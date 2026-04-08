@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import shutil
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -90,6 +91,19 @@ class Screen0Launcher(ctk.CTkFrame):
             command=self._on_open_click,
         )
         self._open_btn.pack(pady=8)
+
+        self._delete_btn = ctk.CTkButton(
+            inner, text="Delete Selected",
+            width=240, height=42,
+            fg_color="transparent",
+            border_width=1,
+            border_color=theme.get("accent"),
+            text_color=theme.get("accent"),
+            font=ctk.CTkFont(size=13),
+            state="disabled",
+            command=self._on_delete_click,
+        )
+        self._delete_btn.pack(pady=(4, 0))
         return panel
 
     # ------------------------------------------------------------------
@@ -103,6 +117,7 @@ class Screen0Launcher(ctk.CTkFrame):
         self._selected_path = None
         self._selected_card = None
         self._open_btn.configure(state="disabled")
+        self._delete_btn.configure(state="disabled")
 
         paths = self.app.get_known_projects()
         loaded = []
@@ -171,6 +186,7 @@ class Screen0Launcher(ctk.CTkFrame):
         self._selected_path = path
         self._selected_card = card
         self._open_btn.configure(state="normal")
+        self._delete_btn.configure(state="normal")
 
     # ------------------------------------------------------------------
     # Actions
@@ -189,12 +205,50 @@ class Screen0Launcher(ctk.CTkFrame):
         try:
             from ui.screen3_main import Screen3Main
             self.app.show_screen(Screen3Main, project=state)
+            return
         except ImportError:
-            pass  # Screen 3 not yet built
+            # Fall back to Screen 1 while Screen 3 is not available.
+            pass
+
+        try:
+            from ui.screen1_sources import Screen1Sources
+            self.app.show_screen(Screen1Sources, project=state)
+        except ImportError:
+            messagebox.showerror(
+                "Navigation Error",
+                "Could not open project screen. Neither Screen 3 nor Screen 1 is available.",
+            )
 
     def _on_new_click(self) -> None:
         """Open the New Project creation dialog."""
         NewProjectDialog(self, self.app, on_success=self._after_project_created)
+
+    def _on_delete_click(self) -> None:
+        """Delete the selected project/workspace after explicit confirmation."""
+        if not self._selected_path:
+            return
+
+        project_path = Path(self._selected_path)
+        project_name = project_path.name
+        confirmed = messagebox.askyesno(
+            "Confirm Delete",
+            (
+                f"Delete project '{project_name}'?\n\n"
+                "This will permanently delete the workspace folder and all project data."
+            ),
+        )
+        if not confirmed:
+            return
+
+        try:
+            if project_path.exists():
+                shutil.rmtree(project_path)
+            self.app.unregister_project(str(project_path))
+        except Exception as exc:
+            messagebox.showerror("Error", f"Could not delete project:\n{exc}")
+            return
+
+        self._load_and_render_projects()
 
     def _after_project_created(self, project_state: dict) -> None:
         """Register the newly created project and navigate to Screen 1."""

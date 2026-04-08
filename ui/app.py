@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 
 import customtkinter as ctk
@@ -11,7 +11,7 @@ _APP_CONFIG = Path(__file__).parent.parent / "app_config.json"
 class App(ctk.CTk):
     """Main application window and navigation controller.
 
-    Owns the 1280×720 window, manages frame switching, holds the
+    Owns the 1280Ã—720 window, manages frame switching, holds the
     currently open project state, and maintains the project registry.
     """
 
@@ -100,4 +100,13 @@ class App(ctk.CTk):
                 with open(_APP_CONFIG, "w", encoding="utf-8") as f:
                     json.dump({"projects": projects}, f, indent=2)
             except OSError:
-                pass  # non-critical — project still created, just not persisted
+                pass  # non-critical â€” project still created, just not persisted
+
+    def unregister_project(self, project_path: str) -> None:
+        """Remove project_path from the registry if present."""
+        projects = [p for p in self.get_known_projects() if p != project_path]
+        try:
+            with open(_APP_CONFIG, "w", encoding="utf-8") as f:
+                json.dump({"projects": projects}, f, indent=2)
+        except OSError:
+            pass  # non-critical

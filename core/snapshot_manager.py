@@ -198,3 +198,15 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     settings = _read_settings(project_path)
     settings["current_manifest"] = manifest_id
     _write_settings(project_path, settings)
+
+
+def update_manifest_label(project_path: Path, manifest_id: str, label: str) -> None:
+    """Update the human-readable label for a manifest."""
+    project_path = Path(project_path)
+    manifest_dir = project_path / "history" / manifest_id
+    if not manifest_dir.exists():
+        raise FileNotFoundError(f"Manifest not found: '{manifest_id}'")
+
+    manifest = get_manifest(project_path, manifest_id)
+    manifest["label"] = str(label)
+    _write_manifest_json(manifest_dir, manifest)
