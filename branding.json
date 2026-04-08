@@ -1,0 +1,13 @@
+{
+  "company_name": "global data",
+  "logo_path": "assets/Screenshot 2026-04-08 150335.png",
+  "color_scheme": {
+    "primary":      "#2B5CE6",
+    "secondary":    "#F5F5F5",
+    "accent":       "#E63946",
+    "text_dark":    "#1A1A2E",
+    "text_light":   "#FFFFFF",
+    "sidebar_bg":   "#2B5CE6",
+    "sidebar_text": "#FFFFFF"
+  }
+}
