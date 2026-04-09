@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -43,14 +43,14 @@ class PopupSheetSelector(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text="Select Sheets",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(24, 12))
 
         ctk.CTkLabel(
             header,
             text=self._excel_path.name,
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left")
 
@@ -63,7 +63,7 @@ class PopupSheetSelector(ctk.CTkToplevel):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.pack(side="left", padx=24)
 
@@ -90,14 +90,14 @@ class PopupSheetSelector(ctk.CTkToplevel):
         ).pack(side="right", pady=15)
 
     def _build_body(self, sheet_names: list[str]) -> None:
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
 
         ctk.CTkLabel(
             body,
             text="Choose sheets and category",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(14, 8))
 
         list_frame = ctk.CTkScrollableFrame(body, fg_color="transparent")
@@ -182,4 +182,5 @@ def select_sheets(parent, excel_path: Path, sheet_names: list[str]) -> list[dict
     dialog = PopupSheetSelector(parent, excel_path=excel_path, sheet_names=sheet_names)
     dialog.wait_window()
     return dialog.result
+
 

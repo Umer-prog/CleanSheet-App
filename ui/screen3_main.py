@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import messagebox
@@ -52,14 +52,14 @@ def build_nav_items(mappings: list[dict]) -> list[dict]:
 class _PlaceholderView(ctk.CTkFrame):
     def __init__(self, parent, title: str, subtitle: str):
         super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
-        card = ctk.CTkFrame(self, fg_color="white", corner_radius=12)
+        card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=12)
         card.pack(fill="both", expand=True, padx=24, pady=24)
 
         ctk.CTkLabel(
             card,
             text=title,
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=24, weight="bold"),
+            font=theme.font(24, weight="bold"),
         ).pack(anchor="w", padx=24, pady=(24, 8))
 
         ctk.CTkLabel(
@@ -67,7 +67,7 @@ class _PlaceholderView(ctk.CTkFrame):
             text=subtitle,
             text_color=theme.get("text_dark"),
             justify="left",
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
         ).pack(anchor="w", padx=24, pady=(0, 24))
 
 
@@ -111,14 +111,14 @@ class Screen3Main(ctk.CTkFrame):
             self._sidebar,
             text="Workspace",
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=21, weight="bold"),
+            font=theme.font(21, weight="bold"),
         ).pack(anchor="w", padx=18, pady=(20, 4))
 
         ctk.CTkLabel(
             self._sidebar,
             text=str(self.project.get("project_name", "Project")),
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=12),
+            font=theme.font(12),
         ).pack(anchor="w", padx=18, pady=(0, 10))
 
         ctk.CTkButton(
@@ -210,7 +210,7 @@ class Screen3Main(ctk.CTkFrame):
     def _set_active_nav(self, active_key: str) -> None:
         for key, button in self._nav_buttons.items():
             if key == active_key:
-                button.configure(fg_color="white", text_color=theme.get("primary"))
+                button.configure(fg_color=theme.selection_color(), text_color=theme.get("primary"))
             else:
                 button.configure(fg_color="transparent", text_color=theme.get("text_light"))
         self._active_nav_key = active_key
@@ -261,3 +261,4 @@ class Screen3Main(ctk.CTkFrame):
 
         self._active_view = _PlaceholderView(self._content_host, title=title, subtitle=subtitle)
         self._active_view.pack(fill="both", expand=True)
+

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import messagebox
@@ -118,7 +118,7 @@ class _BulkScopePopup(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text="Multiple Occurrences Found",
-            font=ctk.CTkFont(size=18, weight="bold"),
+            font=theme.font(18, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=24)
 
@@ -152,7 +152,7 @@ class _BulkScopePopup(ctk.CTkToplevel):
         ).pack(side="right", pady=15)
 
         # Body
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
 
         display_value = bad_value if bad_value else "(empty / null)"
@@ -164,7 +164,7 @@ class _BulkScopePopup(ctk.CTkToplevel):
         ctk.CTkLabel(
             body,
             text=msg,
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
             text_color=theme.get("text_dark"),
             wraplength=450,
             justify="left",
@@ -210,7 +210,7 @@ class ViewMapping(ctk.CTkFrame):
                 f"{self.mapping['dim_table']}.{self.mapping['dim_column']}"
             ),
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=18, weight="bold"),
+            font=theme.font(18, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
@@ -224,7 +224,7 @@ class ViewMapping(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="e")
 
     def _build_transaction_panel(self) -> None:
-        card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 8))
         card.grid_rowconfigure(1, weight=1)
         card.grid_columnconfigure(0, weight=1)
@@ -233,7 +233,7 @@ class ViewMapping(ctk.CTkFrame):
             card,
             text="Transaction Data (Preview)",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._data_box = ctk.CTkTextbox(
@@ -245,7 +245,7 @@ class ViewMapping(ctk.CTkFrame):
         self._data_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
     def _build_error_panel(self) -> None:
-        card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 18))
         card.grid_rowconfigure(1, weight=1)
         card.grid_columnconfigure(0, weight=1)
@@ -254,7 +254,7 @@ class ViewMapping(ctk.CTkFrame):
             card,
             text="Errors",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._error_list = ctk.CTkScrollableFrame(card, fg_color=theme.get("secondary"), corner_radius=8)
@@ -268,7 +268,7 @@ class ViewMapping(ctk.CTkFrame):
             actions,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.grid(row=0, column=0, sticky="w")
 
@@ -334,12 +334,12 @@ class ViewMapping(ctk.CTkFrame):
                 self._error_list,
                 text="No errors found for this mapping.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=10, pady=10)
             return
 
         for error in self._errors:
-            row = ctk.CTkFrame(self._error_list, fg_color="white", corner_radius=8, cursor="hand2")
+            row = ctk.CTkFrame(self._error_list, fg_color=theme.card_color(), corner_radius=8, cursor="hand2")
             row.pack(fill="x", padx=6, pady=5)
             row.grid_columnconfigure(0, weight=1)
 
@@ -353,7 +353,7 @@ class ViewMapping(ctk.CTkFrame):
                 text=text,
                 text_color=theme.get("text_dark"),
                 anchor="w",
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             )
             lbl.grid(row=0, column=0, sticky="w", padx=10, pady=8)
 
@@ -367,7 +367,7 @@ class ViewMapping(ctk.CTkFrame):
         self._selected_error = error
         for child in self._error_list.winfo_children():
             if isinstance(child, ctk.CTkFrame):
-                child.configure(fg_color="white")
+                child.configure(fg_color=theme.card_color())
                 for gchild in child.winfo_children():
                     if isinstance(gchild, ctk.CTkLabel):
                         gchild.configure(text_color=theme.get("text_dark"))
@@ -375,7 +375,7 @@ class ViewMapping(ctk.CTkFrame):
         frame.configure(fg_color=theme.get("primary"))
         label.configure(text_color=theme.get("text_light"))
         self._replace_btn.configure(state="normal")
-        # Null/empty cells have no meaningful value to add to the dim table —
+        # Null/empty cells have no meaningful value to add to the dim table -
         # the user must replace with an existing valid value instead.
         if str(error.get("bad_value", "")).strip():
             self._add_btn.configure(state="normal")
@@ -480,4 +480,5 @@ class ViewMapping(ctk.CTkFrame):
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
+
 

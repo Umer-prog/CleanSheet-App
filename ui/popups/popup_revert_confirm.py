@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import customtkinter as ctk
 
@@ -32,19 +32,19 @@ class PopupRevertConfirm(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text="Revert Confirmation",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(24, 12))
 
         ctk.CTkLabel(
             header,
             text=manifest_id,
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left")
 
     def _build_body(self, manifest_id: str) -> None:
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
 
         ctk.CTkLabel(
@@ -56,7 +56,7 @@ class PopupRevertConfirm(ctk.CTkToplevel):
             ),
             justify="left",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
         ).pack(anchor="w", padx=24, pady=24)
 
     def _build_footer(self) -> None:
@@ -89,4 +89,5 @@ class PopupRevertConfirm(ctk.CTkToplevel):
     def _confirm(self) -> None:
         self._on_confirm()
         self.destroy()
+
 

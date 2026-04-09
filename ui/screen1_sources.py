@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from pathlib import Path
@@ -91,7 +91,7 @@ class Screen1Sources(ctk.CTkFrame):
             panel,
             text="Stage 1 Setup",
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
         ).pack(anchor="w", padx=20, pady=(26, 10))
 
         ctk.CTkLabel(
@@ -99,7 +99,7 @@ class Screen1Sources(ctk.CTkFrame):
             text="Add Excel files and mark each selected sheet\nas Transaction or Dimension.",
             text_color=theme.get("text_light"),
             justify="left",
-            font=ctk.CTkFont(size=12),
+            font=theme.font(12),
         ).pack(anchor="w", padx=20, pady=(0, 16))
 
         ctk.CTkButton(
@@ -128,7 +128,7 @@ class Screen1Sources(ctk.CTkFrame):
             header,
             text="Screen 1: Add Data Sources",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
@@ -141,7 +141,7 @@ class Screen1Sources(ctk.CTkFrame):
             command=self._on_add_file,
         ).grid(row=0, column=1, sticky="e")
 
-        self._list_frame = ctk.CTkScrollableFrame(panel, fg_color="white", corner_radius=10)
+        self._list_frame = ctk.CTkScrollableFrame(panel, fg_color=theme.card_color(), corner_radius=10)
         self._list_frame.grid(row=1, column=0, sticky="nsew", padx=22, pady=(4, 8))
 
         footer = ctk.CTkFrame(panel, fg_color="transparent")
@@ -152,7 +152,7 @@ class Screen1Sources(ctk.CTkFrame):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=12),
+            font=theme.font(12),
         )
         self._error_lbl.grid(row=0, column=0, sticky="w")
 
@@ -240,7 +240,7 @@ class Screen1Sources(ctk.CTkFrame):
                 self._list_frame,
                 text="No files added yet. Click Add File to begin.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=16, pady=14)
             return
 
@@ -256,7 +256,7 @@ class Screen1Sources(ctk.CTkFrame):
                 top,
                 text=Path(source["file_path"]).name,
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=13, weight="bold"),
+                font=theme.font(13, weight="bold"),
                 anchor="w",
             ).grid(row=0, column=0, sticky="w")
 
@@ -282,7 +282,7 @@ class Screen1Sources(ctk.CTkFrame):
                     row,
                     text=f"{sheet['sheet_name']}  ->  {sheet['category']}  ({table_name})",
                     text_color=theme.get("text_dark"),
-                    font=ctk.CTkFont(size=12),
+                    font=theme.font(12),
                     anchor="w",
                 ).grid(row=0, column=0, sticky="w")
 
@@ -357,3 +357,4 @@ class Screen1Sources(ctk.CTkFrame):
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
+

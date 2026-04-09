@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import messagebox
@@ -49,11 +49,11 @@ class ViewSettings(ctk.CTkFrame):
             hdr,
             text="Settings",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=theme.font(22, weight="bold"),
         ).pack(anchor="w")
 
     def _build_form(self) -> None:
-        card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))
         card.columnconfigure(0, weight=1)
 
@@ -61,7 +61,7 @@ class ViewSettings(ctk.CTkFrame):
             card,
             text="Project Name",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=18, pady=(14, 4))
         self._name_entry = ctk.CTkEntry(
             card,
@@ -76,7 +76,7 @@ class ViewSettings(ctk.CTkFrame):
             card,
             text="Company Name",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=2, column=0, sticky="w", padx=18, pady=(0, 4))
         self._company_entry = ctk.CTkEntry(
             card,
@@ -91,7 +91,7 @@ class ViewSettings(ctk.CTkFrame):
             card,
             text="Project Folder Path (read-only)",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=4, column=0, sticky="w", padx=18, pady=(0, 4))
         self._path_entry = ctk.CTkEntry(
             card,
@@ -127,7 +127,7 @@ class ViewSettings(ctk.CTkFrame):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.grid(row=0, column=0, sticky="w")
 
@@ -182,4 +182,5 @@ class ViewSettings(ctk.CTkFrame):
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.configure(text=msg)
+
 

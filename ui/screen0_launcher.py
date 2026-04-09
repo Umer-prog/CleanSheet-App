@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from pathlib import Path
 import shutil
 from tkinter import filedialog, messagebox
@@ -12,7 +12,7 @@ _PANEL_W = 340  # left sidebar width in px
 
 
 class Screen0Launcher(ctk.CTkFrame):
-    """Project launcher screen — left project list, right action panel."""
+    """Project launcher screen - left project list, right action panel."""
 
     def __init__(self, parent, app):
         super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
@@ -39,7 +39,7 @@ class Screen0Launcher(ctk.CTkFrame):
 
         ctk.CTkLabel(
             panel, text="Projects",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=theme.font(14, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(padx=16, pady=(20, 10), anchor="w")
 
@@ -60,22 +60,37 @@ class Screen0Launcher(ctk.CTkFrame):
 
         ctk.CTkLabel(
             inner, text=theme.company_name(),
-            font=ctk.CTkFont(size=30, weight="bold"),
+            font=theme.font(30, weight="bold"),
             text_color=theme.get("primary"),
         ).pack(pady=(0, 6))
 
         ctk.CTkLabel(
             inner, text="Select a project or create a new one.",
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
             text_color=theme.get("text_dark"),
         ).pack(pady=(0, 36))
 
+        self._dark_mode_switch = ctk.CTkSwitch(
+            inner,
+            text="Dark Mode",
+            text_color=theme.get("text_dark"),
+            progress_color=theme.get("primary"),
+            button_color=theme.get("primary"),
+            button_hover_color=theme.get("primary"),
+            command=self._on_toggle_dark_mode,
+        )
+        if self.app.is_dark_mode_enabled():
+            self._dark_mode_switch.select()
+        else:
+            self._dark_mode_switch.deselect()
+        self._dark_mode_switch.pack(pady=(0, 16), anchor="w")
+
         ctk.CTkButton(
-            inner, text="＋  New Project",
+            inner, text="+ New Project",
             width=240, height=46,
             fg_color=theme.get("primary"),
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=theme.font(14, weight="bold"),
             command=self._on_new_click,
         ).pack(pady=8)
 
@@ -86,7 +101,7 @@ class Screen0Launcher(ctk.CTkFrame):
             border_width=2,
             border_color=theme.get("primary"),
             text_color=theme.get("primary"),
-            font=ctk.CTkFont(size=14),
+            font=theme.font(14),
             state="disabled",
             command=self._on_open_click,
         )
@@ -99,7 +114,7 @@ class Screen0Launcher(ctk.CTkFrame):
             border_width=1,
             border_color=theme.get("accent"),
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
             state="disabled",
             command=self._on_delete_click,
         )
@@ -131,7 +146,7 @@ class Screen0Launcher(ctk.CTkFrame):
         if not loaded:
             ctk.CTkLabel(
                 self._list_frame, text="No projects yet.",
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
                 text_color=theme.get("text_light"),
             ).pack(padx=8, pady=12, anchor="w")
             return
@@ -150,14 +165,14 @@ class Screen0Launcher(ctk.CTkFrame):
 
         name_lbl = ctk.CTkLabel(
             card, text=state.get("project_name", "Untitled"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
             text_color=theme.get("text_light"), anchor="w",
         )
         name_lbl.grid(row=0, column=0, padx=10, pady=(8, 0), sticky="w")
 
         company_lbl = ctk.CTkLabel(
             card, text=state.get("company", ""),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"), anchor="w",
         )
         company_lbl.grid(row=1, column=0, padx=10, pady=(0, 6), sticky="w")
@@ -179,7 +194,7 @@ class Screen0Launcher(ctk.CTkFrame):
                 if isinstance(child, ctk.CTkLabel):
                     child.configure(text_color=theme.get("text_light"))
 
-        card.configure(fg_color="white")
+        card.configure(fg_color=theme.selection_color())
         for lbl in labels:
             lbl.configure(text_color=theme.get("primary"))
 
@@ -222,6 +237,12 @@ class Screen0Launcher(ctk.CTkFrame):
     def _on_new_click(self) -> None:
         """Open the New Project creation dialog."""
         NewProjectDialog(self, self.app, on_success=self._after_project_created)
+
+    def _on_toggle_dark_mode(self) -> None:
+        """Set global app appearance and refresh launcher visuals."""
+        enabled = bool(self._dark_mode_switch.get())
+        self.app.set_global_dark_mode(enabled)
+        self.app.show_screen(Screen0Launcher)
 
     def _on_delete_click(self) -> None:
         """Delete the selected project/workspace after explicit confirmation."""
@@ -297,14 +318,14 @@ class NewProjectDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header, text="New Project",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=28, pady=0)
 
         ctk.CTkLabel(
             header,
             text="Fill in the details below to create a new workspace.",
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(0, 20))
 
@@ -318,7 +339,7 @@ class NewProjectDialog(ctk.CTkToplevel):
         self._error_lbl = ctk.CTkLabel(
             footer, text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.pack(side="left", padx=28)
 
@@ -326,7 +347,7 @@ class NewProjectDialog(ctk.CTkToplevel):
             footer, text="Create Project", width=140, height=38,
             fg_color=theme.get("primary"),
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
             command=self._on_create,
         ).pack(side="right", padx=(8, 24), pady=15)
 
@@ -335,19 +356,19 @@ class NewProjectDialog(ctk.CTkToplevel):
             fg_color="transparent", border_width=1,
             border_color=theme.get("primary"),
             text_color=theme.get("primary"),
-            font=ctk.CTkFont(size=13),
+            font=theme.font(13),
             command=self.destroy,
         ).pack(side="right", pady=15)
 
     def _build_body(self) -> None:
         """Build the form fields in the scrollable middle area."""
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
 
         def field(label_text, row):
             ctk.CTkLabel(
                 body, text=label_text,
-                font=ctk.CTkFont(size=12, weight="bold"),
+                font=theme.font(12, weight="bold"),
                 text_color=theme.get("text_dark"), anchor="w",
             ).grid(row=row, column=0, padx=24, pady=(18, 4), sticky="w")
 
@@ -374,13 +395,13 @@ class NewProjectDialog(ctk.CTkToplevel):
 
         ctk.CTkEntry(
             path_row, textvariable=self._folder_var,
-            placeholder_text="Choose a folder…",
+            placeholder_text="Choose a folder...",
             height=38, corner_radius=8,
             border_color=theme.get("primary"),
         ).grid(row=0, column=0, sticky="ew")
 
         ctk.CTkButton(
-            path_row, text="Browse…", width=90, height=38,
+            path_row, text="Browse...", width=90, height=38,
             fg_color=theme.get("primary"),
             text_color=theme.get("text_light"),
             corner_radius=8,
@@ -428,3 +449,4 @@ class NewProjectDialog(ctk.CTkToplevel):
         """Display an inline validation error in the footer."""
         if self._error_lbl:
             self._error_lbl.configure(text=msg)
+

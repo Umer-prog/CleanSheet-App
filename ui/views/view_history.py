@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import messagebox
@@ -56,7 +56,7 @@ class ViewHistory(ctk.CTkFrame):
             hdr,
             text="History / Revert",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
@@ -76,7 +76,7 @@ class ViewHistory(ctk.CTkFrame):
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        left = ctk.CTkFrame(body, fg_color="white", corner_radius=10)
+        left = ctk.CTkFrame(body, fg_color=theme.card_color(), corner_radius=10)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         left.grid_columnconfigure(0, weight=1)
         left.grid_rowconfigure(1, weight=1)
@@ -85,13 +85,13 @@ class ViewHistory(ctk.CTkFrame):
             left,
             text="Manifests",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._list = ctk.CTkScrollableFrame(left, fg_color=theme.get("secondary"), corner_radius=8)
         self._list.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 10))
 
-        right = ctk.CTkFrame(body, fg_color="white", corner_radius=10)
+        right = ctk.CTkFrame(body, fg_color=theme.card_color(), corner_radius=10)
         right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(2, weight=1)
@@ -100,14 +100,14 @@ class ViewHistory(ctk.CTkFrame):
             right,
             text="Manifest Details",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._detail_title = ctk.CTkLabel(
             right,
             text="Select a manifest",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         )
         self._detail_title.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
 
@@ -151,7 +151,7 @@ class ViewHistory(ctk.CTkFrame):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.grid(row=0, column=0, sticky="w")
 
@@ -185,7 +185,7 @@ class ViewHistory(ctk.CTkFrame):
                 self._list,
                 text="History is OFF in settings.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=10, pady=10)
             return
 
@@ -200,12 +200,12 @@ class ViewHistory(ctk.CTkFrame):
                 self._list,
                 text="No manifests available.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=10, pady=10)
             return
 
         for manifest in self._manifests:
-            row = ctk.CTkFrame(self._list, fg_color="white", corner_radius=8, cursor="hand2")
+            row = ctk.CTkFrame(self._list, fg_color=theme.card_color(), corner_radius=8, cursor="hand2")
             row.pack(fill="x", padx=6, pady=5)
             row.grid_columnconfigure(0, weight=1)
 
@@ -217,7 +217,7 @@ class ViewHistory(ctk.CTkFrame):
                 justify="left",
                 anchor="w",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             )
             lbl.grid(row=0, column=0, sticky="w", padx=10, pady=8)
 
@@ -239,7 +239,7 @@ class ViewHistory(ctk.CTkFrame):
 
         for child in self._list.winfo_children():
             if isinstance(child, ctk.CTkFrame):
-                child.configure(fg_color="white")
+                child.configure(fg_color=theme.card_color())
                 for gchild in child.winfo_children():
                     if isinstance(gchild, ctk.CTkLabel):
                         gchild.configure(text_color=theme.get("text_dark"))
@@ -284,4 +284,5 @@ class ViewHistory(ctk.CTkFrame):
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.configure(text=msg)
+
 

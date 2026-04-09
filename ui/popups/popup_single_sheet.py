@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -41,14 +41,14 @@ class PopupSingleSheet(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text=title,
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(24, 12))
 
         ctk.CTkLabel(
             header,
             text=file_name,
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left")
 
@@ -61,7 +61,7 @@ class PopupSingleSheet(ctk.CTkToplevel):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.pack(side="left", padx=24)
 
@@ -88,7 +88,7 @@ class PopupSingleSheet(ctk.CTkToplevel):
         ).pack(side="right", pady=15)
 
     def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
         body.columnconfigure(0, weight=1)
 
@@ -96,7 +96,7 @@ class PopupSingleSheet(ctk.CTkToplevel):
             body,
             text="Choose a sheet",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=24, pady=(18, 6))
 
         values = self._sheet_names or ["No sheets found"]
@@ -132,4 +132,5 @@ def select_single_sheet(parent, excel_path: Path, sheet_names: list[str], title:
     dialog = PopupSingleSheet(parent, excel_path=excel_path, sheet_names=sheet_names, title=title)
     dialog.wait_window()
     return dialog.result
+
 

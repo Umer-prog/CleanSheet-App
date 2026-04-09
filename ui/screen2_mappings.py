@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import messagebox
@@ -89,7 +89,7 @@ class Screen2Mappings(ctk.CTkFrame):
             panel,
             text="Stage 1 Setup",
             text_color=theme.get("text_light"),
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
         ).pack(anchor="w", padx=20, pady=(26, 10))
 
         ctk.CTkLabel(
@@ -97,7 +97,7 @@ class Screen2Mappings(ctk.CTkFrame):
             text="Screen 2: Define mappings\nbetween transaction and\ndimension columns.",
             text_color=theme.get("text_light"),
             justify="left",
-            font=ctk.CTkFont(size=12),
+            font=theme.font(12),
         ).pack(anchor="w", padx=20, pady=(0, 16))
 
         ctk.CTkButton(
@@ -122,7 +122,7 @@ class Screen2Mappings(ctk.CTkFrame):
             panel,
             text="Screen 2: Define Mappings",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=22, pady=(18, 10))
 
         top_grid = ctk.CTkFrame(panel, fg_color="transparent")
@@ -130,26 +130,26 @@ class Screen2Mappings(ctk.CTkFrame):
         top_grid.grid_columnconfigure(0, weight=1)
         top_grid.grid_columnconfigure(1, weight=1)
 
-        self._dim_list = ctk.CTkScrollableFrame(top_grid, fg_color="white", corner_radius=10, height=175)
+        self._dim_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=175)
         self._dim_list.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
-        self._tx_list = ctk.CTkScrollableFrame(top_grid, fg_color="white", corner_radius=10, height=175)
+        self._tx_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=175)
         self._tx_list.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
         ctk.CTkLabel(
             self._dim_list,
             text="Dimension Tables",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).pack(anchor="w", padx=10, pady=(8, 6))
         ctk.CTkLabel(
             self._tx_list,
             text="Transaction Tables",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).pack(anchor="w", padx=10, pady=(8, 6))
 
-        selector = ctk.CTkFrame(panel, fg_color="white", corner_radius=10)
+        selector = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
         selector.grid(row=2, column=0, sticky="ew", padx=22, pady=(12, 10))
         selector.grid_columnconfigure(0, weight=1)
         selector.grid_columnconfigure(1, weight=1)
@@ -158,13 +158,13 @@ class Screen2Mappings(ctk.CTkFrame):
             selector,
             text="Dimension Column",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 4))
         ctk.CTkLabel(
             selector,
             text="Transaction Column",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
         ).grid(row=0, column=1, sticky="w", padx=12, pady=(10, 4))
 
         self._dim_column_menu = ctk.CTkOptionMenu(
@@ -200,7 +200,7 @@ class Screen2Mappings(ctk.CTkFrame):
             command=self._on_confirm_mapping,
         ).grid(row=2, column=1, sticky="e", padx=12, pady=(0, 12))
 
-        mappings_card = ctk.CTkFrame(panel, fg_color="white", corner_radius=10)
+        mappings_card = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
         mappings_card.grid(row=3, column=0, sticky="nsew", padx=22, pady=(0, 10))
         mappings_card.grid_columnconfigure(0, weight=1)
         mappings_card.grid_rowconfigure(1, weight=1)
@@ -209,7 +209,7 @@ class Screen2Mappings(ctk.CTkFrame):
             mappings_card,
             text="Confirmed Mappings",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._mapping_list = ctk.CTkScrollableFrame(mappings_card, fg_color=theme.get("secondary"), corner_radius=8)
@@ -223,7 +223,7 @@ class Screen2Mappings(ctk.CTkFrame):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=12),
+            font=theme.font(12),
         )
         self._error_lbl.grid(row=0, column=0, sticky="w")
 
@@ -361,12 +361,12 @@ class Screen2Mappings(ctk.CTkFrame):
                 self._mapping_list,
                 text="No mappings added yet.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=10, pady=10)
             return
 
         for idx, mapping in enumerate(self._pending_mappings):
-            row = ctk.CTkFrame(self._mapping_list, fg_color="white", corner_radius=8)
+            row = ctk.CTkFrame(self._mapping_list, fg_color=theme.card_color(), corner_radius=8)
             row.pack(fill="x", padx=6, pady=5)
             row.grid_columnconfigure(0, weight=1)
 
@@ -377,7 +377,7 @@ class Screen2Mappings(ctk.CTkFrame):
                     f"{mapping['dim_table']}.{mapping['dim_column']}"
                 ),
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
                 anchor="w",
             ).grid(row=0, column=0, sticky="w", padx=10, pady=8)
 
@@ -445,3 +445,4 @@ class Screen2Mappings(ctk.CTkFrame):
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
+

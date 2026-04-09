@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import customtkinter as ctk
 
@@ -37,14 +37,14 @@ class PopupAdd(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text="Add New Dimension Row",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(24, 12))
 
         ctk.CTkLabel(
             header,
             text=f"Table: {dim_table}",
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left")
 
@@ -57,7 +57,7 @@ class PopupAdd(ctk.CTkToplevel):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.pack(side="left", padx=24)
 
@@ -84,7 +84,7 @@ class PopupAdd(ctk.CTkToplevel):
         ).pack(side="right", pady=15)
 
     def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
@@ -94,7 +94,7 @@ class PopupAdd(ctk.CTkToplevel):
             ctk.CTkLabel(
                 body,
                 text=col,
-                font=ctk.CTkFont(size=12, weight="bold"),
+                font=theme.font(12, weight="bold"),
                 text_color=theme.get("text_dark"),
             ).grid(row=row, column=0, padx=18, pady=(10, 4), sticky="w")
 
@@ -126,4 +126,5 @@ class PopupAdd(ctk.CTkToplevel):
     def _show_error(self, message: str) -> None:
         if self._error_lbl:
             self._error_lbl.configure(text=message)
+
 

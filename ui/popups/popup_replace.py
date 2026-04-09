@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import customtkinter as ctk
 import pandas as pd
@@ -71,7 +71,7 @@ class PopupReplace(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text="Replace Error Value",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=theme.font(20, weight="bold"),
             text_color=theme.get("text_light"),
         ).pack(side="left", padx=(24, 12))
 
@@ -79,7 +79,7 @@ class PopupReplace(ctk.CTkToplevel):
         ctk.CTkLabel(
             header,
             text=f"Current: {display}",
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
             text_color=theme.get("text_light"),
         ).pack(side="left")
 
@@ -92,7 +92,7 @@ class PopupReplace(ctk.CTkToplevel):
             footer,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.pack(side="left", padx=24)
 
@@ -121,7 +121,7 @@ class PopupReplace(ctk.CTkToplevel):
         ).pack(side="right", pady=15)
 
     def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
         body.grid_columnconfigure(0, weight=1)
 
@@ -132,8 +132,8 @@ class PopupReplace(ctk.CTkToplevel):
             # Dim table label
             ctk.CTkLabel(
                 body,
-                text=f"Dimension Table  —  {self._dim_table}",
-                font=ctk.CTkFont(size=12, weight="bold"),
+                text=f"Dimension Table - {self._dim_table}",
+                font=theme.font(12, weight="bold"),
                 text_color=theme.get("text_dark"),
             ).grid(row=r, column=0, padx=24, pady=(18, 4), sticky="w")
             r += 1
@@ -162,7 +162,7 @@ class PopupReplace(ctk.CTkToplevel):
         ctk.CTkLabel(
             body,
             text="Select replacement value",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=theme.font(12, weight="bold"),
             text_color=theme.get("text_dark"),
         ).grid(row=r, column=0, padx=24, pady=(top_pad, 6), sticky="w")
         r += 1
@@ -195,3 +195,4 @@ class PopupReplace(ctk.CTkToplevel):
     def _show_error(self, message: str) -> None:
         if self._error_lbl:
             self._error_lbl.configure(text=message)
+

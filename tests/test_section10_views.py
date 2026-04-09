@@ -48,4 +48,3 @@ def test_merged_project_payload_updates_identity_fields_only():
     assert payload["company"] == "NewCo"
     assert payload["transaction_tables"] == ["sales"]
     assert payload["dim_tables"] == ["item_dim"]
-

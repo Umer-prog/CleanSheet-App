@@ -11,19 +11,22 @@ _APP_CONFIG = Path(__file__).parent.parent / "app_config.json"
 class App(ctk.CTk):
     """Main application window and navigation controller.
 
-    Owns the 1280Ã—720 window, manages frame switching, holds the
+    Owns the 1280x720 window, manages frame switching, holds the
     currently open project state, and maintains the project registry.
     """
 
     def __init__(self):
         super().__init__()
+        self._app_config_cache = self._read_app_config()
+        ctk.set_appearance_mode("dark" if self.is_dark_mode_enabled() else "light")
+
         self.title(theme.company_name())
         self.geometry("1280x720")
         self.resizable(False, False)
 
         self._current_frame = None
         self._current_project: dict | None = None
-        self._icon_photo = None  # keep PIL reference alive
+        self._icon_photo = None
 
         self._container = ctk.CTkFrame(self, fg_color="transparent")
         self._container.pack(fill="both", expand=True)
@@ -31,6 +34,7 @@ class App(ctk.CTk):
         self.after(100, self._set_icon)
 
         from ui.screen0_launcher import Screen0Launcher
+
         self.show_screen(Screen0Launcher)
 
     def _set_icon(self) -> None:
@@ -38,10 +42,10 @@ class App(ctk.CTk):
         try:
             import tempfile
             from PIL import Image
+
             logo = theme.logo_path()
             if not logo:
                 return
-            # Resolve relative paths against the project root
             root = Path(__file__).parent.parent
             if not logo.is_absolute():
                 logo = root / logo
@@ -52,7 +56,7 @@ class App(ctk.CTk):
             img.save(str(ico_path), format="ICO")
             self.iconbitmap(str(ico_path))
         except Exception:
-            pass  # icon is non-critical
+            pass
 
     # ------------------------------------------------------------------
     # Navigation
@@ -78,35 +82,53 @@ class App(ctk.CTk):
         return self._current_project
 
     # ------------------------------------------------------------------
-    # Project registry  (app_config.json)
+    # App config and project registry (app_config.json)
     # ------------------------------------------------------------------
+
+    def _read_app_config(self) -> dict:
+        if not _APP_CONFIG.exists():
+            return {"projects": [], "dark_mode": False}
+        try:
+            with open(_APP_CONFIG, encoding="utf-8") as f:
+                data = json.load(f)
+            data.setdefault("projects", [])
+            data.setdefault("dark_mode", False)
+            return data
+        except (OSError, json.JSONDecodeError):
+            return {"projects": [], "dark_mode": False}
+
+    def _write_app_config(self, config: dict) -> None:
+        try:
+            with open(_APP_CONFIG, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+            self._app_config_cache = config
+        except OSError:
+            pass
+
+    def is_dark_mode_enabled(self) -> bool:
+        return bool(self._read_app_config().get("dark_mode", False))
+
+    def set_global_dark_mode(self, enabled: bool) -> None:
+        config = self._read_app_config()
+        config["dark_mode"] = bool(enabled)
+        self._write_app_config(config)
+        ctk.set_appearance_mode("dark" if enabled else "light")
 
     def get_known_projects(self) -> list:
         """Return the list of registered project path strings."""
-        if not _APP_CONFIG.exists():
-            return []
-        try:
-            with open(_APP_CONFIG, encoding="utf-8") as f:
-                return json.load(f).get("projects", [])
-        except (OSError, json.JSONDecodeError):
-            return []
+        return list(self._read_app_config().get("projects", []))
 
     def register_project(self, project_path: str) -> None:
         """Add project_path to the registry if not already present."""
-        projects = self.get_known_projects()
+        config = self._read_app_config()
+        projects = list(config.get("projects", []))
         if project_path not in projects:
             projects.append(project_path)
-            try:
-                with open(_APP_CONFIG, "w", encoding="utf-8") as f:
-                    json.dump({"projects": projects}, f, indent=2)
-            except OSError:
-                pass  # non-critical â€” project still created, just not persisted
+            config["projects"] = projects
+            self._write_app_config(config)
 
     def unregister_project(self, project_path: str) -> None:
         """Remove project_path from the registry if present."""
-        projects = [p for p in self.get_known_projects() if p != project_path]
-        try:
-            with open(_APP_CONFIG, "w", encoding="utf-8") as f:
-                json.dump({"projects": projects}, f, indent=2)
-        except OSError:
-            pass  # non-critical
+        config = self._read_app_config()
+        config["projects"] = [p for p in config.get("projects", []) if p != project_path]
+        self._write_app_config(config)

@@ -2,12 +2,12 @@
   "company_name": "CleanSheet",
   "logo_path": "assets/Screenshot 2026-04-08 150335.png",
   "color_scheme": {
-    "primary":      "#2B5CE6",
-    "secondary":    "#F5F5F5",
-    "accent":       "#E63946",
-    "text_dark":    "#1A1A2E",
+    "primary":      "#1E6FD8",
+    "secondary":    "#EDF3FB",
+    "accent":       "#FF5C6A",
+    "text_dark":    "#172033",
     "text_light":   "#FFFFFF",
-    "sidebar_bg":   "#2B5CE6",
+    "sidebar_bg":   "#123D78",
     "sidebar_text": "#FFFFFF"
   }
 }

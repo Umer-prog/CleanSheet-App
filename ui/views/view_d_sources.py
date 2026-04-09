@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -45,7 +45,7 @@ class ViewDSources(ctk.CTkFrame):
             hdr,
             text="Dimension Sources",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
@@ -59,7 +59,7 @@ class ViewDSources(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="e")
 
     def _build_list(self) -> None:
-        card = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))
         card.grid_columnconfigure(0, weight=1)
         card.grid_rowconfigure(1, weight=1)
@@ -68,7 +68,7 @@ class ViewDSources(ctk.CTkFrame):
             card,
             text="Current dimension tables",
             text_color=theme.get("text_dark"),
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
         self._rows = ctk.CTkScrollableFrame(card, fg_color=theme.get("secondary"), corner_radius=8)
@@ -78,7 +78,7 @@ class ViewDSources(ctk.CTkFrame):
             card,
             text="",
             text_color=theme.get("accent"),
-            font=ctk.CTkFont(size=11),
+            font=theme.font(11),
         )
         self._error_lbl.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 10))
 
@@ -92,12 +92,12 @@ class ViewDSources(ctk.CTkFrame):
                 self._rows,
                 text="No dimension tables found.",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12),
+                font=theme.font(12),
             ).pack(anchor="w", padx=10, pady=10)
             return
 
         for dim in dims:
-            row = ctk.CTkFrame(self._rows, fg_color="white", corner_radius=8)
+            row = ctk.CTkFrame(self._rows, fg_color=theme.card_color(), corner_radius=8)
             row.pack(fill="x", padx=6, pady=5)
             row.grid_columnconfigure(0, weight=1)
 
@@ -105,7 +105,7 @@ class ViewDSources(ctk.CTkFrame):
                 row,
                 text=dim,
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=12, weight="bold"),
+                font=theme.font(12, weight="bold"),
             ).grid(row=0, column=0, sticky="w", padx=10, pady=8)
 
             ctk.CTkButton(
@@ -124,7 +124,7 @@ class ViewDSources(ctk.CTkFrame):
                 row,
                 text="Cannot delete or replace",
                 text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(size=11),
+                font=theme.font(11),
             ).grid(row=0, column=2, padx=(0, 10), pady=6)
 
     def _on_add_dim_table(self) -> None:
@@ -167,4 +167,5 @@ class ViewDSources(ctk.CTkFrame):
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.configure(text=msg)
+
 
