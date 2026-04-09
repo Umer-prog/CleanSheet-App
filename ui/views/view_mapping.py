@@ -15,10 +15,32 @@ from ui.popups.popup_replace import PopupReplace
 
 
 def format_dataframe_preview(df: pd.DataFrame, max_rows: int = 40) -> str:
+    """Return a pipe-separated text table with row numbers matching Excel (header = row 1, data starts at row 2)."""
     if df.empty:
         return "(No rows)"
     preview = df.head(max_rows).fillna("")
-    return preview.to_string(index=True)
+    cols = list(preview.columns)
+
+    col_widths = {
+        col: max(len(str(col)), max((len(str(v)) for v in preview[col]), default=0))
+        for col in cols
+    }
+    max_row_num = int(preview.index[-1]) + 1 if len(preview) > 0 else 1
+    row_num_w = max(1, len(str(max_row_num)))
+
+    def _row(label, values) -> str:
+        parts = [f"{str(label):<{row_num_w}}"] + [
+            f"{str(v):<{col_widths[c]}}" for c, v in zip(cols, values)
+        ]
+        return " | ".join(parts)
+
+    sep = "-+-".join(["-" * row_num_w] + ["-" * col_widths[c] for c in cols])
+
+    lines = [_row("0", cols), sep]
+    for idx, row_data in preview.iterrows():
+        row_num = int(idx) + 1  # row 0 = header, data rows start at 1
+        lines.append(_row(row_num, [row_data[c] for c in cols]))
+    return "\n".join(lines)
 
 
 def get_valid_dim_values(project_path: Path, dim_table: str, dim_column: str) -> list[str]:
@@ -45,6 +67,114 @@ def replace_transaction_value(
 
     df.at[row_index, t_col] = str(new_value)
     save_as_csv(df, csv_path)
+
+
+def replace_transaction_values_bulk(
+    project_path: Path,
+    mapping: dict,
+    old_value: str,
+    new_value: str,
+) -> int:
+    """Replace every row in transaction_column where the stripped value equals old_value.
+
+    Returns the number of rows changed.
+    """
+    t_table = mapping["transaction_table"]
+    t_col = mapping["transaction_column"]
+    csv_path = Path(project_path) / "data" / "transactions" / f"{t_table}.csv"
+
+    df = load_csv(csv_path)
+    if t_col not in df.columns:
+        raise ValueError(f"Column '{t_col}' not found in '{t_table}'.")
+
+    mask = df[t_col].astype(str).str.strip() == str(old_value)
+    count = int(mask.sum())
+    if count:
+        df.loc[mask, t_col] = str(new_value)
+        save_as_csv(df, csv_path)
+    return count
+
+
+class _BulkScopePopup(ctk.CTkToplevel):
+    """Ask the user whether to apply a Replace action to all matching rows or just the selected one."""
+
+    def __init__(self, parent, bad_value: str, total_count: int, selected_row: int, on_choice):
+        """on_choice is called with "all" or "single"."""
+        super().__init__(parent)
+        self._on_choice = on_choice
+
+        self.title("Multiple Occurrences Found")
+        self.geometry("520x280")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.configure(fg_color=theme.get("secondary"))
+
+        # Header
+        header = ctk.CTkFrame(self, fg_color=theme.get("primary"), corner_radius=0, height=68)
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+
+        ctk.CTkLabel(
+            header,
+            text="Multiple Occurrences Found",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=theme.get("text_light"),
+        ).pack(side="left", padx=24)
+
+        # Footer (packed before body so it pins to bottom)
+        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0, height=68)
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+
+        ctk.CTkButton(
+            footer,
+            text=f"Apply to All  ({total_count} rows)",
+            width=190,
+            height=38,
+            fg_color=theme.get("primary"),
+            text_color=theme.get("text_light"),
+            corner_radius=8,
+            command=lambda: self._pick("all"),
+        ).pack(side="right", padx=(8, 24), pady=15)
+
+        ctk.CTkButton(
+            footer,
+            text=f"Just Row {selected_row}",
+            width=130,
+            height=38,
+            fg_color="transparent",
+            border_width=1,
+            border_color=theme.get("primary"),
+            text_color=theme.get("primary"),
+            corner_radius=8,
+            command=lambda: self._pick("single"),
+        ).pack(side="right", pady=15)
+
+        # Body
+        body = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
+        body.pack(fill="both", expand=True, padx=20, pady=16)
+
+        display_value = bad_value if bad_value else "(empty / null)"
+        msg = (
+            f'The value  "{display_value}"  appears on {total_count} rows in this mapping.\n\n'
+            f"Do you want to apply this replacement to all {total_count} rows, "
+            f"or only to Row {selected_row}?"
+        )
+        ctk.CTkLabel(
+            body,
+            text=msg,
+            font=ctk.CTkFont(size=13),
+            text_color=theme.get("text_dark"),
+            wraplength=450,
+            justify="left",
+        ).pack(padx=24, pady=24, anchor="w")
+
+        self.after(50, self.lift)
+
+    def _pick(self, choice: str) -> None:
+        self.destroy()
+        self._on_choice(choice)
 
 
 class ViewMapping(ctk.CTkFrame):
@@ -106,7 +236,12 @@ class ViewMapping(ctk.CTkFrame):
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
-        self._data_box = ctk.CTkTextbox(card, fg_color=theme.get("secondary"), text_color=theme.get("text_dark"))
+        self._data_box = ctk.CTkTextbox(
+            card,
+            fg_color=theme.get("secondary"),
+            text_color=theme.get("text_dark"),
+            font=ctk.CTkFont(family="Courier New", size=11),
+        )
         self._data_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
     def _build_error_panel(self) -> None:
@@ -209,7 +344,7 @@ class ViewMapping(ctk.CTkFrame):
             row.grid_columnconfigure(0, weight=1)
 
             text = (
-                f"Row {error['row_index'] + 2} | "
+                f"Row {error['row_index'] + 1} | "
                 f"Column: {error['transaction_column']} | "
                 f"Bad value: {error['bad_value']}"
             )
@@ -240,7 +375,12 @@ class ViewMapping(ctk.CTkFrame):
         frame.configure(fg_color=theme.get("primary"))
         label.configure(text_color=theme.get("text_light"))
         self._replace_btn.configure(state="normal")
-        self._add_btn.configure(state="normal")
+        # Null/empty cells have no meaningful value to add to the dim table —
+        # the user must replace with an existing valid value instead.
+        if str(error.get("bad_value", "")).strip():
+            self._add_btn.configure(state="normal")
+        else:
+            self._add_btn.configure(state="disabled")
 
     def _on_replace(self) -> None:
         if not self._selected_error:
@@ -257,24 +397,59 @@ class ViewMapping(ctk.CTkFrame):
             self._set_error(f"Could not load dim values: {exc}")
             return
 
-        def on_confirm(new_value: str) -> None:
-            try:
-                replace_transaction_value(
-                    self.project_path,
-                    self.mapping,
-                    row_index=int(self._selected_error["row_index"]),
-                    new_value=new_value,
-                )
-                self._reload_data()
-            except Exception as exc:
-                messagebox.showerror("Error", f"Could not replace value:\n{exc}")
+        try:
+            dim_df = get_dim_dataframe(self.project_path, self.mapping["dim_table"])
+        except Exception:
+            dim_df = None
 
-        PopupReplace(
-            self,
-            bad_value=str(self._selected_error.get("bad_value", "")),
-            valid_values=values,
-            on_confirm=on_confirm,
+        bad_value = str(self._selected_error.get("bad_value", ""))
+        row_index = int(self._selected_error["row_index"])
+
+        # Count all errors that share the same bad_value (including the selected one)
+        same_value_count = sum(
+            1 for e in self._errors if str(e.get("bad_value", "")) == bad_value
         )
+
+        def open_replace_popup(scope: str) -> None:
+            def on_confirm(new_value: str) -> None:
+                try:
+                    if scope == "all":
+                        replace_transaction_values_bulk(
+                            self.project_path,
+                            self.mapping,
+                            old_value=bad_value,
+                            new_value=new_value,
+                        )
+                    else:
+                        replace_transaction_value(
+                            self.project_path,
+                            self.mapping,
+                            row_index=row_index,
+                            new_value=new_value,
+                        )
+                    self._reload_data()
+                except Exception as exc:
+                    messagebox.showerror("Error", f"Could not replace value:\n{exc}")
+
+            PopupReplace(
+                self,
+                bad_value=bad_value,
+                valid_values=values,
+                on_confirm=on_confirm,
+                dim_df=dim_df,
+                dim_table=self.mapping["dim_table"],
+            )
+
+        if same_value_count > 1:
+            _BulkScopePopup(
+                self,
+                bad_value=bad_value,
+                total_count=same_value_count,
+                selected_row=row_index + 1,  # row 0 = header, data starts at 1
+                on_choice=open_replace_popup,
+            )
+        else:
+            open_replace_popup("single")
 
     def _on_add(self) -> None:
         if not self._selected_error:
