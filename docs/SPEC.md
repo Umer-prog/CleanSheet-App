@@ -56,6 +56,7 @@ new project.
 - All comparisons are full string comparisons (handles whitespace, wrong spelling, null/blank, wrong values)
 - An error = a value in the transaction column that has no exact match in the dim column
 - Errors are shown per mapping (clicking a mapping in the navbar shows its errors)
+- Implementation detail: transaction CSV validation must stream in chunks using `pd.read_csv(..., chunksize=5000)` for large files
 
 ---
 
@@ -269,15 +270,20 @@ def hash_dataframe(df):
 
 **Default view (mapping selected):**
 - Top area: transaction table data displayed as a grid/table
+- Transaction display is paginated at 500 rows per page with Prev/Next and `row X-Y of Z`
 - Bottom area: error list for this mapping
   - Each error row shows: row number, column name, bad value, expected values (from dim)
   - Click an error → shows two buttons: Replace | Add
+- If selected mapping has no errors and all mappings in project are clean, Replace/Add are replaced by:
+  - `All errors are removed. Generate final file.`
+  - `Generate` button
 
 **Replace flow:**
 1. Popup opens showing all valid values from the linked dim column
 2. Client selects the correct value
 3. Confirms → that cell in the transaction CSV is updated
 4. Error removed from list
+5. Final workbook is not auto-generated here
 
 **Add flow:**
 1. Popup opens showing all columns of the dim table (except the mapped column which is pre-filled with the bad value)
@@ -285,6 +291,7 @@ def hash_dataframe(df):
 3. Client fills in remaining fields and confirms
 4. New row appended to the dim JSON file
 5. Error removed from list (value now exists in dim table)
+6. Final workbook is not auto-generated here
 
 ---
 
@@ -406,6 +413,20 @@ def run_checks(value, dim_values, **kwargs):
 
 ---
 
+
+### UI responsiveness and async execution
+- Heavy work runs in background threads across launcher/setup/workspace flows.
+- UI widgets are updated only on the main thread via `after(0, ...)`.
+- Loading overlays are shown during background operations with smooth animated progress bars.
+
+### Scrolling and large-data usability
+- Transaction preview and dimension preview text areas use no-wrap mode to support horizontal scrolling for wide columns.
+- Add-row popup body is scrollable to support dimension tables with many fields.
+
+### Final export trigger
+- `final/final_updated.xlsx` is generated only when user explicitly clicks `Generate` after all mappings are error-free.
+- Replace/Add actions update source data and errors, but do not auto-export the final workbook.
+
 ## Branding & Theming System
 
 ### Overview
@@ -495,3 +516,4 @@ def logo_path():
 ## App Name
 TBD — replace [APPNAME] everywhere once confirmed.
 Candidates: Mapflow, Veriflow, Cleansheet, Mappiq, Datarule
+

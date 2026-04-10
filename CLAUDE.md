@@ -54,6 +54,15 @@ Full spec is in `docs/SPEC.md` — read it before starting any section.
 - Never silently swallow exceptions
 - Validation errors shown as inline labels (red text), not popups, unless it's a blocking action
 
+### Performance & responsiveness (mandatory)
+- Any heavy operation (file reads/writes, snapshot creation, error detection, history/revert, project create/open, settings save, mapping save) must run in a background `threading.Thread`.
+- Background threads must never touch UI widgets directly.
+- Return background results to the UI thread with `self.after(0, callback)`.
+- Use a loading overlay while background work is running.
+- Loading overlay progress bars should animate smoothly and continuously (do not appear stuck at the end).
+- Error detection over transaction CSV must stream with `pd.read_csv(..., chunksize=5000)`.
+- Wide table-like text views must use horizontal scrolling (`CTkTextbox(..., wrap="none")`).
+
 ### Do not
 - Do not use tkinter StringVar/IntVar etc unless absolutely necessary
 - Do not put SQL or file I/O inside UI files
