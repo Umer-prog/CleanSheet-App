@@ -87,19 +87,23 @@ class PopupAdd(ctk.CTkToplevel):
         body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         body.pack(fill="both", expand=True, padx=20, pady=16)
         body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=1)
+
+        fields = ctk.CTkScrollableFrame(body, fg_color="transparent")
+        fields.pack(fill="both", expand=True, padx=8, pady=8)
+        fields.grid_columnconfigure(0, weight=1)
+        fields.grid_columnconfigure(1, weight=1)
 
         row = 0
         for col in self._dim_columns:
             ctk.CTkLabel(
-                body,
+                fields,
                 text=col,
                 font=theme.font(12, weight="bold"),
                 text_color=theme.get("text_dark"),
             ).grid(row=row, column=0, padx=18, pady=(10, 4), sticky="w")
 
             entry = ctk.CTkEntry(
-                body,
+                fields,
                 height=38,
                 corner_radius=8,
                 border_color=theme.get("primary"),

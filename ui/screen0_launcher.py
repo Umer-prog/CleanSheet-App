@@ -1,6 +1,7 @@
 ﻿from datetime import datetime
 from pathlib import Path
 import shutil
+import threading
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -331,10 +332,15 @@ class NewProjectDialog(ctk.CTkToplevel):
 
         self._folder_var = ctk.StringVar()
         self._error_lbl = None
+        self._loading_count = 0
+        self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
 
         self._build_header()
         self._build_footer()   # footer pinned first so it anchors bottom
         self._build_body()
+        self._build_loading_overlay()
         self.after(50, self.lift)
 
     def _build_header(self) -> None:
@@ -463,15 +469,113 @@ class NewProjectDialog(ctk.CTkToplevel):
             self._show_error("Save location does not exist.")
             return
 
-        try:
+        def worker():
             project_path = create_project(name, company, Path(folder))
-            state = open_project(project_path)
-        except Exception as exc:
-            self._show_error(f"Could not create project: {exc}")
-            return
+            return open_project(project_path)
 
-        self.destroy()
-        self.on_success(state)
+        def on_success(state):
+            self.destroy()
+            self.on_success(state)
+
+        def on_error(exc):
+            self._show_error(f"Could not create project: {exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _build_loading_overlay(self) -> None:
+        self._loading_overlay = ctk.CTkFrame(
+            self,
+            fg_color=theme.get("secondary"),
+            corner_radius=0,
+        )
+
+        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
+        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(
+            overlay_card,
+            text="Creating project...",
+            font=theme.font(14, weight="bold"),
+            text_color=theme.get("text_dark"),
+        ).pack(padx=20, pady=(14, 8))
+
+        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=240)
+        self._loading_bar.set(0.0)
+        self._loading_bar.pack(padx=20, pady=(0, 14))
+
+    def _run_background(self, worker, on_success=None, on_error=None) -> None:
+        self._show_loading()
+
+        def _finish_success(result):
+            self._hide_loading()
+            if on_success:
+                on_success(result)
+
+        def _finish_error(exc):
+            self._hide_loading()
+            if on_error:
+                on_error(exc)
+            else:
+                self._show_error(str(exc))
+
+        def _task():
+            try:
+                result = worker()
+            except Exception as exc:
+                try:
+                    self.after(0, lambda err=exc: _finish_error(err))
+                except Exception:
+                    pass
+                return
+            try:
+                self.after(0, lambda value=result: _finish_success(value))
+            except Exception:
+                pass
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _show_loading(self) -> None:
+        self._loading_count += 1
+        if self._loading_count != 1:
+            return
+        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._loading_overlay.lift()
+        self._start_loading_animation()
+
+    def _hide_loading(self) -> None:
+        self._loading_count = max(0, self._loading_count - 1)
+        if self._loading_count != 0:
+            return
+        self._stop_loading_animation()
+        self._loading_overlay.place_forget()
+
+    def _start_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            return
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _stop_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            self.after_cancel(self._loading_anim_job)
+            self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(0.0)
+
+    def _animate_loading_bar(self) -> None:
+        step = 0.015
+        self._loading_anim_value += step * self._loading_anim_direction
+        if self._loading_anim_value >= 1.0:
+            self._loading_anim_value = 1.0
+            self._loading_anim_direction = -1
+        elif self._loading_anim_value <= 0.0:
+            self._loading_anim_value = 0.0
+            self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
 
     def _show_error(self, msg: str) -> None:
         """Display an inline validation error in the footer."""

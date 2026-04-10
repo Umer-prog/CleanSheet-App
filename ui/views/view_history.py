@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import threading
 from pathlib import Path
 from tkinter import messagebox
 
@@ -39,12 +40,17 @@ class ViewHistory(ctk.CTkFrame):
         self._selected_manifest: dict | None = None
         self._selected_row = None
         self._manifests: list[dict] = []
+        self._loading_count = 0
+        self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         self._build_header()
         self._build_body()
+        self._build_loading_overlay()
         self._load_manifests()
 
     def _build_header(self) -> None:
@@ -198,12 +204,19 @@ class ViewHistory(ctk.CTkFrame):
             ).pack(anchor="w", padx=10, pady=10)
             return
 
-        try:
-            self._manifests = list_manifests(self.project_path)
-        except Exception as exc:
-            self._set_error(f"Could not load manifests: {exc}")
-            return
+        def worker():
+            return list_manifests(self.project_path)
 
+        def on_success(manifests):
+            self._manifests = manifests
+            self._render_manifest_rows()
+
+        def on_error(exc):
+            self._set_error(f"Could not load manifests: {exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _render_manifest_rows(self) -> None:
         if not self._manifests:
             ctk.CTkLabel(
                 self._list,
@@ -261,17 +274,22 @@ class ViewHistory(ctk.CTkFrame):
             self._set_error("Select a manifest first.")
             return
         new_label = self._label_entry.get().strip()
-        try:
+        manifest_id = self._selected_manifest["manifest_id"]
+
+        def worker():
             update_manifest_label(
                 self.project_path,
-                self._selected_manifest["manifest_id"],
+                manifest_id,
                 new_label,
             )
-        except Exception as exc:
-            self._set_error(f"Could not update label: {exc}")
-            return
 
-        self.on_project_changed(target_key="history")
+        def on_success(_result):
+            self.on_project_changed(target_key="history")
+
+        def on_error(exc):
+            self._set_error(f"Could not update label: {exc}")
+
+        self._run_background(worker, on_success, on_error)
 
     def _confirm_revert(self) -> None:
         if not self._selected_manifest:
@@ -281,17 +299,116 @@ class ViewHistory(ctk.CTkFrame):
         manifest_id = self._selected_manifest["manifest_id"]
 
         def do_revert():
-            try:
+            def worker():
                 revert_to_manifest(self.project_path, manifest_id)
-            except Exception as exc:
+
+            def on_success(_result):
+                messagebox.showinfo("Reverted", f"Project reverted to {manifest_id}.")
+                self.on_project_changed(target_key="history")
+
+            def on_error(exc):
                 messagebox.showerror("Error", f"Could not revert manifest:\n{exc}")
-                return
-            messagebox.showinfo("Reverted", f"Project reverted to {manifest_id}.")
-            self.on_project_changed(target_key="history")
+
+            self._run_background(worker, on_success, on_error)
 
         PopupRevertConfirm(self, manifest_id=manifest_id, on_confirm=do_revert)
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.configure(text=msg)
+
+    def _build_loading_overlay(self) -> None:
+        self._loading_overlay = ctk.CTkFrame(
+            self,
+            fg_color=theme.get("secondary"),
+            corner_radius=0,
+        )
+
+        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
+        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(
+            overlay_card,
+            text="Loading history...",
+            text_color=theme.get("text_dark"),
+            font=theme.font(14, weight="bold"),
+        ).pack(padx=20, pady=(14, 8))
+
+        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=260)
+        self._loading_bar.set(0.0)
+        self._loading_bar.pack(padx=20, pady=(0, 14))
+
+    def _run_background(self, worker, on_success=None, on_error=None) -> None:
+        self._show_loading()
+
+        def _finish_success(result):
+            self._hide_loading()
+            if on_success:
+                on_success(result)
+
+        def _finish_error(exc):
+            self._hide_loading()
+            if on_error:
+                on_error(exc)
+            else:
+                self._set_error(str(exc))
+
+        def _task():
+            try:
+                result = worker()
+            except Exception as exc:
+                try:
+                    self.after(0, lambda err=exc: _finish_error(err))
+                except Exception:
+                    pass
+                return
+            try:
+                self.after(0, lambda value=result: _finish_success(value))
+            except Exception:
+                pass
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _show_loading(self) -> None:
+        self._loading_count += 1
+        if self._loading_count != 1:
+            return
+        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._loading_overlay.lift()
+        self._start_loading_animation()
+
+    def _hide_loading(self) -> None:
+        self._loading_count = max(0, self._loading_count - 1)
+        if self._loading_count != 0:
+            return
+        self._stop_loading_animation()
+        self._loading_overlay.place_forget()
+
+    def _start_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            return
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _stop_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            self.after_cancel(self._loading_anim_job)
+            self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(0.0)
+
+    def _animate_loading_bar(self) -> None:
+        step = 0.015
+        self._loading_anim_value += step * self._loading_anim_direction
+        if self._loading_anim_value >= 1.0:
+            self._loading_anim_value = 1.0
+            self._loading_anim_direction = -1
+        elif self._loading_anim_value <= 0.0:
+            self._loading_anim_value = 0.0
+            self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
 
 

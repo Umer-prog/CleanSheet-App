@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import threading
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -39,12 +40,17 @@ class ViewTSources(ctk.CTkFrame):
         self.project_path = Path(project["project_path"])
         self.on_project_changed = on_project_changed
         self.on_go_mapping_setup = on_go_mapping_setup
+        self._loading_count = 0
+        self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         self._build_header()
         self._build_list()
+        self._build_loading_overlay()
         self._render_rows()
 
     def _build_header(self) -> None:
@@ -162,60 +168,76 @@ class ViewTSources(ctk.CTkFrame):
             return
 
         excel_path = Path(file_path)
-        try:
-            sheets = load_excel_sheets(excel_path)
+        def load_sheets_worker():
+            return load_excel_sheets(excel_path)
+
+        def on_sheets_loaded(sheets):
             selected_sheet = select_single_sheet(self, excel_path, sheets, title="Select Sheet For Update")
             if not selected_sheet:
                 return
-            df = get_sheet_as_dataframe(excel_path, selected_sheet)
-            create_snapshot(
-                self.project_path,
-                {table_name: df},
-                label=f"Updated {table_name}",
-            )
-            messagebox.showinfo("Updated", f"Table '{table_name}' updated successfully.")
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not update table:\n{exc}")
-            return
 
-        self.on_project_changed(target_key="t_sources")
+            def update_worker():
+                df = get_sheet_as_dataframe(excel_path, selected_sheet)
+                create_snapshot(
+                    self.project_path,
+                    {table_name: df},
+                    label=f"Updated {table_name}",
+                )
+
+            def on_update_done(_result):
+                messagebox.showinfo("Updated", f"Table '{table_name}' updated successfully.")
+                self.on_project_changed(target_key="t_sources")
+
+            def on_update_error(exc):
+                messagebox.showerror("Error", f"Could not update table:\n{exc}")
+
+            self._run_background(update_worker, on_update_done, on_update_error)
+
+        def on_sheets_error(exc):
+            messagebox.showerror("Error", f"Could not update table:\n{exc}")
+
+        self._run_background(load_sheets_worker, on_sheets_loaded, on_sheets_error)
 
     def _on_delete_table(self, table_name: str) -> None:
         self._set_error("")
-        try:
-            mappings = get_mappings(self.project_path)
-        except Exception as exc:
+        def load_mappings_worker():
+            return get_mappings(self.project_path)
+
+        def on_mappings_loaded(mappings):
+            count = count_mappings_for_table(mappings, table_name)
+            message = f"Deleting '{table_name}' will also remove {count} mapping(s). Confirm?"
+            if not messagebox.askyesno("Confirm Delete", message):
+                return
+
+            def delete_worker():
+                csv_path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
+                if csv_path.exists():
+                    csv_path.unlink()
+                delete_mappings_for_table(self.project_path, table_name)
+
+                project_data = {
+                    "project_name": self.project.get("project_name", ""),
+                    "created_at": self.project.get("created_at", ""),
+                    "company": self.project.get("company", ""),
+                    "transaction_tables": [
+                        t for t in self.project.get("transaction_tables", []) if t != table_name
+                    ],
+                    "dim_tables": list(self.project.get("dim_tables", [])),
+                }
+                save_project_json(self.project_path, project_data)
+
+            def on_delete_done(_result):
+                self.on_project_changed(target_key="t_sources")
+
+            def on_delete_error(exc):
+                messagebox.showerror("Error", f"Could not delete table:\n{exc}")
+
+            self._run_background(delete_worker, on_delete_done, on_delete_error)
+
+        def on_mappings_error(exc):
             self._set_error(f"Could not read mappings: {exc}")
-            return
 
-        count = count_mappings_for_table(mappings, table_name)
-        message = (
-            f"Deleting '{table_name}' will also remove {count} mapping(s). Confirm?"
-        )
-        if not messagebox.askyesno("Confirm Delete", message):
-            return
-
-        try:
-            csv_path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
-            if csv_path.exists():
-                csv_path.unlink()
-            delete_mappings_for_table(self.project_path, table_name)
-
-            project_data = {
-                "project_name": self.project.get("project_name", ""),
-                "created_at": self.project.get("created_at", ""),
-                "company": self.project.get("company", ""),
-                "transaction_tables": [
-                    t for t in self.project.get("transaction_tables", []) if t != table_name
-                ],
-                "dim_tables": list(self.project.get("dim_tables", [])),
-            }
-            save_project_json(self.project_path, project_data)
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not delete table:\n{exc}")
-            return
-
-        self.on_project_changed(target_key="t_sources")
+        self._run_background(load_mappings_worker, on_mappings_loaded, on_mappings_error)
 
     def _on_add_transaction_table(self) -> None:
         self._set_error("")
@@ -226,8 +248,10 @@ class ViewTSources(ctk.CTkFrame):
         if not file_path:
             return
         excel_path = Path(file_path)
-        try:
-            sheets = load_excel_sheets(excel_path)
+        def load_sheets_worker():
+            return load_excel_sheets(excel_path)
+
+        def on_sheets_loaded(sheets):
             selected_sheet = select_single_sheet(self, excel_path, sheets, title="Select Transaction Sheet")
             if not selected_sheet:
                 return
@@ -236,30 +260,135 @@ class ViewTSources(ctk.CTkFrame):
                 self._set_error(f"Table name already exists: {table_name}")
                 return
 
-            df = get_sheet_as_dataframe(excel_path, selected_sheet)
-            save_as_csv(df, self.project_path / "data" / "transactions" / f"{table_name}.csv")
-            create_snapshot(
-                self.project_path,
-                {table_name: df},
-                label=f"Added {table_name}",
-            )
-            project_data = {
-                "project_name": self.project.get("project_name", ""),
-                "created_at": self.project.get("created_at", ""),
-                "company": self.project.get("company", ""),
-                "transaction_tables": [*self.project.get("transaction_tables", []), table_name],
-                "dim_tables": list(self.project.get("dim_tables", [])),
-            }
-            save_project_json(self.project_path, project_data)
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not add transaction table:\n{exc}")
-            return
+            def add_worker():
+                df = get_sheet_as_dataframe(excel_path, selected_sheet)
+                save_as_csv(df, self.project_path / "data" / "transactions" / f"{table_name}.csv")
+                create_snapshot(
+                    self.project_path,
+                    {table_name: df},
+                    label=f"Added {table_name}",
+                )
+                project_data = {
+                    "project_name": self.project.get("project_name", ""),
+                    "created_at": self.project.get("created_at", ""),
+                    "company": self.project.get("company", ""),
+                    "transaction_tables": [*self.project.get("transaction_tables", []), table_name],
+                    "dim_tables": list(self.project.get("dim_tables", [])),
+                }
+                save_project_json(self.project_path, project_data)
 
-        self.on_project_changed(target_key="t_sources")
-        if messagebox.askyesno("Mapping Setup", "Go to mapping setup for the new table now?"):
-            self.on_go_mapping_setup()
+            def on_add_done(_result):
+                go_setup = messagebox.askyesno("Mapping Setup", "Go to mapping setup for the new table now?")
+                self.on_project_changed(target_key="t_sources")
+                if go_setup:
+                    self.on_go_mapping_setup()
+
+            def on_add_error(exc):
+                messagebox.showerror("Error", f"Could not add transaction table:\n{exc}")
+
+            self._run_background(add_worker, on_add_done, on_add_error)
+
+        def on_sheets_error(exc):
+            messagebox.showerror("Error", f"Could not add transaction table:\n{exc}")
+
+        self._run_background(load_sheets_worker, on_sheets_loaded, on_sheets_error)
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.configure(text=msg)
+
+    def _build_loading_overlay(self) -> None:
+        self._loading_overlay = ctk.CTkFrame(
+            self,
+            fg_color=theme.get("secondary"),
+            corner_radius=0,
+        )
+
+        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
+        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(
+            overlay_card,
+            text="Working...",
+            text_color=theme.get("text_dark"),
+            font=theme.font(14, weight="bold"),
+        ).pack(padx=20, pady=(14, 8))
+
+        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=260)
+        self._loading_bar.set(0.0)
+        self._loading_bar.pack(padx=20, pady=(0, 14))
+
+    def _run_background(self, worker, on_success=None, on_error=None) -> None:
+        self._show_loading()
+
+        def _finish_success(result):
+            self._hide_loading()
+            if on_success:
+                on_success(result)
+
+        def _finish_error(exc):
+            self._hide_loading()
+            if on_error:
+                on_error(exc)
+            else:
+                self._set_error(str(exc))
+
+        def _task():
+            try:
+                result = worker()
+            except Exception as exc:
+                try:
+                    self.after(0, lambda err=exc: _finish_error(err))
+                except Exception:
+                    pass
+                return
+            try:
+                self.after(0, lambda value=result: _finish_success(value))
+            except Exception:
+                pass
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _show_loading(self) -> None:
+        self._loading_count += 1
+        if self._loading_count != 1:
+            return
+        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._loading_overlay.lift()
+        self._start_loading_animation()
+
+    def _hide_loading(self) -> None:
+        self._loading_count = max(0, self._loading_count - 1)
+        if self._loading_count != 0:
+            return
+        self._stop_loading_animation()
+        self._loading_overlay.place_forget()
+
+    def _start_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            return
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _stop_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            self.after_cancel(self._loading_anim_job)
+            self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(0.0)
+
+    def _animate_loading_bar(self) -> None:
+        step = 0.015
+        self._loading_anim_value += step * self._loading_anim_direction
+        if self._loading_anim_value >= 1.0:
+            self._loading_anim_value = 1.0
+            self._loading_anim_direction = -1
+        elif self._loading_anim_value <= 0.0:
+            self._loading_anim_value = 0.0
+            self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
 
 

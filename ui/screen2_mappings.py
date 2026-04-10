@@ -1,12 +1,14 @@
 ﻿from __future__ import annotations
 
+import threading
 from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
+import pandas as pd
 
 import ui.theme as theme
-from core.data_loader import load_csv, load_dim_json
+from core.data_loader import load_dim_json
 from core.mapping_manager import add_mapping, get_mappings
 
 
@@ -71,6 +73,10 @@ class Screen2Mappings(ctk.CTkFrame):
         self._selected_transaction_button = None
         self._dim_buttons: dict[str, ctk.CTkButton] = {}
         self._transaction_buttons: dict[str, ctk.CTkButton] = {}
+        self._loading_count = 0
+        self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
 
         self.grid_columnconfigure(0, weight=0, minsize=320)
         self.grid_columnconfigure(1, weight=1)
@@ -78,6 +84,7 @@ class Screen2Mappings(ctk.CTkFrame):
 
         self._build_left_panel()
         self._build_right_panel()
+        self._build_loading_overlay()
         self._refresh_tables()
         self._refresh_mappings()
 
@@ -286,17 +293,55 @@ class Screen2Mappings(ctk.CTkFrame):
         self._set_error("")
         self._selected_dim_table = table_name
         self._set_button_selection(self._dim_buttons, table_name, is_dim=True)
-        self._dim_columns = self._load_dim_columns(table_name)
-        self._dim_column_menu.configure(values=self._dim_columns or ["Select Column"])
-        self._dim_column_menu.set("Select Column")
+        self._dim_column_menu.configure(values=["Loading..."])
+        self._dim_column_menu.set("Loading...")
+
+        def worker():
+            return self._load_dim_columns(table_name)
+
+        def on_success(columns):
+            if self._selected_dim_table != table_name:
+                return
+            self._dim_columns = columns
+            self._dim_column_menu.configure(values=self._dim_columns or ["Select Column"])
+            self._dim_column_menu.set("Select Column")
+
+        def on_error(exc):
+            if self._selected_dim_table != table_name:
+                return
+            self._dim_columns = []
+            self._dim_column_menu.configure(values=["Select Column"])
+            self._dim_column_menu.set("Select Column")
+            messagebox.showerror("Error", f"Could not load dim table '{table_name}':\n{exc}")
+
+        self._run_background(worker, on_success, on_error)
 
     def _select_transaction_table(self, table_name: str) -> None:
         self._set_error("")
         self._selected_transaction_table = table_name
         self._set_button_selection(self._transaction_buttons, table_name, is_dim=False)
-        self._transaction_columns = self._load_transaction_columns(table_name)
-        self._tx_column_menu.configure(values=self._transaction_columns or ["Select Column"])
-        self._tx_column_menu.set("Select Column")
+        self._tx_column_menu.configure(values=["Loading..."])
+        self._tx_column_menu.set("Loading...")
+
+        def worker():
+            return self._load_transaction_columns(table_name)
+
+        def on_success(columns):
+            if self._selected_transaction_table != table_name:
+                return
+            self._transaction_columns = columns
+            self._tx_column_menu.configure(values=self._transaction_columns or ["Select Column"])
+            self._tx_column_menu.set("Select Column")
+
+        def on_error(exc):
+            if self._selected_transaction_table != table_name:
+                return
+            self._transaction_columns = []
+            self._tx_column_menu.configure(values=["Select Column"])
+            self._tx_column_menu.set("Select Column")
+            messagebox.showerror("Error", f"Could not load transaction table '{table_name}':\n{exc}")
+
+        self._run_background(worker, on_success, on_error)
 
     def _set_button_selection(self, button_map: dict[str, ctk.CTkButton], selected_name: str, is_dim: bool) -> None:
         for name, button in button_map.items():
@@ -316,21 +361,13 @@ class Screen2Mappings(ctk.CTkFrame):
 
     def _load_dim_columns(self, table_name: str) -> list[str]:
         path = self.project_path / "data" / "dim" / f"{table_name}.json"
-        try:
-            df = load_dim_json(path)
-            return list(df.columns)
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not load dim table '{table_name}':\n{exc}")
-            return []
+        df = load_dim_json(path)
+        return list(df.columns)
 
     def _load_transaction_columns(self, table_name: str) -> list[str]:
         path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
-        try:
-            df = load_csv(path)
-            return list(df.columns)
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not load transaction table '{table_name}':\n{exc}")
-            return []
+        cols = pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns
+        return [str(c) for c in cols]
 
     def _on_confirm_mapping(self) -> None:
         dim_column = self._dim_column_menu.get().strip()
@@ -422,50 +459,151 @@ class Screen2Mappings(ctk.CTkFrame):
             self._refresh_mappings()
 
     def _on_finish_setup(self) -> None:
-        try:
-            existing_mappings = get_mappings(self.project_path)
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not read existing mappings:\n{exc}")
-            return
+        def load_existing_worker():
+            return get_mappings(self.project_path)
 
-        combined_mappings = [*existing_mappings, *self._pending_mappings]
-        missing_tx, missing_dim = find_unmapped_tables(
-            transaction_tables=self._transaction_tables,
-            dim_tables=self._dim_tables,
-            mappings=combined_mappings,
-        )
-        if missing_tx or missing_dim:
-            chunks = []
-            if missing_tx:
-                chunks.append(f"Unmapped transaction tables: {', '.join(missing_tx)}")
-            if missing_dim:
-                chunks.append(f"Unmapped dimension tables: {', '.join(missing_dim)}")
-            self._set_error(" | ".join(chunks))
-            return
-
-        try:
-            existing_keys = {mapping_key(m) for m in existing_mappings}
-            for mapping in self._pending_mappings:
-                if mapping_key(mapping) not in existing_keys:
-                    add_mapping(self.project_path, mapping)
-                    existing_keys.add(mapping_key(mapping))
-        except Exception as exc:
-            messagebox.showerror("Error", f"Could not save mappings:\n{exc}")
-            return
-
-        self._pending_mappings.clear()
-        self._refresh_mappings()
-        self._set_error("")
-        try:
-            from ui.screen3_main import Screen3Main
-
-            self.app.show_screen(Screen3Main, project=self.project)
-        except ImportError:
-            messagebox.showinfo(
-                "Setup Complete",
-                "Mappings saved successfully. Screen 3 is not built yet.",
+        def on_existing_loaded(existing_mappings):
+            combined_mappings = [*existing_mappings, *self._pending_mappings]
+            missing_tx, missing_dim = find_unmapped_tables(
+                transaction_tables=self._transaction_tables,
+                dim_tables=self._dim_tables,
+                mappings=combined_mappings,
             )
+            if missing_tx or missing_dim:
+                chunks = []
+                if missing_tx:
+                    chunks.append(f"Unmapped transaction tables: {', '.join(missing_tx)}")
+                if missing_dim:
+                    chunks.append(f"Unmapped dimension tables: {', '.join(missing_dim)}")
+                self._set_error(" | ".join(chunks))
+                return
+
+            def save_worker():
+                existing_keys = {mapping_key(m) for m in existing_mappings}
+                for mapping in self._pending_mappings:
+                    if mapping_key(mapping) not in existing_keys:
+                        add_mapping(self.project_path, mapping)
+                        existing_keys.add(mapping_key(mapping))
+
+            def on_save_success(_result):
+                self._pending_mappings.clear()
+                self._refresh_mappings()
+                self._set_error("")
+                try:
+                    from ui.screen3_main import Screen3Main
+
+                    self.app.show_screen(Screen3Main, project=self.project)
+                except ImportError:
+                    messagebox.showinfo(
+                        "Setup Complete",
+                        "Mappings saved successfully. Screen 3 is not built yet.",
+                    )
+
+            def on_save_error(exc):
+                messagebox.showerror("Error", f"Could not save mappings:\n{exc}")
+
+            self._run_background(save_worker, on_save_success, on_save_error)
+
+        def on_existing_error(exc):
+            messagebox.showerror("Error", f"Could not read existing mappings:\n{exc}")
+
+        self._run_background(load_existing_worker, on_existing_loaded, on_existing_error)
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
+
+    def _build_loading_overlay(self) -> None:
+        self._loading_overlay = ctk.CTkFrame(
+            self,
+            fg_color=theme.get("secondary"),
+            corner_radius=0,
+        )
+
+        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
+        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(
+            overlay_card,
+            text="Loading...",
+            text_color=theme.get("text_dark"),
+            font=theme.font(14, weight="bold"),
+        ).pack(padx=20, pady=(14, 8))
+
+        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=260)
+        self._loading_bar.set(0.0)
+        self._loading_bar.pack(padx=20, pady=(0, 14))
+
+    def _run_background(self, worker, on_success=None, on_error=None) -> None:
+        self._show_loading()
+
+        def _finish_success(result):
+            self._hide_loading()
+            if on_success:
+                on_success(result)
+
+        def _finish_error(exc):
+            self._hide_loading()
+            if on_error:
+                on_error(exc)
+            else:
+                self._set_error(str(exc))
+
+        def _task():
+            try:
+                result = worker()
+            except Exception as exc:
+                try:
+                    self.after(0, lambda err=exc: _finish_error(err))
+                except Exception:
+                    pass
+                return
+            try:
+                self.after(0, lambda value=result: _finish_success(value))
+            except Exception:
+                pass
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _show_loading(self) -> None:
+        self._loading_count += 1
+        if self._loading_count != 1:
+            return
+        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._loading_overlay.lift()
+        self._start_loading_animation()
+
+    def _hide_loading(self) -> None:
+        self._loading_count = max(0, self._loading_count - 1)
+        if self._loading_count != 0:
+            return
+        self._stop_loading_animation()
+        self._loading_overlay.place_forget()
+
+    def _start_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            return
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _stop_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            self.after_cancel(self._loading_anim_job)
+            self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(0.0)
+
+    def _animate_loading_bar(self) -> None:
+        step = 0.015
+        self._loading_anim_value += step * self._loading_anim_direction
+        if self._loading_anim_value >= 1.0:
+            self._loading_anim_value = 1.0
+            self._loading_anim_direction = -1
+        elif self._loading_anim_value <= 0.0:
+            self._loading_anim_value = 0.0
+            self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
 

@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import threading
 from pathlib import Path
 from tkinter import messagebox
 
@@ -11,15 +12,16 @@ from core.data_loader import load_csv, save_as_csv
 from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
 from core.final_export_manager import export_final_workbook
+from core.mapping_manager import get_mappings
 from ui.popups.popup_add import PopupAdd
 from ui.popups.popup_replace import PopupReplace
 
 
-def format_dataframe_preview(df: pd.DataFrame, max_rows: int = 40) -> str:
+def format_dataframe_preview(df: pd.DataFrame) -> str:
     """Return a pipe-separated text table with row numbers matching Excel (header = row 1, data starts at row 2)."""
     if df.empty:
         return "(No rows)"
-    preview = df.head(max_rows).fillna("")
+    preview = df.fillna("")
     cols = list(preview.columns)
 
     col_widths = {
@@ -189,6 +191,15 @@ class ViewMapping(ctk.CTkFrame):
 
         self._selected_error: dict | None = None
         self._errors: list[dict] = []
+        self._transaction_df: pd.DataFrame | None = None
+        self._page_size = 500
+        self._current_page = 0
+        self._loading_count = 0
+        self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._generate_mode = False
+        self._generate_check_token = 0
 
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -197,6 +208,7 @@ class ViewMapping(ctk.CTkFrame):
         self._build_header()
         self._build_transaction_panel()
         self._build_error_panel()
+        self._build_loading_overlay()
         self._reload_data()
 
     def _build_header(self) -> None:
@@ -238,6 +250,7 @@ class ViewMapping(ctk.CTkFrame):
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 8))
         card.grid_rowconfigure(1, weight=1)
         card.grid_columnconfigure(0, weight=1)
+        card.grid_columnconfigure(1, weight=0)
 
         ctk.CTkLabel(
             card,
@@ -246,13 +259,53 @@ class ViewMapping(ctk.CTkFrame):
             font=theme.font(13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
+        pagination = ctk.CTkFrame(card, fg_color="transparent")
+        pagination.grid(row=0, column=1, sticky="e", padx=12, pady=(10, 6))
+
+        self._tx_range_lbl = ctk.CTkLabel(
+            pagination,
+            text="row 0-0 of 0",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+        )
+        self._tx_range_lbl.pack(side="left", padx=(0, 8))
+
+        self._prev_btn = ctk.CTkButton(
+            pagination,
+            text="Prev",
+            width=64,
+            height=30,
+            fg_color="transparent",
+            border_width=1,
+            border_color=theme.get("primary"),
+            text_color=theme.get("primary"),
+            state="disabled",
+            command=self._go_prev_page,
+        )
+        self._prev_btn.pack(side="left", padx=(0, 6))
+
+        self._next_btn = ctk.CTkButton(
+            pagination,
+            text="Next",
+            width=64,
+            height=30,
+            fg_color="transparent",
+            border_width=1,
+            border_color=theme.get("primary"),
+            text_color=theme.get("primary"),
+            state="disabled",
+            command=self._go_next_page,
+        )
+        self._next_btn.pack(side="left")
+
         self._data_box = ctk.CTkTextbox(
             card,
             fg_color=theme.get("secondary"),
             text_color=theme.get("text_dark"),
             font=ctk.CTkFont(family="Courier New", size=11),
+            wrap="none",
         )
-        self._data_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self._data_box.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=12, pady=(0, 12))
 
     def _build_error_panel(self) -> None:
         card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
@@ -308,13 +361,57 @@ class ViewMapping(ctk.CTkFrame):
         )
         self._add_btn.grid(row=0, column=2, sticky="e")
 
+        self._generate_msg_lbl = ctk.CTkLabel(
+            actions,
+            text="All errors are removed. Generate final file.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11, weight="bold"),
+        )
+        self._generate_msg_lbl.grid(row=0, column=1, sticky="e", padx=(0, 8))
+        self._generate_msg_lbl.grid_remove()
+
+        self._generate_btn = ctk.CTkButton(
+            actions,
+            text="Generate",
+            width=110,
+            height=38,
+            fg_color=theme.get("primary"),
+            text_color=theme.get("text_light"),
+            command=self._on_generate_final_file,
+        )
+        self._generate_btn.grid(row=0, column=2, sticky="e")
+        self._generate_btn.grid_remove()
+
+    def _build_loading_overlay(self) -> None:
+        self._loading_overlay = ctk.CTkFrame(
+            self,
+            fg_color=theme.get("secondary"),
+            corner_radius=0,
+        )
+
+        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
+        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(
+            overlay_card,
+            text="Loading...",
+            text_color=theme.get("text_dark"),
+            font=theme.font(14, weight="bold"),
+        ).pack(padx=20, pady=(14, 8))
+
+        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=220)
+        self._loading_bar.set(0.0)
+        self._loading_bar.pack(padx=20, pady=(0, 14))
+
     def _reload_data(self) -> None:
         self._set_error("")
         self._selected_error = None
-        self._replace_btn.configure(state="disabled")
-        self._add_btn.configure(state="disabled")
+        self._set_generate_mode(False)
+        self._error_list_set_loading()
+        self._transaction_df = None
+        self._update_transaction_preview()
 
-        try:
+        def worker():
             csv_path = (
                 self.project_path
                 / "data"
@@ -322,18 +419,27 @@ class ViewMapping(ctk.CTkFrame):
                 / f"{self.mapping['transaction_table']}.csv"
             )
             tx_df = load_csv(csv_path)
-            self._data_box.delete("1.0", "end")
-            self._data_box.insert("1.0", format_dataframe_preview(tx_df))
-        except Exception as exc:
-            self._data_box.delete("1.0", "end")
-            self._data_box.insert("1.0", f"Could not load transaction data:\n{exc}")
+            errors = detect_errors(self.project_path, self.mapping)
+            return tx_df, errors
 
-        try:
-            self._errors = detect_errors(self.project_path, self.mapping)
-        except Exception as exc:
+        def on_success(result):
+            tx_df, errors = result
+            self._transaction_df = tx_df
+            self._current_page = 0
+            self._errors = errors
+            self._update_transaction_preview()
+            self._render_errors()
+            self._refresh_generate_state()
+
+        def on_error(exc):
+            self._transaction_df = None
             self._errors = []
-            self._set_error(f"Error detection failed: {exc}")
-        self._render_errors()
+            self._update_transaction_preview(f"Could not load mapping data:\n{exc}")
+            self._set_error(f"Load failed: {exc}")
+            self._render_errors()
+            self._set_generate_mode(False)
+
+        self._run_background(worker, on_success, on_error)
 
     def _render_errors(self) -> None:
         for child in self._error_list.winfo_children():
@@ -373,7 +479,19 @@ class ViewMapping(ctk.CTkFrame):
             row.bind("<Button-1>", on_click)
             lbl.bind("<Button-1>", on_click)
 
+    def _error_list_set_loading(self) -> None:
+        for child in self._error_list.winfo_children():
+            child.destroy()
+        ctk.CTkLabel(
+            self._error_list,
+            text="Loading errors...",
+            text_color=theme.get("text_dark"),
+            font=theme.font(12),
+        ).pack(anchor="w", padx=10, pady=10)
+
     def _select_error(self, error: dict, frame: ctk.CTkFrame, label: ctk.CTkLabel) -> None:
+        if self._generate_mode:
+            return
         self._selected_error = error
         for child in self._error_list.winfo_children():
             if isinstance(child, ctk.CTkFrame):
@@ -397,107 +515,313 @@ class ViewMapping(ctk.CTkFrame):
             self._set_error("Select an error first.")
             return
 
-        try:
+        bad_value = str(self._selected_error.get("bad_value", ""))
+        row_index = int(self._selected_error["row_index"])
+
+        def worker():
             values = get_valid_dim_values(
                 self.project_path,
                 self.mapping["dim_table"],
                 self.mapping["dim_column"],
             )
-        except Exception as exc:
+            try:
+                dim_df = get_dim_dataframe(self.project_path, self.mapping["dim_table"])
+            except Exception:
+                dim_df = None
+            return values, dim_df
+
+        def on_success(result):
+            values, dim_df = result
+            same_value_count = sum(
+                1 for e in self._errors if str(e.get("bad_value", "")) == bad_value
+            )
+
+            def open_replace_popup(scope: str) -> None:
+                def on_confirm(new_value: str) -> None:
+                    def apply_worker():
+                        if scope == "all":
+                            replace_transaction_values_bulk(
+                                self.project_path,
+                                self.mapping,
+                                old_value=bad_value,
+                                new_value=new_value,
+                            )
+                        else:
+                            replace_transaction_value(
+                                self.project_path,
+                                self.mapping,
+                                row_index=row_index,
+                                new_value=new_value,
+                            )
+
+                    def apply_success(_result):
+                        self._reload_data()
+
+                    def apply_error(exc):
+                        messagebox.showerror("Error", f"Could not replace value:\n{exc}")
+
+                    self._run_background(apply_worker, apply_success, apply_error)
+
+                PopupReplace(
+                    self,
+                    bad_value=bad_value,
+                    valid_values=values,
+                    on_confirm=on_confirm,
+                    dim_df=dim_df,
+                    dim_table=self.mapping["dim_table"],
+                )
+
+            if same_value_count > 1:
+                _BulkScopePopup(
+                    self,
+                    bad_value=bad_value,
+                    total_count=same_value_count,
+                    selected_row=row_index + 1,  # row 0 = header, data starts at 1
+                    on_choice=open_replace_popup,
+                )
+            else:
+                open_replace_popup("single")
+
+        def on_error(exc):
             self._set_error(f"Could not load dim values: {exc}")
-            return
 
-        try:
-            dim_df = get_dim_dataframe(self.project_path, self.mapping["dim_table"])
-        except Exception:
-            dim_df = None
-
-        bad_value = str(self._selected_error.get("bad_value", ""))
-        row_index = int(self._selected_error["row_index"])
-
-        # Count all errors that share the same bad_value (including the selected one)
-        same_value_count = sum(
-            1 for e in self._errors if str(e.get("bad_value", "")) == bad_value
-        )
-
-        def open_replace_popup(scope: str) -> None:
-            def on_confirm(new_value: str) -> None:
-                try:
-                    if scope == "all":
-                        replace_transaction_values_bulk(
-                            self.project_path,
-                            self.mapping,
-                            old_value=bad_value,
-                            new_value=new_value,
-                        )
-                    else:
-                        replace_transaction_value(
-                            self.project_path,
-                            self.mapping,
-                            row_index=row_index,
-                            new_value=new_value,
-                        )
-                    self._reload_data()
-                    self._export_final_workbook_safely()
-                except Exception as exc:
-                    messagebox.showerror("Error", f"Could not replace value:\n{exc}")
-
-            PopupReplace(
-                self,
-                bad_value=bad_value,
-                valid_values=values,
-                on_confirm=on_confirm,
-                dim_df=dim_df,
-                dim_table=self.mapping["dim_table"],
-            )
-
-        if same_value_count > 1:
-            _BulkScopePopup(
-                self,
-                bad_value=bad_value,
-                total_count=same_value_count,
-                selected_row=row_index + 1,  # row 0 = header, data starts at 1
-                on_choice=open_replace_popup,
-            )
-        else:
-            open_replace_popup("single")
+        self._run_background(worker, on_success, on_error)
 
     def _on_add(self) -> None:
         if not self._selected_error:
             self._set_error("Select an error first.")
             return
 
-        try:
-            dim_columns = get_dim_columns(self.project_path, self.mapping["dim_table"])
-        except Exception as exc:
+        def worker():
+            return get_dim_columns(self.project_path, self.mapping["dim_table"])
+
+        def on_success(dim_columns):
+            def on_confirm(row: dict) -> None:
+                def apply_worker():
+                    append_dim_row(self.project_path, self.mapping["dim_table"], row)
+
+                def apply_success(_result):
+                    self._reload_data()
+
+                def apply_error(exc):
+                    messagebox.showerror("Error", f"Could not append dim row:\n{exc}")
+
+                self._run_background(apply_worker, apply_success, apply_error)
+
+            PopupAdd(
+                self,
+                dim_table=self.mapping["dim_table"],
+                dim_columns=dim_columns,
+                mapped_column=self.mapping["dim_column"],
+                bad_value=str(self._selected_error.get("bad_value", "")),
+                on_confirm=on_confirm,
+            )
+
+        def on_error(exc):
             self._set_error(f"Could not load dim columns: {exc}")
-            return
 
-        def on_confirm(row: dict) -> None:
-            try:
-                append_dim_row(self.project_path, self.mapping["dim_table"], row)
-                self._reload_data()
-                self._export_final_workbook_safely()
-            except Exception as exc:
-                messagebox.showerror("Error", f"Could not append dim row:\n{exc}")
-
-        PopupAdd(
-            self,
-            dim_table=self.mapping["dim_table"],
-            dim_columns=dim_columns,
-            mapped_column=self.mapping["dim_column"],
-            bad_value=str(self._selected_error.get("bad_value", "")),
-            on_confirm=on_confirm,
-        )
+        self._run_background(worker, on_success, on_error)
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
 
-    def _export_final_workbook_safely(self) -> None:
-        """Keep final/final_updated.xlsx in sync with latest corrected data."""
-        try:
-            export_final_workbook(self.project_path)
-        except Exception as exc:
-            self._set_error(f"Updated data, but final export failed: {exc}")
+    def _run_background(self, worker, on_success=None, on_error=None) -> None:
+        self._show_loading()
 
+        def _finish_success(result):
+            self._hide_loading()
+            if on_success:
+                on_success(result)
 
+        def _finish_error(exc):
+            self._hide_loading()
+            if on_error:
+                on_error(exc)
+            else:
+                self._set_error(str(exc))
+
+        def _task():
+            try:
+                result = worker()
+            except Exception as exc:
+                try:
+                    self.after(0, lambda err=exc: _finish_error(err))
+                except Exception:
+                    pass
+                return
+            try:
+                self.after(0, lambda value=result: _finish_success(value))
+            except Exception:
+                pass
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _set_generate_mode(self, enabled: bool) -> None:
+        self._generate_mode = bool(enabled)
+        if self._generate_mode:
+            self._replace_btn.configure(state="disabled")
+            self._add_btn.configure(state="disabled")
+            self._replace_btn.grid_remove()
+            self._add_btn.grid_remove()
+            self._generate_msg_lbl.grid()
+            self._generate_btn.grid()
+            return
+
+        self._generate_msg_lbl.grid_remove()
+        self._generate_btn.grid_remove()
+        self._replace_btn.grid()
+        self._add_btn.grid()
+
+        if self._selected_error:
+            self._replace_btn.configure(state="normal")
+            if str(self._selected_error.get("bad_value", "")).strip():
+                self._add_btn.configure(state="normal")
+            else:
+                self._add_btn.configure(state="disabled")
+        else:
+            self._replace_btn.configure(state="disabled")
+            self._add_btn.configure(state="disabled")
+
+    def _refresh_generate_state(self) -> None:
+        if self._errors:
+            self._set_generate_mode(False)
+            return
+
+        self._generate_check_token += 1
+        check_token = self._generate_check_token
+
+        def worker():
+            mappings = get_mappings(self.project_path)
+            for mapping in mappings:
+                if detect_errors(self.project_path, mapping):
+                    return False
+            return True
+
+        def on_success(all_clear):
+            if check_token != self._generate_check_token:
+                return
+            self._set_generate_mode(bool(all_clear))
+            if not all_clear:
+                self._set_error("No errors in this mapping. Resolve remaining mappings to enable final export.")
+
+        def on_error(exc):
+            if check_token != self._generate_check_token:
+                return
+            self._set_generate_mode(False)
+            self._set_error(f"Could not verify mapping status: {exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _on_generate_final_file(self) -> None:
+        if not self._generate_mode:
+            return
+
+        def worker():
+            return export_final_workbook(self.project_path)
+
+        def on_success(output_path):
+            messagebox.showinfo("Final File Generated", f"Final file created:\n{output_path}")
+
+        def on_error(exc):
+            messagebox.showerror("Error", f"Could not generate final file:\n{exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _show_loading(self) -> None:
+        self._loading_count += 1
+        if self._loading_count != 1:
+            return
+        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._loading_overlay.lift()
+        self._start_loading_animation()
+
+    def _hide_loading(self) -> None:
+        self._loading_count = max(0, self._loading_count - 1)
+        if self._loading_count != 0:
+            return
+        self._stop_loading_animation()
+        self._loading_overlay.place_forget()
+
+    def _start_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            return
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _stop_loading_animation(self) -> None:
+        if self._loading_anim_job is not None:
+            self.after_cancel(self._loading_anim_job)
+            self._loading_anim_job = None
+        self._loading_anim_value = 0.0
+        self._loading_anim_direction = 1
+        self._loading_bar.set(0.0)
+
+    def _animate_loading_bar(self) -> None:
+        step = 0.015
+        self._loading_anim_value += step * self._loading_anim_direction
+        if self._loading_anim_value >= 1.0:
+            self._loading_anim_value = 1.0
+            self._loading_anim_direction = -1
+        elif self._loading_anim_value <= 0.0:
+            self._loading_anim_value = 0.0
+            self._loading_anim_direction = 1
+        self._loading_bar.set(self._loading_anim_value)
+        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+
+    def _go_prev_page(self) -> None:
+        if self._transaction_df is None or self._current_page <= 0:
+            return
+        self._current_page -= 1
+        self._update_transaction_preview()
+
+    def _go_next_page(self) -> None:
+        if self._transaction_df is None:
+            return
+        total_rows = len(self._transaction_df)
+        if total_rows == 0:
+            return
+        max_page = (total_rows - 1) // self._page_size
+        if self._current_page >= max_page:
+            return
+        self._current_page += 1
+        self._update_transaction_preview()
+
+    def _update_transaction_preview(self, message: str | None = None) -> None:
+        self._data_box.delete("1.0", "end")
+
+        if message:
+            self._data_box.insert("1.0", message)
+            self._tx_range_lbl.configure(text="row 0-0 of 0")
+            self._prev_btn.configure(state="disabled")
+            self._next_btn.configure(state="disabled")
+            return
+
+        if self._transaction_df is None:
+            self._data_box.insert("1.0", "Loading transaction data...")
+            self._tx_range_lbl.configure(text="row 0-0 of 0")
+            self._prev_btn.configure(state="disabled")
+            self._next_btn.configure(state="disabled")
+            return
+
+        total_rows = len(self._transaction_df)
+        if total_rows == 0:
+            self._data_box.insert("1.0", "(No rows)")
+            self._tx_range_lbl.configure(text="row 0-0 of 0")
+            self._prev_btn.configure(state="disabled")
+            self._next_btn.configure(state="disabled")
+            return
+
+        max_page = (total_rows - 1) // self._page_size
+        if self._current_page > max_page:
+            self._current_page = max_page
+
+        start = self._current_page * self._page_size
+        end = min(start + self._page_size, total_rows)
+        page_df = self._transaction_df.iloc[start:end].copy()
+        self._data_box.insert("1.0", format_dataframe_preview(page_df))
+        self._tx_range_lbl.configure(text=f"row {start + 1}-{end} of {total_rows}")
+
+        self._prev_btn.configure(state="normal" if self._current_page > 0 else "disabled")
+        self._next_btn.configure(state="normal" if self._current_page < max_page else "disabled")

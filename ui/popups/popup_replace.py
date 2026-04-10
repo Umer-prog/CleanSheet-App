@@ -145,6 +145,7 @@ class PopupReplace(ctk.CTkToplevel):
                 fg_color=theme.get("secondary"),
                 text_color=theme.get("text_dark"),
                 font=ctk.CTkFont(family="Courier New", size=11),
+                wrap="none",
             )
             table_box.grid(row=r, column=0, padx=24, pady=(0, 10), sticky="nsew")
             table_box.insert("1.0", _format_dim_table(self._dim_df))
