@@ -121,6 +121,15 @@ class Screen3Main(ctk.CTkFrame):
             font=theme.font(12),
         ).pack(anchor="w", padx=18, pady=(0, 10))
 
+        ctk.CTkLabel(
+            self._sidebar,
+            text="How to use: Pick a section below to manage mappings, sources, history, or settings.",
+            text_color=theme.get("text_light"),
+            font=theme.font(10),
+            justify="left",
+            wraplength=280,
+        ).pack(anchor="w", padx=18, pady=(0, 10))
+
         ctk.CTkButton(
             self._sidebar,
             text="Back To Launcher",

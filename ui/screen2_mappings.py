@@ -87,14 +87,14 @@ class Screen2Mappings(ctk.CTkFrame):
 
         ctk.CTkLabel(
             panel,
-            text="Stage 1 Setup",
+            text="Mapper",
             text_color=theme.get("text_light"),
             font=theme.font(20, weight="bold"),
         ).pack(anchor="w", padx=20, pady=(26, 10))
 
         ctk.CTkLabel(
             panel,
-            text="Screen 2: Define mappings\nbetween transaction and\ndimension columns.",
+            text="Map transaction tables\nwith dimension tables\nusing selected columns.",
             text_color=theme.get("text_light"),
             justify="left",
             font=theme.font(12),
@@ -102,7 +102,7 @@ class Screen2Mappings(ctk.CTkFrame):
 
         ctk.CTkButton(
             panel,
-            text="Back To Screen 1",
+            text="Back To Data Loader",
             width=180,
             height=38,
             fg_color="transparent",
@@ -116,24 +116,35 @@ class Screen2Mappings(ctk.CTkFrame):
         panel = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0)
         panel.grid(row=0, column=1, sticky="nsew")
         panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(3, weight=1)
+        panel.grid_rowconfigure(4, weight=1)
 
         ctk.CTkLabel(
             panel,
-            text="Screen 2: Define Mappings",
+            text="Mapper",
             text_color=theme.get("text_dark"),
             font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=22, pady=(18, 10))
 
+        tip = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
+        tip.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 8))
+        ctk.CTkLabel(
+            tip,
+            text="How to use: Select one table on each side, pick columns, then confirm. Repeat until every table is mapped.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=700,
+        ).pack(anchor="w", padx=12, pady=8)
+
         top_grid = ctk.CTkFrame(panel, fg_color="transparent")
-        top_grid.grid(row=1, column=0, sticky="ew", padx=22)
+        top_grid.grid(row=2, column=0, sticky="ew", padx=22)
         top_grid.grid_columnconfigure(0, weight=1)
         top_grid.grid_columnconfigure(1, weight=1)
 
-        self._dim_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=175)
+        self._dim_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=150)
         self._dim_list.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
-        self._tx_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=175)
+        self._tx_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=150)
         self._tx_list.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
         ctk.CTkLabel(
@@ -150,7 +161,7 @@ class Screen2Mappings(ctk.CTkFrame):
         ).pack(anchor="w", padx=10, pady=(8, 6))
 
         selector = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        selector.grid(row=2, column=0, sticky="ew", padx=22, pady=(12, 10))
+        selector.grid(row=3, column=0, sticky="ew", padx=22, pady=(8, 8))
         selector.grid_columnconfigure(0, weight=1)
         selector.grid_columnconfigure(1, weight=1)
 
@@ -201,7 +212,7 @@ class Screen2Mappings(ctk.CTkFrame):
         ).grid(row=2, column=1, sticky="e", padx=12, pady=(0, 12))
 
         mappings_card = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        mappings_card.grid(row=3, column=0, sticky="nsew", padx=22, pady=(0, 10))
+        mappings_card.grid(row=4, column=0, sticky="nsew", padx=22, pady=(0, 10))
         mappings_card.grid_columnconfigure(0, weight=1)
         mappings_card.grid_rowconfigure(1, weight=1)
 
@@ -216,7 +227,7 @@ class Screen2Mappings(ctk.CTkFrame):
         self._mapping_list.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 10))
 
         footer = ctk.CTkFrame(panel, fg_color="transparent")
-        footer.grid(row=4, column=0, sticky="ew", padx=22, pady=(0, 18))
+        footer.grid(row=5, column=0, sticky="ew", padx=22, pady=(0, 18))
         footer.grid_columnconfigure(0, weight=1)
 
         self._error_lbl = ctk.CTkLabel(
@@ -348,7 +359,19 @@ class Screen2Mappings(ctk.CTkFrame):
         self._pending_mappings.append(candidate)
         self._set_error("")
         self._refresh_mappings()
+        self._clear_current_selection()
 
+    def _clear_current_selection(self) -> None:
+        self._selected_dim_table = None
+        self._selected_transaction_table = None
+        self._selected_dim_button = None
+        self._selected_transaction_button = None
+        self._set_button_selection(self._dim_buttons, "__none__", is_dim=True)
+        self._set_button_selection(self._transaction_buttons, "__none__", is_dim=False)
+        self._dim_columns = []
+        self._transaction_columns = []
+        self._dim_column_menu.configure(values=["Select Column"])
+        self._tx_column_menu.configure(values=["Select Column"])
         self._dim_column_menu.set("Select Column")
         self._tx_column_menu.set("Select Column")
 

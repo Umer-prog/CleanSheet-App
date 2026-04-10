@@ -10,6 +10,7 @@ import ui.theme as theme
 from core.data_loader import load_csv, save_as_csv
 from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
+from core.final_export_manager import export_final_workbook
 from ui.popups.popup_add import PopupAdd
 from ui.popups.popup_replace import PopupReplace
 
@@ -223,6 +224,15 @@ class ViewMapping(ctk.CTkFrame):
             command=self._reload_data,
         ).grid(row=0, column=1, sticky="e")
 
+        ctk.CTkLabel(
+            hdr,
+            text="How to use: Select an error, then use Replace to fix transaction values or Add to append missing dim values.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=760,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
     def _build_transaction_panel(self) -> None:
         card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 8))
@@ -428,6 +438,7 @@ class ViewMapping(ctk.CTkFrame):
                             new_value=new_value,
                         )
                     self._reload_data()
+                    self._export_final_workbook_safely()
                 except Exception as exc:
                     messagebox.showerror("Error", f"Could not replace value:\n{exc}")
 
@@ -466,6 +477,7 @@ class ViewMapping(ctk.CTkFrame):
             try:
                 append_dim_row(self.project_path, self.mapping["dim_table"], row)
                 self._reload_data()
+                self._export_final_workbook_safely()
             except Exception as exc:
                 messagebox.showerror("Error", f"Could not append dim row:\n{exc}")
 
@@ -480,5 +492,12 @@ class ViewMapping(ctk.CTkFrame):
 
     def _set_error(self, message: str) -> None:
         self._error_lbl.configure(text=message)
+
+    def _export_final_workbook_safely(self) -> None:
+        """Keep final/final_updated.xlsx in sync with latest corrected data."""
+        try:
+            export_final_workbook(self.project_path)
+        except Exception as exc:
+            self._set_error(f"Updated data, but final export failed: {exc}")
 
 

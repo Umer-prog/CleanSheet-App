@@ -89,7 +89,7 @@ class Screen1Sources(ctk.CTkFrame):
 
         ctk.CTkLabel(
             panel,
-            text="Stage 1 Setup",
+            text="Data Loader",
             text_color=theme.get("text_light"),
             font=theme.font(20, weight="bold"),
         ).pack(anchor="w", padx=20, pady=(26, 10))
@@ -117,7 +117,7 @@ class Screen1Sources(ctk.CTkFrame):
     def _build_right_panel(self) -> None:
         panel = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0)
         panel.grid(row=0, column=1, sticky="nsew")
-        panel.grid_rowconfigure(1, weight=1)
+        panel.grid_rowconfigure(2, weight=1)
         panel.grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(panel, fg_color="transparent")
@@ -126,7 +126,7 @@ class Screen1Sources(ctk.CTkFrame):
 
         ctk.CTkLabel(
             header,
-            text="Screen 1: Add Data Sources",
+            text="Data Loader",
             text_color=theme.get("text_dark"),
             font=theme.font(22, weight="bold"),
         ).grid(row=0, column=0, sticky="w")
@@ -141,11 +141,22 @@ class Screen1Sources(ctk.CTkFrame):
             command=self._on_add_file,
         ).grid(row=0, column=1, sticky="e")
 
+        tip = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
+        tip.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 6))
+        ctk.CTkLabel(
+            tip,
+            text="How to use: Add files, pick sheets, and assign Transaction or Dimension. Confirm when both categories are present.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=760,
+        ).pack(anchor="w", padx=12, pady=8)
+
         self._list_frame = ctk.CTkScrollableFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        self._list_frame.grid(row=1, column=0, sticky="nsew", padx=22, pady=(4, 8))
+        self._list_frame.grid(row=2, column=0, sticky="nsew", padx=22, pady=(4, 8))
 
         footer = ctk.CTkFrame(panel, fg_color="transparent")
-        footer.grid(row=2, column=0, sticky="ew", padx=22, pady=(6, 20))
+        footer.grid(row=3, column=0, sticky="ew", padx=22, pady=(6, 20))
         footer.grid_columnconfigure(0, weight=1)
 
         self._error_lbl = ctk.CTkLabel(

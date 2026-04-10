@@ -52,6 +52,15 @@ class ViewSettings(ctk.CTkFrame):
             font=theme.font(22, weight="bold"),
         ).pack(anchor="w")
 
+        ctk.CTkLabel(
+            hdr,
+            text="How to use: Update project details and history preference, then click Save to apply changes.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=760,
+        ).pack(anchor="w", pady=(6, 0))
+
     def _build_form(self) -> None:
         card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))

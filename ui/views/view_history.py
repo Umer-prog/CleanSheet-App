@@ -69,6 +69,15 @@ class ViewHistory(ctk.CTkFrame):
             command=self._load_manifests,
         ).grid(row=0, column=1, sticky="e")
 
+        ctk.CTkLabel(
+            hdr,
+            text="How to use: Select a manifest to inspect details, edit label if needed, then revert when you want to restore that version.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=760,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
     def _build_body(self) -> None:
         body = ctk.CTkFrame(self, fg_color="transparent")
         body.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))

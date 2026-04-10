@@ -69,6 +69,15 @@ class ViewTSources(ctk.CTkFrame):
             command=self._on_add_transaction_table,
         ).grid(row=0, column=1, sticky="e")
 
+        ctk.CTkLabel(
+            hdr,
+            text="How to use: Upload new versions for existing tables, delete obsolete ones, or add new transaction tables.",
+            text_color=theme.get("text_dark"),
+            font=theme.font(11),
+            justify="left",
+            wraplength=760,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
     def _build_list(self) -> None:
         card = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
         card.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))

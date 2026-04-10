@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 import ui.theme as theme
+from core.mapping_manager import get_mappings
 from core.project_manager import create_project, open_project
 
 _PANEL_W = 340  # left sidebar width in px
@@ -69,6 +70,15 @@ class Screen0Launcher(ctk.CTkFrame):
             font=theme.font(13),
             text_color=theme.get("text_dark"),
         ).pack(pady=(0, 36))
+
+        ctk.CTkLabel(
+            inner,
+            text="How to use: Select a project on the left, then Open Selected. Use New Project to create a fresh workspace.",
+            font=theme.font(11),
+            text_color=theme.get("text_dark"),
+            justify="left",
+            wraplength=260,
+        ).pack(pady=(0, 14), anchor="w")
 
         self._dark_mode_switch = ctk.CTkSwitch(
             inner,
@@ -208,7 +218,7 @@ class Screen0Launcher(ctk.CTkFrame):
     # ------------------------------------------------------------------
 
     def _on_open_click(self) -> None:
-        """Load the selected project state and navigate to Screen 3."""
+        """Load selected project and navigate to the appropriate continuation screen."""
         if not self._selected_path:
             return
         try:
@@ -217,21 +227,39 @@ class Screen0Launcher(ctk.CTkFrame):
         except Exception as exc:
             messagebox.showerror("Error", f"Could not open project:\n{exc}")
             return
+        project_path = Path(state["project_path"])
+        tx_tables = list(state.get("transaction_tables", []))
+        dim_tables = list(state.get("dim_tables", []))
         try:
-            from ui.screen3_main import Screen3Main
-            self.app.show_screen(Screen3Main, project=state)
-            return
-        except ImportError:
-            # Fall back to Screen 1 while Screen 3 is not available.
-            pass
+            mappings = get_mappings(project_path)
+        except Exception:
+            mappings = []
+
+        # Resume setup where it was interrupted.
+        if not tx_tables or not dim_tables:
+            target = "screen1"
+        elif len(mappings) == 0:
+            target = "screen2"
+        else:
+            target = "screen3"
 
         try:
-            from ui.screen1_sources import Screen1Sources
-            self.app.show_screen(Screen1Sources, project=state)
+            if target == "screen1":
+                from ui.screen1_sources import Screen1Sources
+
+                self.app.show_screen(Screen1Sources, project=state)
+            elif target == "screen2":
+                from ui.screen2_mappings import Screen2Mappings
+
+                self.app.show_screen(Screen2Mappings, project=state)
+            else:
+                from ui.screen3_main import Screen3Main
+
+                self.app.show_screen(Screen3Main, project=state)
         except ImportError:
             messagebox.showerror(
                 "Navigation Error",
-                "Could not open project screen. Neither Screen 3 nor Screen 1 is available.",
+                "Could not open the required screen for this project state.",
             )
 
     def _on_new_click(self) -> None:
