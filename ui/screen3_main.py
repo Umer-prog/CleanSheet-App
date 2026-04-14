@@ -109,15 +109,22 @@ class Screen3Main(QWidget):
         layout.addWidget(header)
 
         # Back button
+        back_container = QWidget()
+        back_container.setStyleSheet("background: transparent;")
+        bc_lay = QHBoxLayout(back_container)
+        bc_lay.setContentsMargins(18, 0, 18, 12)
+        bc_lay.setSpacing(0)
+
         back_btn = QPushButton("← Back To Launcher")
         back_btn.setFixedHeight(32)
         back_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 1px solid rgba(255,255,255,0.15); "
-            "border-radius: 6px; color: #94a3b8; margin: 0 18px 12px 18px; font-size: 12px; }"
+            "border-radius: 6px; color: #94a3b8; font-size: 12px; }"
             "QPushButton:hover { background: rgba(255,255,255,0.05); }"
         )
         back_btn.clicked.connect(self._go_to_launcher)
-        layout.addWidget(back_btn)
+        bc_lay.addWidget(back_btn)
+        layout.addWidget(back_container)
 
         # Nav scroll
         scroll = QScrollArea()

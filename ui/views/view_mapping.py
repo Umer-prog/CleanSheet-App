@@ -163,7 +163,7 @@ class ViewMapping(ScreenBase):
 
         self._data_box = QTextEdit()
         self._data_box.setReadOnly(True)
-        self._data_box.setLineWrapMode(QTextEdit.NoWrap)
+        self._data_box.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self._data_box.setFont(QFont("Courier New", 11))
         self._data_box.setStyleSheet(
             "QTextEdit { background-color: #0f1117; color: #94a3b8; border-radius: 6px; }"
