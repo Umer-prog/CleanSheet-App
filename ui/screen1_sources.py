@@ -1,25 +1,23 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
-import threading
 from pathlib import Path
-from tkinter import filedialog, messagebox
 
-import customtkinter as ctk
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
-from core.data_loader import (
-    get_sheet_as_dataframe,
-    load_excel_sheets,
-    save_as_csv,
-    save_as_json,
-)
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv, save_as_json
 from core.project_manager import open_project, save_project_json
-from ui.popups.popup_sheet_selector import select_sheets
+from ui.workers import ScreenBase, clear_layout, make_scroll_area
+
+_SIDEBAR_W = 300
 
 
 def normalize_table_name(sheet_name: str) -> str:
-    """Convert a sheet name into a safe table name."""
     normalized = re.sub(r"[^a-z0-9]+", "_", sheet_name.strip().lower()).strip("_")
     if not normalized:
         normalized = "table"
@@ -28,10 +26,7 @@ def normalize_table_name(sheet_name: str) -> str:
     return normalized
 
 
-def find_duplicate_table_names(
-    selected_rows: list[dict], existing_table_names: set[str]
-) -> set[str]:
-    """Return normalized names that would collide with existing or selected rows."""
+def find_duplicate_table_names(selected_rows: list[dict], existing_table_names: set[str]) -> set[str]:
     seen = set(existing_table_names)
     duplicates = set()
     for row in selected_rows:
@@ -43,12 +38,9 @@ def find_duplicate_table_names(
 
 
 def validate_confirm_requirements(source_rows: list[dict]) -> str | None:
-    """Return an error message if Screen 1 confirm requirements are not met."""
     if not source_rows:
         return "Add at least one file before continuing."
-
-    tx_count = 0
-    dim_count = 0
+    tx_count = dim_count = 0
     for source in source_rows:
         for sheet in source.get("sheets", []):
             category = str(sheet.get("category", "")).strip()
@@ -58,7 +50,6 @@ def validate_confirm_requirements(source_rows: list[dict]) -> str | None:
                 dim_count += 1
             else:
                 return "Every selected sheet must have a category."
-
     if tx_count == 0:
         return "At least one transaction sheet is required."
     if dim_count == 0:
@@ -66,164 +57,155 @@ def validate_confirm_requirements(source_rows: list[dict]) -> str | None:
     return None
 
 
-class Screen1Sources(ctk.CTkFrame):
-    """Stage 1 screen for adding Excel files and categorizing their sheets."""
+class Screen1Sources(ScreenBase):
+    """Stage 1 — add Excel files and categorize their sheets."""
 
-    def __init__(self, parent, app, project: dict):
-        super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
+    def __init__(self, app, project: dict, **kwargs):
+        super().__init__()
         self.app = app
         self.project = project
         self.project_path = Path(project["project_path"])
         self._sources: list[dict] = []
-        self._loading_count = 0
-        self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
 
-        self.grid_columnconfigure(0, weight=0, minsize=300)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self._build_left_panel()
-        self._build_right_panel()
-        self._build_loading_overlay()
+        # --- Sidebar ---
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(_SIDEBAR_W)
+        sb = QVBoxLayout(sidebar)
+        sb.setContentsMargins(20, 26, 20, 20)
+        sb.setSpacing(10)
+
+        t = QLabel("Data Loader")
+        t.setFont(theme.font(20, "bold"))
+        t.setStyleSheet("color: #f1f5f9;")
+        sb.addWidget(t)
+
+        desc = QLabel("Add Excel files and mark each selected sheet\nas Transaction or Dimension.")
+        desc.setFont(theme.font(12))
+        desc.setStyleSheet("color: #94a3b8;")
+        sb.addWidget(desc)
+        sb.addSpacing(6)
+
+        back_btn = QPushButton("Back To Projects")
+        back_btn.setObjectName("btn_ghost")
+        back_btn.setFixedHeight(38)
+        back_btn.clicked.connect(self._go_back)
+        sb.addWidget(back_btn)
+        sb.addStretch()
+        root.addWidget(sidebar)
+
+        # --- Content ---
+        content = QWidget()
+        c_layout = QVBoxLayout(content)
+        c_layout.setContentsMargins(22, 20, 22, 20)
+        c_layout.setSpacing(8)
+
+        # Header row
+        hdr = QHBoxLayout()
+        hdr.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Data Loader")
+        title.setFont(theme.font(22, "bold"))
+        title.setStyleSheet("color: #f1f5f9;")
+        hdr.addWidget(title, 1)
+        add_btn = QPushButton("Add File")
+        add_btn.setObjectName("btn_primary")
+        add_btn.setFixedHeight(40)
+        add_btn.setFixedWidth(120)
+        add_btn.clicked.connect(self._on_add_file)
+        hdr.addWidget(add_btn)
+        c_layout.addLayout(hdr)
+
+        # Tip card
+        tip = QFrame()
+        tip.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        tip_layout = QVBoxLayout(tip)
+        tip_layout.setContentsMargins(12, 8, 12, 8)
+        tip_lbl = QLabel(
+            "How to use: Add files, pick sheets, and assign Transaction or Dimension. "
+            "Confirm when both categories are present."
+        )
+        tip_lbl.setFont(theme.font(11))
+        tip_lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+        tip_lbl.setWordWrap(True)
+        tip_layout.addWidget(tip_lbl)
+        c_layout.addWidget(tip)
+
+        # Scrollable list
+        list_card = QFrame()
+        list_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        list_card_layout = QVBoxLayout(list_card)
+        list_card_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._list_scroll, self._list_container, self._list_layout = make_scroll_area()
+        self._list_layout.setContentsMargins(10, 8, 10, 8)
+        self._list_layout.setSpacing(8)
+        list_card_layout.addWidget(self._list_scroll)
+        c_layout.addWidget(list_card, 1)
+
+        # Footer
+        footer_row = QHBoxLayout()
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(12))
+        self._error_lbl.setStyleSheet("color: #f87171;")
+        footer_row.addWidget(self._error_lbl, 1)
+
+        confirm_btn = QPushButton("Confirm & Continue")
+        confirm_btn.setObjectName("btn_primary")
+        confirm_btn.setFixedHeight(42)
+        confirm_btn.setFixedWidth(180)
+        confirm_btn.clicked.connect(self._on_confirm_continue)
+        footer_row.addWidget(confirm_btn)
+        c_layout.addLayout(footer_row)
+
+        root.addWidget(content, 1)
+
+        self._setup_overlay("Working...")
         self._render_sources()
 
-    def _build_left_panel(self) -> None:
-        panel = ctk.CTkFrame(self, fg_color=theme.get("sidebar_bg"), corner_radius=0)
-        panel.grid(row=0, column=0, sticky="nsew")
-
-        ctk.CTkLabel(
-            panel,
-            text="Data Loader",
-            text_color=theme.get("text_light"),
-            font=theme.font(20, weight="bold"),
-        ).pack(anchor="w", padx=20, pady=(26, 10))
-
-        ctk.CTkLabel(
-            panel,
-            text="Add Excel files and mark each selected sheet\nas Transaction or Dimension.",
-            text_color=theme.get("text_light"),
-            justify="left",
-            font=theme.font(12),
-        ).pack(anchor="w", padx=20, pady=(0, 16))
-
-        ctk.CTkButton(
-            panel,
-            text="Back To Projects",
-            width=180,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("text_light"),
-            text_color=theme.get("text_light"),
-            command=self._go_back,
-        ).pack(anchor="w", padx=20, pady=(0, 0))
-
-    def _build_right_panel(self) -> None:
-        panel = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0)
-        panel.grid(row=0, column=1, sticky="nsew")
-        panel.grid_rowconfigure(2, weight=1)
-        panel.grid_columnconfigure(0, weight=1)
-
-        header = ctk.CTkFrame(panel, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 8))
-        header.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            header,
-            text="Data Loader",
-            text_color=theme.get("text_dark"),
-            font=theme.font(22, weight="bold"),
-        ).grid(row=0, column=0, sticky="w")
-
-        ctk.CTkButton(
-            header,
-            text="Add File",
-            width=120,
-            height=40,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_add_file,
-        ).grid(row=0, column=1, sticky="e")
-
-        tip = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        tip.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 6))
-        ctk.CTkLabel(
-            tip,
-            text="How to use: Add files, pick sheets, and assign Transaction or Dimension. Confirm when both categories are present.",
-            text_color=theme.get("text_dark"),
-            font=theme.font(11),
-            justify="left",
-            wraplength=760,
-        ).pack(anchor="w", padx=12, pady=8)
-
-        self._list_frame = ctk.CTkScrollableFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        self._list_frame.grid(row=2, column=0, sticky="nsew", padx=22, pady=(4, 8))
-
-        footer = ctk.CTkFrame(panel, fg_color="transparent")
-        footer.grid(row=3, column=0, sticky="ew", padx=22, pady=(6, 20))
-        footer.grid_columnconfigure(0, weight=1)
-
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(12),
-        )
-        self._error_lbl.grid(row=0, column=0, sticky="w")
-
-        ctk.CTkButton(
-            footer,
-            text="Confirm & Continue",
-            width=180,
-            height=42,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_confirm_continue,
-        ).grid(row=0, column=1, sticky="e")
+    # ------------------------------------------------------------------
 
     def _go_back(self) -> None:
         from ui.screen0_launcher import Screen0Launcher
-
         self.app.show_screen(Screen0Launcher)
+
+    def _set_error(self, msg: str) -> None:
+        self._error_lbl.setText(msg)
+
+    # ------------------------------------------------------------------
+    # File / sheet operations
+    # ------------------------------------------------------------------
 
     def _on_add_file(self) -> None:
         self._set_error("")
-        selected_file = filedialog.askopenfilename(
-            title="Select Excel file",
-            filetypes=[("Excel Files", "*.xlsx *.xlsm *.xls")],
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Excel file", "", "Excel Files (*.xlsx *.xlsm *.xls)"
         )
-        if not selected_file:
+        if not file_path:
             return
-
-        excel_path = Path(selected_file)
+        excel_path = Path(file_path)
 
         def worker():
             return load_excel_sheets(excel_path)
 
         def on_success(sheet_names):
+            from ui.popups.popup_sheet_selector import select_sheets
             picked_rows = select_sheets(self, excel_path=excel_path, sheet_names=sheet_names)
             if not picked_rows:
                 return
-
             existing = self._all_known_table_names()
             duplicates = find_duplicate_table_names(picked_rows, existing_table_names=existing)
             if duplicates:
-                names = ", ".join(sorted(duplicates))
-                self._set_error(f"Duplicate table name(s): {names}")
+                self._set_error(f"Duplicate table name(s): {', '.join(sorted(duplicates))}")
                 return
-
-            self._sources.append(
-                {
-                    "file_path": str(excel_path),
-                    "sheets": picked_rows,
-                }
-            )
+            self._sources.append({"file_path": str(excel_path), "sheets": picked_rows})
             self._render_sources()
 
         def on_error(exc):
-            messagebox.showerror("Error", f"Could not read Excel file:\n{exc}")
+            QMessageBox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -253,71 +235,61 @@ class Screen1Sources(ctk.CTkFrame):
         self._render_sources()
 
     def _render_sources(self) -> None:
-        for widget in self._list_frame.winfo_children():
-            widget.destroy()
+        clear_layout(self._list_layout)
 
         if not self._sources:
-            ctk.CTkLabel(
-                self._list_frame,
-                text="No files added yet. Click Add File to begin.",
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
-            ).pack(anchor="w", padx=16, pady=14)
+            lbl = QLabel("No files added yet. Click Add File to begin.")
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+            self._list_layout.addWidget(lbl)
             return
 
         for file_index, source in enumerate(self._sources):
-            card = ctk.CTkFrame(self._list_frame, fg_color=theme.get("secondary"), corner_radius=10)
-            card.pack(fill="x", padx=10, pady=8)
+            card = QFrame()
+            card.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 10px; }")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(12, 10, 12, 10)
+            card_layout.setSpacing(6)
 
-            top = ctk.CTkFrame(card, fg_color="transparent")
-            top.pack(fill="x", padx=12, pady=(10, 6))
-            top.grid_columnconfigure(0, weight=1)
+            top_row = QHBoxLayout()
+            fname_lbl = QLabel(Path(source["file_path"]).name)
+            fname_lbl.setFont(theme.font(13, "bold"))
+            fname_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            top_row.addWidget(fname_lbl, 1)
 
-            ctk.CTkLabel(
-                top,
-                text=Path(source["file_path"]).name,
-                text_color=theme.get("text_dark"),
-                font=theme.font(13, weight="bold"),
-                anchor="w",
-            ).grid(row=0, column=0, sticky="w")
-
-            ctk.CTkButton(
-                top,
-                text="Remove File",
-                width=98,
-                height=30,
-                fg_color="transparent",
-                border_width=1,
-                border_color=theme.get("accent"),
-                text_color=theme.get("accent"),
-                command=lambda i=file_index: self._on_remove_file(i),
-            ).grid(row=0, column=1, sticky="e")
+            rm_file_btn = QPushButton("Remove File")
+            rm_file_btn.setObjectName("btn_danger")
+            rm_file_btn.setFixedHeight(30)
+            rm_file_btn.setFixedWidth(98)
+            rm_file_btn.clicked.connect(lambda _=False, i=file_index: self._on_remove_file(i))
+            top_row.addWidget(rm_file_btn)
+            card_layout.addLayout(top_row)
 
             for sheet_index, sheet in enumerate(source.get("sheets", [])):
-                row = ctk.CTkFrame(card, fg_color="transparent")
-                row.pack(fill="x", padx=12, pady=(0, 8))
-                row.grid_columnconfigure(0, weight=1)
-
+                sheet_row = QHBoxLayout()
                 table_name = normalize_table_name(sheet["sheet_name"])
-                ctk.CTkLabel(
-                    row,
-                    text=f"{sheet['sheet_name']}  ->  {sheet['category']}  ({table_name})",
-                    text_color=theme.get("text_dark"),
-                    font=theme.font(12),
-                    anchor="w",
-                ).grid(row=0, column=0, sticky="w")
+                sheet_lbl = QLabel(
+                    f"{sheet['sheet_name']}  →  {sheet['category']}  ({table_name})"
+                )
+                sheet_lbl.setFont(theme.font(12))
+                sheet_lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+                sheet_row.addWidget(sheet_lbl, 1)
 
-                ctk.CTkButton(
-                    row,
-                    text="Remove",
-                    width=74,
-                    height=28,
-                    fg_color="transparent",
-                    border_width=1,
-                    border_color=theme.get("primary"),
-                    text_color=theme.get("primary"),
-                    command=lambda fi=file_index, si=sheet_index: self._on_remove_sheet(fi, si),
-                ).grid(row=0, column=1, sticky="e")
+                rm_sheet_btn = QPushButton("Remove")
+                rm_sheet_btn.setObjectName("btn_outline")
+                rm_sheet_btn.setFixedHeight(28)
+                rm_sheet_btn.setFixedWidth(74)
+                rm_sheet_btn.clicked.connect(
+                    lambda _=False, fi=file_index, si=sheet_index: self._on_remove_sheet(fi, si)
+                )
+                sheet_row.addWidget(rm_sheet_btn)
+                card_layout.addLayout(sheet_row)
+
+            self._list_layout.addWidget(card)
+
+    # ------------------------------------------------------------------
+    # Confirm & persist
+    # ------------------------------------------------------------------
 
     def _on_confirm_continue(self) -> None:
         error = validate_confirm_requirements(self._sources)
@@ -338,16 +310,14 @@ class Screen1Sources(ctk.CTkFrame):
             self._set_error("")
             try:
                 from ui.screen2_mappings import Screen2Mappings
-
                 self.app.show_screen(Screen2Mappings, project=updated_state)
             except ImportError:
-                messagebox.showinfo(
-                    "Screen 2",
-                    "Data sources saved successfully. Screen 2 is not built yet.",
+                QMessageBox.information(
+                    self, "Screen 2", "Data sources saved. Screen 2 is not built yet."
                 )
 
         def on_error(exc):
-            messagebox.showerror("Error", f"Could not save selected sheets:\n{exc}")
+            QMessageBox.critical(self, "Error", f"Could not save selected sheets:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -359,7 +329,6 @@ class Screen1Sources(ctk.CTkFrame):
             "transaction_tables": list(self.project.get("transaction_tables", [])),
             "dim_tables": list(self.project.get("dim_tables", [])),
         }
-
         tx_names = list(project_data["transaction_tables"])
         dim_names = list(project_data["dim_tables"])
 
@@ -380,102 +349,3 @@ class Screen1Sources(ctk.CTkFrame):
         project_data["transaction_tables"] = tx_names
         project_data["dim_tables"] = dim_names
         save_project_json(self.project_path, project_data)
-
-    def _set_error(self, message: str) -> None:
-        self._error_lbl.configure(text=message)
-
-    def _build_loading_overlay(self) -> None:
-        self._loading_overlay = ctk.CTkFrame(
-            self,
-            fg_color=theme.get("secondary"),
-            corner_radius=0,
-        )
-
-        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
-        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            overlay_card,
-            text="Working...",
-            text_color=theme.get("text_dark"),
-            font=theme.font(14, weight="bold"),
-        ).pack(padx=20, pady=(14, 8))
-
-        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=300)
-        self._loading_bar.set(0.0)
-        self._loading_bar.pack(padx=20, pady=(0, 14))
-
-    def _run_background(self, worker, on_success=None, on_error=None) -> None:
-        self._show_loading()
-
-        def _finish_success(result):
-            self._hide_loading()
-            if on_success:
-                on_success(result)
-
-        def _finish_error(exc):
-            self._hide_loading()
-            if on_error:
-                on_error(exc)
-            else:
-                self._set_error(str(exc))
-
-        def _task():
-            try:
-                result = worker()
-            except Exception as exc:
-                try:
-                    self.after(0, lambda err=exc: _finish_error(err))
-                except Exception:
-                    pass
-                return
-            try:
-                self.after(0, lambda value=result: _finish_success(value))
-            except Exception:
-                pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
-    def _show_loading(self) -> None:
-        self._loading_count += 1
-        if self._loading_count != 1:
-            return
-        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._loading_overlay.lift()
-        self._start_loading_animation()
-
-    def _hide_loading(self) -> None:
-        self._loading_count = max(0, self._loading_count - 1)
-        if self._loading_count != 0:
-            return
-        self._stop_loading_animation()
-        self._loading_overlay.place_forget()
-
-    def _start_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            return
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
-    def _stop_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            self.after_cancel(self._loading_anim_job)
-            self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(0.0)
-
-    def _animate_loading_bar(self) -> None:
-        step = 0.015
-        self._loading_anim_value += step * self._loading_anim_direction
-        if self._loading_anim_value >= 1.0:
-            self._loading_anim_value = 1.0
-            self._loading_anim_direction = -1
-        elif self._loading_anim_value <= 0.0:
-            self._loading_anim_value = 0.0
-            self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-

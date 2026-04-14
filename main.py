@@ -1,19 +1,22 @@
+import sys
 from pathlib import Path
 
-import customtkinter as ctk
+from PySide6.QtWidgets import QApplication
 
 import ui.theme as theme
 
 
-def main():
-    """Entry point: load branding, configure CTk, launch the app."""
+def main() -> None:
+    """Entry point: load branding, apply QSS, launch the app."""
     theme.load(Path(__file__).parent / "branding.json")
-    ctk.set_appearance_mode("light")
-    ctk.set_default_color_theme("blue")
+
+    app = QApplication(sys.argv)
+    app.setStyleSheet(theme.QSS)
 
     from ui.app import App
-    app = App()
-    app.mainloop()
+    window = App()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

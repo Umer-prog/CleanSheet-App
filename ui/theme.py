@@ -1,86 +1,195 @@
 import json
 from pathlib import Path
 
-import customtkinter as ctk
+from PySide6.QtGui import QFont
 
-_branding = {}
+_branding: dict = {}
 
-_DEFAULTS = {
-    "company_name": "[APPNAME]",
-    "logo_path": None,
-    "color_scheme": {
-        "primary":      "#2B5CE6",
-        "secondary":    "#F5F5F5",
-        "accent":       "#E63946",
-        "text_dark":    "#1A1A2E",
-        "text_light":   "#FFFFFF",
-        "sidebar_bg":   "#2B5CE6",
-        "sidebar_text": "#FFFFFF",
-    },
+# Fixed dark-theme color palette used for inline overrides
+_COLORS = {
+    "primary":        "#3b82f6",
+    "secondary":      "#0f1117",
+    "accent":         "#f87171",
+    "text_dark":      "#f1f5f9",
+    "text_light":     "#f1f5f9",
+    "sidebar_bg":     "#13161e",
+    "sidebar_text":   "#f1f5f9",
+    "card":           "#13161e",
+    "text_muted":     "#475569",
+    "text_secondary": "#94a3b8",
+    "selection":      "rgba(59,130,246,0.10)",
 }
 
-_DARK_OVERRIDES = {
-    # Crisp dark palette with clearer separation between sidebar and content
-    "primary": "#4DA3FF",
-    "secondary": "#0B1220",
-    "accent": "#FF6A7D",
-    "text_dark": "#EAF2FF",
-    "text_light": "#F7FAFF",
-    "sidebar_bg": "#0F203A",
-    "sidebar_text": "#F1F6FF",
+# Global QSS applied once to QApplication at startup
+QSS = """
+QMainWindow, QWidget {
+    background-color: #0f1117;
+    color: #f1f5f9;
+    font-family: 'Segoe UI';
+    font-size: 13px;
 }
+QFrame#sidebar {
+    background-color: #13161e;
+    border-right: 1px solid rgba(255,255,255,0.07);
+}
+QFrame#topbar {
+    background-color: #13161e;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+QLineEdit {
+    background-color: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 7px;
+    padding: 4px 10px;
+    color: #f1f5f9;
+    min-height: 32px;
+}
+QLineEdit:focus { border-color: #3b82f6; }
+QLineEdit:disabled { color: #475569; }
+QPushButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 7px;
+    color: #f1f5f9;
+    padding: 6px 14px;
+}
+QPushButton#btn_primary {
+    background-color: #3b82f6;
+    color: white;
+    font-weight: 600;
+}
+QPushButton#btn_primary:hover { background-color: #2563eb; }
+QPushButton#btn_primary:disabled { background-color: rgba(59,130,246,0.35); color: rgba(255,255,255,0.5); }
+QPushButton#btn_ghost {
+    background-color: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: #94a3b8;
+}
+QPushButton#btn_ghost:hover { background-color: rgba(255,255,255,0.07); }
+QPushButton#btn_ghost:disabled { color: rgba(148,163,184,0.4); }
+QPushButton#btn_danger {
+    background-color: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.2);
+    color: #f87171;
+}
+QPushButton#btn_danger:hover { background-color: rgba(239,68,68,0.13); }
+QPushButton#btn_danger:disabled { color: rgba(248,113,113,0.35); border-color: rgba(239,68,68,0.1); }
+QPushButton#btn_outline {
+    border: 1px solid #3b82f6;
+    color: #3b82f6;
+}
+QPushButton#btn_outline:hover { background-color: rgba(59,130,246,0.08); }
+QPushButton#btn_outline:disabled { border-color: rgba(59,130,246,0.3); color: rgba(59,130,246,0.3); }
+QTableView {
+    background-color: transparent;
+    border: none;
+    gridline-color: rgba(255,255,255,0.04);
+    selection-background-color: rgba(59,130,246,0.12);
+    selection-color: #93c5fd;
+    outline: none;
+}
+QTableView::item { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+QHeaderView::section {
+    background-color: #13161e;
+    color: #475569;
+    font-size: 11px;
+    padding: 6px 12px;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+QScrollBar:vertical { background: transparent; width: 6px; margin: 0; }
+QScrollBar::handle:vertical { background: rgba(255,255,255,0.10); border-radius: 3px; min-height: 20px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: transparent; height: 6px; margin: 0; }
+QScrollBar::handle:horizontal { background: rgba(255,255,255,0.10); border-radius: 3px; min-width: 20px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollArea { border: none; background: transparent; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QListWidget { background: transparent; border: none; outline: none; }
+QListWidget::item { padding: 10px 18px; border-left: 2px solid transparent; color: #94a3b8; }
+QListWidget::item:selected { background: rgba(59,130,246,0.10); border-left-color: #3b82f6; color: #93c5fd; }
+QListWidget::item:hover { background: rgba(255,255,255,0.03); }
+QDialog, QDialog QWidget { background-color: #0f1117; }
+QComboBox {
+    background-color: #3b82f6;
+    border: none;
+    border-radius: 7px;
+    color: white;
+    padding: 4px 12px;
+    font-weight: 600;
+    min-height: 34px;
+}
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox::down-arrow { width: 0; height: 0; }
+QComboBox QAbstractItemView {
+    background-color: #13161e;
+    color: #f1f5f9;
+    border: 1px solid rgba(255,255,255,0.07);
+    selection-background-color: rgba(59,130,246,0.20);
+    outline: none;
+}
+QTextEdit, QPlainTextEdit {
+    background-color: #13161e;
+    color: #f1f5f9;
+    border: none;
+    border-radius: 7px;
+    padding: 4px;
+}
+QCheckBox { color: #f1f5f9; spacing: 8px; }
+QCheckBox::indicator {
+    width: 18px; height: 18px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+}
+QCheckBox::indicator:checked { background: #3b82f6; border-color: #3b82f6; }
+QProgressBar {
+    background: rgba(255,255,255,0.06);
+    border: none;
+    border-radius: 3px;
+    text-align: center;
+}
+QProgressBar::chunk { background: #3b82f6; border-radius: 3px; }
+"""
 
-# Surfaces
-_CARD_LIGHT = "#FFFFFF"
-_CARD_DARK = "#15253D"
-_SELECTION_LIGHT = "#EAF2FF"
-_SELECTION_DARK = "#1D3B64"
 _FONT_FAMILY = "Segoe UI"
 
 
 def load(branding_path: Path) -> None:
-    """Load branding.json into the module. Silently uses defaults if missing or invalid."""
+    """Load branding.json. Silently uses defaults if missing or invalid."""
     global _branding
-    branding_path = Path(branding_path)
-    if branding_path.exists():
-        try:
-            with open(branding_path, encoding="utf-8") as f:
-                _branding = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            _branding = {}
-    else:
+    try:
+        with open(branding_path, encoding="utf-8") as f:
+            _branding = json.load(f)
+    except (OSError, json.JSONDecodeError, TypeError):
         _branding = {}
 
 
-def get(key: str, fallback: str = "#2B5CE6") -> str:
-    """Return a color value from the loaded color scheme, or fallback if not found."""
-    scheme = _branding.get("color_scheme") or _DEFAULTS["color_scheme"]
-    if ctk.get_appearance_mode().lower() == "dark":
-        return _DARK_OVERRIDES.get(key, scheme.get(key, fallback))
-    return scheme.get(key, fallback)
+def get(key: str, fallback: str = "#3b82f6") -> str:
+    """Return a color token value."""
+    return _COLORS.get(key, fallback)
 
 
 def card_color() -> str:
-    """Return card/panel background color for current appearance mode."""
-    return _CARD_DARK if ctk.get_appearance_mode().lower() == "dark" else _CARD_LIGHT
+    return _COLORS["card"]
 
 
 def selection_color() -> str:
-    """Return selected-item background color for current appearance mode."""
-    return _SELECTION_DARK if ctk.get_appearance_mode().lower() == "dark" else _SELECTION_LIGHT
+    return "rgba(59,130,246,0.10)"
 
 
-def font(size: int, weight: str = "normal") -> ctk.CTkFont:
-    """Standardized app font for consistent visual hierarchy."""
-    return ctk.CTkFont(family=_FONT_FAMILY, size=size, weight=weight)
+def font(size: int, weight: str = "normal") -> QFont:
+    """Return a QFont for the standard app typeface."""
+    f = QFont(_FONT_FAMILY, size)
+    if weight == "bold":
+        f.setWeight(QFont.Weight.Bold)
+    return f
 
 
 def company_name() -> str:
-    """Return the company name from branding, or the default app name."""
-    return _branding.get("company_name") or _DEFAULTS["company_name"]
+    return _branding.get("company_name") or "CleanSheet"
 
 
 def logo_path():
-    """Return a Path to the logo file, or None if no logo is configured."""
-    p = _branding.get("logo_path") or _DEFAULTS.get("logo_path")
+    p = _branding.get("logo_path")
     return Path(p) if p else None

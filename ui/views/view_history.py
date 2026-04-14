@@ -1,207 +1,173 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-import threading
 from pathlib import Path
-from tkinter import messagebox
 
-import customtkinter as ctk
+from PySide6.QtWidgets import (
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTextEdit, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
-from core.snapshot_manager import (
-    list_manifests,
-    revert_to_manifest,
-    update_manifest_label,
-)
-from ui.popups.popup_revert_confirm import PopupRevertConfirm
+from core.snapshot_manager import list_manifests, revert_to_manifest, update_manifest_label
+from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 
 def manifest_title(manifest: dict) -> str:
-    manifest_id = str(manifest.get("manifest_id", "")).strip()
-    created_at = str(manifest.get("created_at", "")).strip()
-    return f"{manifest_id} | {created_at}"
+    mid = str(manifest.get("manifest_id", "")).strip()
+    created = str(manifest.get("created_at", "")).strip()
+    return f"{mid} | {created}"
 
 
 def manifest_tables_text(manifest: dict) -> str:
     tables = manifest.get("tables", {})
     if not tables:
         return "(No tables)"
-    lines = [f"{name} -> {filename}" for name, filename in tables.items()]
-    return "\n".join(lines)
+    return "\n".join(f"{name} → {filename}" for name, filename in tables.items())
 
 
-class ViewHistory(ctk.CTkFrame):
+class ViewHistory(ScreenBase):
     """History list and revert view."""
 
     def __init__(self, parent, project: dict, on_project_changed):
-        super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
+        super().__init__(parent)
         self.project = project
         self.project_path = Path(project["project_path"])
         self.on_project_changed = on_project_changed
         self._selected_manifest: dict | None = None
-        self._selected_row = None
+        self._selected_row_frame: QFrame | None = None
         self._manifests: list[dict] = []
-        self._loading_count = 0
-        self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
 
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 18)
+        outer.setSpacing(8)
 
-        self._build_header()
-        self._build_body()
-        self._build_loading_overlay()
+        # Header
+        hdr = QHBoxLayout()
+        title = QLabel("History / Revert")
+        title.setFont(theme.font(22, "bold"))
+        title.setStyleSheet("color: #f1f5f9;")
+        hdr.addWidget(title, 1)
+
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setObjectName("btn_primary")
+        refresh_btn.setFixedSize(100, 38)
+        refresh_btn.clicked.connect(self._load_manifests)
+        hdr.addWidget(refresh_btn)
+        outer.addLayout(hdr)
+
+        hint = QLabel(
+            "How to use: Select a manifest to inspect details, edit label if needed, "
+            "then revert to restore that version."
+        )
+        hint.setFont(theme.font(11))
+        hint.setStyleSheet("color: #475569;")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+
+        # Body — left list | right detail
+        body = QHBoxLayout()
+        body.setSpacing(12)
+
+        # Left: manifest list
+        left_card = QFrame()
+        left_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        left_layout = QVBoxLayout(left_card)
+        left_layout.setContentsMargins(12, 10, 12, 10)
+        left_layout.setSpacing(6)
+
+        left_title = QLabel("Manifests")
+        left_title.setFont(theme.font(13, "bold"))
+        left_title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        left_layout.addWidget(left_title)
+
+        self._list_scroll, _, self._list_layout = make_scroll_area()
+        self._list_layout.setContentsMargins(4, 4, 4, 4)
+        self._list_layout.setSpacing(4)
+        left_layout.addWidget(self._list_scroll, 1)
+        body.addWidget(left_card, 1)
+
+        # Right: detail panel
+        right_card = QFrame()
+        right_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        right_layout = QVBoxLayout(right_card)
+        right_layout.setContentsMargins(12, 10, 12, 10)
+        right_layout.setSpacing(6)
+
+        right_title = QLabel("Manifest Details")
+        right_title.setFont(theme.font(13, "bold"))
+        right_title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        right_layout.addWidget(right_title)
+
+        self._detail_title = QLabel("Select a manifest")
+        self._detail_title.setFont(theme.font(12, "bold"))
+        self._detail_title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        right_layout.addWidget(self._detail_title)
+
+        self._detail_box = QTextEdit()
+        self._detail_box.setReadOnly(True)
+        self._detail_box.setStyleSheet(
+            "QTextEdit { background-color: #0f1117; color: #94a3b8; border-radius: 6px; }"
+        )
+        right_layout.addWidget(self._detail_box, 1)
+
+        # Label edit row
+        label_row = QHBoxLayout()
+        label_row.setSpacing(8)
+        self._label_entry = QLineEdit()
+        self._label_entry.setPlaceholderText("Label")
+        self._label_entry.setFixedHeight(36)
+        label_row.addWidget(self._label_entry, 1)
+
+        save_label_btn = QPushButton("Save Label")
+        save_label_btn.setObjectName("btn_outline")
+        save_label_btn.setFixedSize(110, 36)
+        save_label_btn.clicked.connect(self._save_label)
+        label_row.addWidget(save_label_btn)
+        right_layout.addLayout(label_row)
+
+        # Footer
+        footer_row = QHBoxLayout()
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        footer_row.addWidget(self._error_lbl, 1)
+
+        self._revert_btn = QPushButton("Revert To This Version")
+        self._revert_btn.setObjectName("btn_primary")
+        self._revert_btn.setFixedSize(180, 38)
+        self._revert_btn.setEnabled(False)
+        self._revert_btn.clicked.connect(self._confirm_revert)
+        footer_row.addWidget(self._revert_btn)
+        right_layout.addLayout(footer_row)
+
+        body.addWidget(right_card, 1)
+        outer.addLayout(body, 1)
+
+        self._setup_overlay("Loading history...")
         self._load_manifests()
 
-    def _build_header(self) -> None:
-        hdr = ctk.CTkFrame(self, fg_color="transparent")
-        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 8))
-        hdr.grid_columnconfigure(0, weight=1)
+    def _set_error(self, msg: str) -> None:
+        self._error_lbl.setText(msg)
 
-        ctk.CTkLabel(
-            hdr,
-            text="History / Revert",
-            text_color=theme.get("text_dark"),
-            font=theme.font(22, weight="bold"),
-        ).grid(row=0, column=0, sticky="w")
-
-        ctk.CTkButton(
-            hdr,
-            text="Refresh",
-            width=100,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._load_manifests,
-        ).grid(row=0, column=1, sticky="e")
-
-        ctk.CTkLabel(
-            hdr,
-            text="How to use: Select a manifest to inspect details, edit label if needed, then revert when you want to restore that version.",
-            text_color=theme.get("text_dark"),
-            font=theme.font(11),
-            justify="left",
-            wraplength=760,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-    def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 18))
-        body.grid_columnconfigure(0, weight=1)
-        body.grid_columnconfigure(1, weight=1)
-        body.grid_rowconfigure(0, weight=1)
-
-        left = ctk.CTkFrame(body, fg_color=theme.card_color(), corner_radius=10)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-        left.grid_columnconfigure(0, weight=1)
-        left.grid_rowconfigure(1, weight=1)
-
-        ctk.CTkLabel(
-            left,
-            text="Manifests",
-            text_color=theme.get("text_dark"),
-            font=theme.font(13, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
-
-        self._list = ctk.CTkScrollableFrame(left, fg_color=theme.get("secondary"), corner_radius=8)
-        self._list.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 10))
-
-        right = ctk.CTkFrame(body, fg_color=theme.card_color(), corner_radius=10)
-        right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
-        right.grid_columnconfigure(0, weight=1)
-        right.grid_rowconfigure(2, weight=1)
-
-        ctk.CTkLabel(
-            right,
-            text="Manifest Details",
-            text_color=theme.get("text_dark"),
-            font=theme.font(13, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
-
-        self._detail_title = ctk.CTkLabel(
-            right,
-            text="Select a manifest",
-            text_color=theme.get("text_dark"),
-            font=theme.font(12, weight="bold"),
-        )
-        self._detail_title.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
-
-        self._detail_box = ctk.CTkTextbox(
-            right,
-            fg_color=theme.get("secondary"),
-            text_color=theme.get("text_dark"),
-        )
-        self._detail_box.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
-
-        label_row = ctk.CTkFrame(right, fg_color="transparent")
-        label_row.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 8))
-        label_row.grid_columnconfigure(0, weight=1)
-
-        self._label_entry = ctk.CTkEntry(
-            label_row,
-            placeholder_text="Label",
-            height=36,
-            corner_radius=8,
-            border_color=theme.get("primary"),
-        )
-        self._label_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-
-        ctk.CTkButton(
-            label_row,
-            text="Save Label",
-            width=110,
-            height=36,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            command=self._save_label,
-        ).grid(row=0, column=1, sticky="e")
-
-        footer = ctk.CTkFrame(right, fg_color="transparent")
-        footer.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 10))
-        footer.grid_columnconfigure(0, weight=1)
-
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
-        )
-        self._error_lbl.grid(row=0, column=0, sticky="w")
-
-        self._revert_btn = ctk.CTkButton(
-            footer,
-            text="Revert To This Version",
-            width=180,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            state="disabled",
-            command=self._confirm_revert,
-        )
-        self._revert_btn.grid(row=0, column=1, sticky="e")
+    # ------------------------------------------------------------------
 
     def _load_manifests(self) -> None:
         self._set_error("")
         self._selected_manifest = None
-        self._selected_row = None
-        self._revert_btn.configure(state="disabled")
-        self._label_entry.delete(0, "end")
-        self._detail_title.configure(text="Select a manifest")
-        self._detail_box.delete("1.0", "end")
+        self._selected_row_frame = None
+        self._revert_btn.setEnabled(False)
+        self._label_entry.clear()
+        self._detail_title.setText("Select a manifest")
+        self._detail_box.clear()
+
+        clear_layout(self._list_layout)
 
         history_enabled = bool(self.project.get("settings", {}).get("history_enabled", True))
-        for w in self._list.winfo_children():
-            w.destroy()
-
         if not history_enabled:
-            ctk.CTkLabel(
-                self._list,
-                text="History is OFF in settings.",
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
-            ).pack(anchor="w", padx=10, pady=10)
+            lbl = QLabel("History is OFF in settings.")
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+            self._list_layout.addWidget(lbl)
             return
 
         def worker():
@@ -211,204 +177,105 @@ class ViewHistory(ctk.CTkFrame):
             self._manifests = manifests
             self._render_manifest_rows()
 
-        def on_error(exc):
-            self._set_error(f"Could not load manifests: {exc}")
-
-        self._run_background(worker, on_success, on_error)
+        self._run_background(worker, on_success,
+                             lambda exc: self._set_error(f"Could not load manifests: {exc}"))
 
     def _render_manifest_rows(self) -> None:
         if not self._manifests:
-            ctk.CTkLabel(
-                self._list,
-                text="No manifests available.",
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
-            ).pack(anchor="w", padx=10, pady=10)
+            lbl = QLabel("No manifests available.")
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+            self._list_layout.addWidget(lbl)
             return
 
         for manifest in self._manifests:
-            row = ctk.CTkFrame(self._list, fg_color=theme.card_color(), corner_radius=8, cursor="hand2")
-            row.pack(fill="x", padx=6, pady=5)
-            row.grid_columnconfigure(0, weight=1)
+            row = QFrame()
+            row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
+            row.setCursor(
+                __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.PointingHandCursor
+            )
+            row_layout = QVBoxLayout(row)
+            row_layout.setContentsMargins(10, 8, 10, 8)
+            row_layout.setSpacing(2)
 
             title = manifest_title(manifest)
-            label = str(manifest.get("label", "")).strip() or "(no label)"
-            lbl = ctk.CTkLabel(
-                row,
-                text=f"{title}\n{label}",
-                justify="left",
-                anchor="w",
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
+            label_text = str(manifest.get("label", "")).strip() or "(no label)"
+
+            title_lbl = QLabel(title)
+            title_lbl.setFont(theme.font(12, "bold"))
+            title_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            row_layout.addWidget(title_lbl)
+
+            label_lbl = QLabel(label_text)
+            label_lbl.setFont(theme.font(11))
+            label_lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+            row_layout.addWidget(label_lbl)
+
+            def _click(event=None, m=manifest, frame=row):
+                self._select_manifest(m, frame)
+
+            row.mousePressEvent = _click
+            title_lbl.mousePressEvent = _click
+            label_lbl.mousePressEvent = _click
+
+            self._list_layout.addWidget(row)
+
+    def _select_manifest(self, manifest: dict, frame: QFrame) -> None:
+        if self._selected_row_frame:
+            self._selected_row_frame.setStyleSheet(
+                "QFrame { background-color: #0f1117; border-radius: 8px; }"
             )
-            lbl.grid(row=0, column=0, sticky="w", padx=10, pady=8)
+            for lbl in self._selected_row_frame.findChildren(QLabel):
+                lbl.setStyleSheet("color: #f1f5f9; background: transparent;" if
+                                  lbl.font().bold() else "color: #94a3b8; background: transparent;")
 
-            def on_click(_event=None, m=manifest, frame=row, label_widget=lbl):
-                self._select_manifest(m, frame, label_widget)
-
-            row.bind("<Button-1>", on_click)
-            lbl.bind("<Button-1>", on_click)
-
-    def _select_manifest(self, manifest: dict, frame: ctk.CTkFrame, label_widget: ctk.CTkLabel) -> None:
         self._selected_manifest = manifest
-        self._selected_row = frame
-        self._revert_btn.configure(state="normal")
-        self._label_entry.delete(0, "end")
-        self._label_entry.insert(0, str(manifest.get("label", "")))
-        self._detail_title.configure(text=manifest_title(manifest))
-        self._detail_box.delete("1.0", "end")
-        self._detail_box.insert("1.0", manifest_tables_text(manifest))
+        self._selected_row_frame = frame
+        frame.setStyleSheet("QFrame { background-color: #3b82f6; border-radius: 8px; }")
+        for lbl in frame.findChildren(QLabel):
+            lbl.setStyleSheet("color: white; background: transparent;")
 
-        for child in self._list.winfo_children():
-            if isinstance(child, ctk.CTkFrame):
-                child.configure(fg_color=theme.card_color())
-                for gchild in child.winfo_children():
-                    if isinstance(gchild, ctk.CTkLabel):
-                        gchild.configure(text_color=theme.get("text_dark"))
-
-        frame.configure(fg_color=theme.get("primary"))
-        label_widget.configure(text_color=theme.get("text_light"))
+        self._revert_btn.setEnabled(True)
+        self._label_entry.setText(str(manifest.get("label", "")))
+        self._detail_title.setText(manifest_title(manifest))
+        self._detail_box.setPlainText(manifest_tables_text(manifest))
 
     def _save_label(self) -> None:
         if not self._selected_manifest:
             self._set_error("Select a manifest first.")
             return
-        new_label = self._label_entry.get().strip()
+        new_label = self._label_entry.text().strip()
         manifest_id = self._selected_manifest["manifest_id"]
 
         def worker():
-            update_manifest_label(
-                self.project_path,
-                manifest_id,
-                new_label,
-            )
+            update_manifest_label(self.project_path, manifest_id, new_label)
 
-        def on_success(_result):
-            self.on_project_changed(target_key="history")
-
-        def on_error(exc):
-            self._set_error(f"Could not update label: {exc}")
-
-        self._run_background(worker, on_success, on_error)
+        self._run_background(worker,
+                             lambda _: self.on_project_changed(target_key="history"),
+                             lambda exc: self._set_error(f"Could not update label: {exc}"))
 
     def _confirm_revert(self) -> None:
         if not self._selected_manifest:
             self._set_error("Select a manifest first.")
             return
-
         manifest_id = self._selected_manifest["manifest_id"]
+
+        from ui.popups.popup_revert_confirm import PopupRevertConfirm
 
         def do_revert():
             def worker():
                 revert_to_manifest(self.project_path, manifest_id)
 
-            def on_success(_result):
-                messagebox.showinfo("Reverted", f"Project reverted to {manifest_id}.")
-                self.on_project_changed(target_key="history")
+            self._run_background(
+                worker,
+                lambda _: (
+                    QMessageBox.information(self, "Reverted", f"Reverted to {manifest_id}."),
+                    self.on_project_changed(target_key="history"),
+                ),
+                lambda exc: QMessageBox.critical(
+                    self, "Error", f"Could not revert:\n{exc}"
+                ),
+            )
 
-            def on_error(exc):
-                messagebox.showerror("Error", f"Could not revert manifest:\n{exc}")
-
-            self._run_background(worker, on_success, on_error)
-
-        PopupRevertConfirm(self, manifest_id=manifest_id, on_confirm=do_revert)
-
-    def _set_error(self, msg: str) -> None:
-        self._error_lbl.configure(text=msg)
-
-    def _build_loading_overlay(self) -> None:
-        self._loading_overlay = ctk.CTkFrame(
-            self,
-            fg_color=theme.get("secondary"),
-            corner_radius=0,
-        )
-
-        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
-        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            overlay_card,
-            text="Loading history...",
-            text_color=theme.get("text_dark"),
-            font=theme.font(14, weight="bold"),
-        ).pack(padx=20, pady=(14, 8))
-
-        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=260)
-        self._loading_bar.set(0.0)
-        self._loading_bar.pack(padx=20, pady=(0, 14))
-
-    def _run_background(self, worker, on_success=None, on_error=None) -> None:
-        self._show_loading()
-
-        def _finish_success(result):
-            self._hide_loading()
-            if on_success:
-                on_success(result)
-
-        def _finish_error(exc):
-            self._hide_loading()
-            if on_error:
-                on_error(exc)
-            else:
-                self._set_error(str(exc))
-
-        def _task():
-            try:
-                result = worker()
-            except Exception as exc:
-                try:
-                    self.after(0, lambda err=exc: _finish_error(err))
-                except Exception:
-                    pass
-                return
-            try:
-                self.after(0, lambda value=result: _finish_success(value))
-            except Exception:
-                pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
-    def _show_loading(self) -> None:
-        self._loading_count += 1
-        if self._loading_count != 1:
-            return
-        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._loading_overlay.lift()
-        self._start_loading_animation()
-
-    def _hide_loading(self) -> None:
-        self._loading_count = max(0, self._loading_count - 1)
-        if self._loading_count != 0:
-            return
-        self._stop_loading_animation()
-        self._loading_overlay.place_forget()
-
-    def _start_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            return
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
-    def _stop_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            self.after_cancel(self._loading_anim_job)
-            self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(0.0)
-
-    def _animate_loading_bar(self) -> None:
-        step = 0.015
-        self._loading_anim_value += step * self._loading_anim_direction
-        if self._loading_anim_value >= 1.0:
-            self._loading_anim_value = 1.0
-            self._loading_anim_direction = -1
-        elif self._loading_anim_value <= 0.0:
-            self._loading_anim_value = 0.0
-            self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
-
+        dlg = PopupRevertConfirm(self, manifest_id=manifest_id, on_confirm=do_revert)
+        dlg.exec()

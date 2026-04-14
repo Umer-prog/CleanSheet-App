@@ -1,6 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-import customtkinter as ctk
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QComboBox, QDialog, QFrame, QHBoxLayout,
+    QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
+)
+
 import pandas as pd
 
 import ui.theme as theme
@@ -28,7 +34,7 @@ def _format_dim_table(df: pd.DataFrame, max_rows: int = 200) -> str:
     return "\n".join(lines)
 
 
-class PopupReplace(ctk.CTkToplevel):
+class PopupReplace(QDialog):
     """Modal popup for selecting a replacement value from dim values."""
 
     def __init__(
@@ -46,154 +52,124 @@ class PopupReplace(ctk.CTkToplevel):
         self._dim_df = dim_df
         self._dim_table = dim_table
 
-        self.title("Replace Value")
-        # Taller when dim table is present so it has comfortable reading space
-        height = 580 if (dim_df is not None and not dim_df.empty) else 440
-        self.geometry(f"580x{height}")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.configure(fg_color=theme.get("secondary"))
+        has_table = dim_df is not None and not dim_df.empty
+        height = 580 if has_table else 440
 
-        self._error_lbl = None
-        self._value_menu = None
+        self.setWindowTitle("Replace Value")
+        self.setFixedSize(580, height)
+        self.setModal(True)
 
-        self._build_header(bad_value)
-        self._build_footer()
-        self._build_body()
-        self.after(50, self.lift)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-    def _build_header(self, bad_value: str) -> None:
-        header = ctk.CTkFrame(self, fg_color=theme.get("primary"), corner_radius=0, height=68)
-        header.pack(fill="x", side="top")
-        header.pack_propagate(False)
+        root.addWidget(self._make_header(bad_value))
+        root.addWidget(self._make_body(has_table), 1)
+        root.addWidget(self._make_footer())
 
-        ctk.CTkLabel(
-            header,
-            text="Replace Error Value",
-            font=theme.font(20, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=(24, 12))
+        self._combo: QComboBox  # set in _make_body
+
+    # ------------------------------------------------------------------
+
+    def _make_header(self, bad_value: str) -> QFrame:
+        header = QFrame()
+        header.setFixedHeight(68)
+        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(24, 0, 24, 0)
+
+        title = QLabel("Replace Error Value")
+        title.setFont(theme.font(18, "bold"))
+        title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(title)
 
         display = bad_value if bad_value else "(empty / null)"
-        ctk.CTkLabel(
-            header,
-            text=f"Current: {display}",
-            font=theme.font(11),
-            text_color=theme.get("text_light"),
-        ).pack(side="left")
+        sub = QLabel(f"Current: {display}")
+        sub.setFont(theme.font(11))
+        sub.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(sub, 1)
+        return header
 
-    def _build_footer(self) -> None:
-        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0, height=68)
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
-
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
-        )
-        self._error_lbl.pack(side="left", padx=24)
-
-        ctk.CTkButton(
-            footer,
-            text="Replace",
-            width=120,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            corner_radius=8,
-            command=self._submit,
-        ).pack(side="right", padx=(8, 24), pady=15)
-
-        ctk.CTkButton(
-            footer,
-            text="Cancel",
-            width=100,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            corner_radius=8,
-            command=self.destroy,
-        ).pack(side="right", pady=15)
-
-    def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-        body.grid_columnconfigure(0, weight=1)
-
-        has_table = self._dim_df is not None and not self._dim_df.empty
-        r = 0
+    def _make_body(self, has_table: bool) -> QWidget:
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        body_lay = QVBoxLayout(body)
+        body_lay.setContentsMargins(20, 14, 20, 14)
+        body_lay.setSpacing(8)
 
         if has_table:
-            # Dim table label
-            ctk.CTkLabel(
-                body,
-                text=f"Dimension Table - {self._dim_table}",
-                font=theme.font(12, weight="bold"),
-                text_color=theme.get("text_dark"),
-            ).grid(row=r, column=0, padx=24, pady=(18, 4), sticky="w")
-            r += 1
+            table_lbl = QLabel(f"Dimension Table — {self._dim_table}")
+            table_lbl.setFont(theme.font(12, "bold"))
+            table_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            body_lay.addWidget(table_lbl)
 
-            # Formatted table in a scrollable monospace textbox
-            body.grid_rowconfigure(r, weight=1)
-            table_box = ctk.CTkTextbox(
-                body,
-                fg_color=theme.get("secondary"),
-                text_color=theme.get("text_dark"),
-                font=ctk.CTkFont(family="Courier New", size=11),
-                wrap="none",
+            table_box = QTextEdit()
+            table_box.setReadOnly(True)
+            mono = QFont("Courier New", 10)
+            table_box.setFont(mono)
+            table_box.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+            table_box.setStyleSheet(
+                "QTextEdit { background-color: #0f1117; color: #94a3b8; border-radius: 6px; }"
             )
-            table_box.grid(row=r, column=0, padx=24, pady=(0, 10), sticky="nsew")
-            table_box.insert("1.0", _format_dim_table(self._dim_df))
-            table_box.configure(state="disabled")
-            r += 1
+            table_box.setPlainText(_format_dim_table(self._dim_df))
+            body_lay.addWidget(table_box, 1)
 
-            # Divider
-            ctk.CTkFrame(body, fg_color=theme.get("secondary"), height=1, corner_radius=0).grid(
-                row=r, column=0, sticky="ew", padx=24, pady=(0, 8)
-            )
-            r += 1
+            divider = QFrame()
+            divider.setFixedHeight(1)
+            divider.setStyleSheet("background-color: #0f1117;")
+            body_lay.addWidget(divider)
 
-        # Dropdown label
-        top_pad = 18 if not has_table else 4
-        ctk.CTkLabel(
-            body,
-            text="Select replacement value",
-            font=theme.font(12, weight="bold"),
-            text_color=theme.get("text_dark"),
-        ).grid(row=r, column=0, padx=24, pady=(top_pad, 6), sticky="w")
-        r += 1
+        select_lbl = QLabel("Select replacement value")
+        select_lbl.setFont(theme.font(12, "bold"))
+        select_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        body_lay.addWidget(select_lbl)
 
-        # Dropdown
+        self._combo = QComboBox()
+        self._combo.setFixedHeight(38)
         values = self._valid_values or ["No Values Available"]
-        self._value_menu = ctk.CTkOptionMenu(
-            body,
-            values=values,
-            fg_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            height=38,
-        )
-        self._value_menu.set(values[0])
-        self._value_menu.grid(row=r, column=0, padx=24, pady=(0, 18), sticky="ew")
+        self._combo.addItems(values)
+        self._combo.setCurrentIndex(0)
+        body_lay.addWidget(self._combo)
+
+        if not has_table:
+            body_lay.addStretch(1)
+
+        return body
+
+    def _make_footer(self) -> QFrame:
+        footer = QFrame()
+        footer.setFixedHeight(68)
+        footer.setStyleSheet("QFrame { background-color: #13161e; border-top: 1px solid #0f1117; }")
+        lay = QHBoxLayout(footer)
+        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setSpacing(8)
+
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        lay.addWidget(self._error_lbl, 1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("btn_outline")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.clicked.connect(self.reject)
+        lay.addWidget(cancel_btn)
+
+        replace_btn = QPushButton("Replace")
+        replace_btn.setObjectName("btn_primary")
+        replace_btn.setFixedSize(120, 38)
+        replace_btn.clicked.connect(self._submit)
+        lay.addWidget(replace_btn)
+
+        return footer
 
     def _submit(self) -> None:
-        selected = self._value_menu.get().strip()
+        selected = self._combo.currentText().strip()
         if not self._valid_values:
-            self._show_error("No valid values available.")
+            self._error_lbl.setText("No valid values available.")
             return
         if not selected:
-            self._show_error("Select a replacement value.")
+            self._error_lbl.setText("Select a replacement value.")
             return
         self._on_confirm(selected)
-        self.destroy()
-
-    def _show_error(self, message: str) -> None:
-        if self._error_lbl:
-            self._error_lbl.configure(text=message)
-
+        self.accept()

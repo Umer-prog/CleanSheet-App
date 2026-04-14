@@ -1,18 +1,23 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-import threading
 from pathlib import Path
-from tkinter import messagebox
 
-import customtkinter as ctk
 import pandas as pd
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QPushButton, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
 from core.data_loader import load_dim_json
 from core.mapping_manager import add_mapping, get_mappings
+from ui.workers import ScreenBase, clear_layout, make_scroll_area
+
+_SIDEBAR_W = 320
 
 
-def mapping_key(mapping: dict) -> tuple[str, str, str, str]:
+def mapping_key(mapping: dict) -> tuple:
     return (
         mapping.get("transaction_table", "").strip(),
         mapping.get("transaction_column", "").strip(),
@@ -22,10 +27,7 @@ def mapping_key(mapping: dict) -> tuple[str, str, str, str]:
 
 
 def validate_mapping_selection(
-    transaction_table: str | None,
-    dim_table: str | None,
-    transaction_column: str | None,
-    dim_column: str | None,
+    transaction_table, dim_table, transaction_column, dim_column
 ) -> str | None:
     if not dim_table:
         return "Select a dimension table."
@@ -39,23 +41,21 @@ def validate_mapping_selection(
 
 
 def find_unmapped_tables(
-    transaction_tables: list[str],
-    dim_tables: list[str],
-    mappings: list[dict],
+    transaction_tables: list[str], dim_tables: list[str], mappings: list[dict]
 ) -> tuple[list[str], list[str]]:
-    mapped_transactions = {m.get("transaction_table", "").strip() for m in mappings}
-    mapped_dimensions = {m.get("dim_table", "").strip() for m in mappings}
+    mapped_tx = {m.get("transaction_table", "").strip() for m in mappings}
+    mapped_dim = {m.get("dim_table", "").strip() for m in mappings}
+    return (
+        [t for t in transaction_tables if t not in mapped_tx],
+        [t for t in dim_tables if t not in mapped_dim],
+    )
 
-    missing_tx = [name for name in transaction_tables if name not in mapped_transactions]
-    missing_dim = [name for name in dim_tables if name not in mapped_dimensions]
-    return missing_tx, missing_dim
 
+class Screen2Mappings(ScreenBase):
+    """Stage 2 — define dimension/transaction column mappings."""
 
-class Screen2Mappings(ctk.CTkFrame):
-    """Stage 1 screen to define dim/transaction column mappings."""
-
-    def __init__(self, parent, app, project: dict):
-        super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
+    def __init__(self, app, project: dict, **kwargs):
+        super().__init__()
         self.app = app
         self.project = project
         self.project_path = Path(project["project_path"])
@@ -66,235 +66,226 @@ class Screen2Mappings(ctk.CTkFrame):
 
         self._selected_dim_table: str | None = None
         self._selected_transaction_table: str | None = None
-        self._dim_columns: list[str] = []
-        self._transaction_columns: list[str] = []
+        self._dim_buttons: dict[str, QPushButton] = {}
+        self._transaction_buttons: dict[str, QPushButton] = {}
 
-        self._selected_dim_button = None
-        self._selected_transaction_button = None
-        self._dim_buttons: dict[str, ctk.CTkButton] = {}
-        self._transaction_buttons: dict[str, ctk.CTkButton] = {}
-        self._loading_count = 0
-        self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self.grid_columnconfigure(0, weight=0, minsize=320)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        # --- Sidebar ---
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(_SIDEBAR_W)
+        sb = QVBoxLayout(sidebar)
+        sb.setContentsMargins(20, 26, 20, 20)
+        sb.setSpacing(10)
 
-        self._build_left_panel()
-        self._build_right_panel()
-        self._build_loading_overlay()
+        t = QLabel("Mapper")
+        t.setFont(theme.font(20, "bold"))
+        t.setStyleSheet("color: #f1f5f9;")
+        sb.addWidget(t)
+
+        desc = QLabel("Map transaction tables with dimension tables\nusing selected columns.")
+        desc.setFont(theme.font(12))
+        desc.setStyleSheet("color: #94a3b8;")
+        sb.addWidget(desc)
+        sb.addSpacing(6)
+
+        back_btn = QPushButton("Back To Data Loader")
+        back_btn.setObjectName("btn_ghost")
+        back_btn.setFixedHeight(38)
+        back_btn.clicked.connect(self._go_back)
+        sb.addWidget(back_btn)
+        sb.addStretch()
+        root.addWidget(sidebar)
+
+        # --- Content ---
+        content = QWidget()
+        c_layout = QVBoxLayout(content)
+        c_layout.setContentsMargins(22, 18, 22, 18)
+        c_layout.setSpacing(8)
+
+        title = QLabel("Mapper")
+        title.setFont(theme.font(22, "bold"))
+        title.setStyleSheet("color: #f1f5f9;")
+        c_layout.addWidget(title)
+
+        tip = QFrame()
+        tip.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        tip_layout = QVBoxLayout(tip)
+        tip_layout.setContentsMargins(12, 8, 12, 8)
+        tip_lbl = QLabel(
+            "How to use: Select one table on each side, pick columns, then confirm. "
+            "Repeat until every table is mapped."
+        )
+        tip_lbl.setFont(theme.font(11))
+        tip_lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+        tip_lbl.setWordWrap(True)
+        tip_layout.addWidget(tip_lbl)
+        c_layout.addWidget(tip)
+
+        # Table lists (dim | transaction)
+        lists_row = QHBoxLayout()
+        lists_row.setSpacing(12)
+
+        self._dim_scroll, _, self._dim_btn_layout = make_scroll_area()
+        self._dim_btn_layout.setContentsMargins(10, 8, 10, 8)
+        self._dim_btn_layout.setSpacing(4)
+        dim_card = self._wrap_card(self._dim_scroll, "Dimension Tables", fixed_height=150)
+        lists_row.addWidget(dim_card, 1)
+
+        self._tx_scroll, _, self._tx_btn_layout = make_scroll_area()
+        self._tx_btn_layout.setContentsMargins(10, 8, 10, 8)
+        self._tx_btn_layout.setSpacing(4)
+        tx_card = self._wrap_card(self._tx_scroll, "Transaction Tables", fixed_height=150)
+        lists_row.addWidget(tx_card, 1)
+        c_layout.addLayout(lists_row)
+
+        # Column selectors
+        selector = QFrame()
+        selector.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        sel_layout = QVBoxLayout(selector)
+        sel_layout.setContentsMargins(12, 10, 12, 12)
+        sel_layout.setSpacing(6)
+
+        col_labels_row = QHBoxLayout()
+        dim_col_lbl = QLabel("Dimension Column")
+        dim_col_lbl.setFont(theme.font(12, "bold"))
+        dim_col_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        tx_col_lbl = QLabel("Transaction Column")
+        tx_col_lbl.setFont(theme.font(12, "bold"))
+        tx_col_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        col_labels_row.addWidget(dim_col_lbl, 1)
+        col_labels_row.addWidget(tx_col_lbl, 1)
+        sel_layout.addLayout(col_labels_row)
+
+        menus_row = QHBoxLayout()
+        menus_row.setSpacing(12)
+        self._dim_column_menu = QComboBox()
+        self._dim_column_menu.addItem("Select Column")
+        self._tx_column_menu = QComboBox()
+        self._tx_column_menu.addItem("Select Column")
+        menus_row.addWidget(self._dim_column_menu, 1)
+        menus_row.addWidget(self._tx_column_menu, 1)
+        sel_layout.addLayout(menus_row)
+
+        confirm_row = QHBoxLayout()
+        confirm_row.addStretch()
+        confirm_mapping_btn = QPushButton("Confirm Mapping")
+        confirm_mapping_btn.setObjectName("btn_primary")
+        confirm_mapping_btn.setFixedHeight(38)
+        confirm_mapping_btn.clicked.connect(self._on_confirm_mapping)
+        confirm_row.addWidget(confirm_mapping_btn)
+        sel_layout.addLayout(confirm_row)
+        c_layout.addWidget(selector)
+
+        # Mappings list
+        mappings_card = QFrame()
+        mappings_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        mappings_card_layout = QVBoxLayout(mappings_card)
+        mappings_card_layout.setContentsMargins(12, 10, 12, 10)
+        mappings_card_layout.setSpacing(4)
+
+        mapping_title = QLabel("Confirmed Mappings")
+        mapping_title.setFont(theme.font(13, "bold"))
+        mapping_title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        mappings_card_layout.addWidget(mapping_title)
+
+        self._mapping_scroll, _, self._mapping_list_layout = make_scroll_area()
+        self._mapping_list_layout.setContentsMargins(6, 4, 6, 4)
+        self._mapping_list_layout.setSpacing(4)
+        mappings_card_layout.addWidget(self._mapping_scroll, 1)
+        c_layout.addWidget(mappings_card, 1)
+
+        # Footer
+        footer_row = QHBoxLayout()
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(12))
+        self._error_lbl.setStyleSheet("color: #f87171;")
+        footer_row.addWidget(self._error_lbl, 1)
+
+        finish_btn = QPushButton("Finish Setup")
+        finish_btn.setObjectName("btn_primary")
+        finish_btn.setFixedHeight(42)
+        finish_btn.setFixedWidth(150)
+        finish_btn.clicked.connect(self._on_finish_setup)
+        footer_row.addWidget(finish_btn)
+        c_layout.addLayout(footer_row)
+
+        root.addWidget(content, 1)
+
+        self._setup_overlay("Loading...")
         self._refresh_tables()
         self._refresh_mappings()
 
-    def _build_left_panel(self) -> None:
-        panel = ctk.CTkFrame(self, fg_color=theme.get("sidebar_bg"), corner_radius=0)
-        panel.grid(row=0, column=0, sticky="nsew")
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
-        ctk.CTkLabel(
-            panel,
-            text="Mapper",
-            text_color=theme.get("text_light"),
-            font=theme.font(20, weight="bold"),
-        ).pack(anchor="w", padx=20, pady=(26, 10))
-
-        ctk.CTkLabel(
-            panel,
-            text="Map transaction tables\nwith dimension tables\nusing selected columns.",
-            text_color=theme.get("text_light"),
-            justify="left",
-            font=theme.font(12),
-        ).pack(anchor="w", padx=20, pady=(0, 16))
-
-        ctk.CTkButton(
-            panel,
-            text="Back To Data Loader",
-            width=180,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("text_light"),
-            text_color=theme.get("text_light"),
-            command=self._go_back,
-        ).pack(anchor="w", padx=20)
-
-    def _build_right_panel(self) -> None:
-        panel = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0)
-        panel.grid(row=0, column=1, sticky="nsew")
-        panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(4, weight=1)
-
-        ctk.CTkLabel(
-            panel,
-            text="Mapper",
-            text_color=theme.get("text_dark"),
-            font=theme.font(22, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=22, pady=(18, 10))
-
-        tip = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        tip.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 8))
-        ctk.CTkLabel(
-            tip,
-            text="How to use: Select one table on each side, pick columns, then confirm. Repeat until every table is mapped.",
-            text_color=theme.get("text_dark"),
-            font=theme.font(11),
-            justify="left",
-            wraplength=700,
-        ).pack(anchor="w", padx=12, pady=8)
-
-        top_grid = ctk.CTkFrame(panel, fg_color="transparent")
-        top_grid.grid(row=2, column=0, sticky="ew", padx=22)
-        top_grid.grid_columnconfigure(0, weight=1)
-        top_grid.grid_columnconfigure(1, weight=1)
-
-        self._dim_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=150)
-        self._dim_list.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-
-        self._tx_list = ctk.CTkScrollableFrame(top_grid, fg_color=theme.card_color(), corner_radius=10, height=150)
-        self._tx_list.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
-
-        ctk.CTkLabel(
-            self._dim_list,
-            text="Dimension Tables",
-            text_color=theme.get("text_dark"),
-            font=theme.font(13, weight="bold"),
-        ).pack(anchor="w", padx=10, pady=(8, 6))
-        ctk.CTkLabel(
-            self._tx_list,
-            text="Transaction Tables",
-            text_color=theme.get("text_dark"),
-            font=theme.font(13, weight="bold"),
-        ).pack(anchor="w", padx=10, pady=(8, 6))
-
-        selector = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        selector.grid(row=3, column=0, sticky="ew", padx=22, pady=(8, 8))
-        selector.grid_columnconfigure(0, weight=1)
-        selector.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(
-            selector,
-            text="Dimension Column",
-            text_color=theme.get("text_dark"),
-            font=theme.font(12, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 4))
-        ctk.CTkLabel(
-            selector,
-            text="Transaction Column",
-            text_color=theme.get("text_dark"),
-            font=theme.font(12, weight="bold"),
-        ).grid(row=0, column=1, sticky="w", padx=12, pady=(10, 4))
-
-        self._dim_column_menu = ctk.CTkOptionMenu(
-            selector,
-            values=["Select Column"],
-            fg_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            height=38,
-        )
-        self._dim_column_menu.set("Select Column")
-        self._dim_column_menu.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
-
-        self._tx_column_menu = ctk.CTkOptionMenu(
-            selector,
-            values=["Select Column"],
-            fg_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            height=38,
-        )
-        self._tx_column_menu.set("Select Column")
-        self._tx_column_menu.grid(row=1, column=1, sticky="ew", padx=12, pady=(0, 12))
-
-        ctk.CTkButton(
-            selector,
-            text="Confirm Mapping",
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_confirm_mapping,
-        ).grid(row=2, column=1, sticky="e", padx=12, pady=(0, 12))
-
-        mappings_card = ctk.CTkFrame(panel, fg_color=theme.card_color(), corner_radius=10)
-        mappings_card.grid(row=4, column=0, sticky="nsew", padx=22, pady=(0, 10))
-        mappings_card.grid_columnconfigure(0, weight=1)
-        mappings_card.grid_rowconfigure(1, weight=1)
-
-        ctk.CTkLabel(
-            mappings_card,
-            text="Confirmed Mappings",
-            text_color=theme.get("text_dark"),
-            font=theme.font(13, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
-
-        self._mapping_list = ctk.CTkScrollableFrame(mappings_card, fg_color=theme.get("secondary"), corner_radius=8)
-        self._mapping_list.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 10))
-
-        footer = ctk.CTkFrame(panel, fg_color="transparent")
-        footer.grid(row=5, column=0, sticky="ew", padx=22, pady=(0, 18))
-        footer.grid_columnconfigure(0, weight=1)
-
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(12),
-        )
-        self._error_lbl.grid(row=0, column=0, sticky="w")
-
-        ctk.CTkButton(
-            footer,
-            text="Finish Setup",
-            width=150,
-            height=42,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_finish_setup,
-        ).grid(row=0, column=1, sticky="e")
+    @staticmethod
+    def _wrap_card(inner_widget: QWidget, label_text: str, fixed_height: int) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        card.setFixedHeight(fixed_height)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        lbl = QLabel(label_text)
+        lbl.setFont(theme.font(13, "bold"))
+        lbl.setStyleSheet("color: #f1f5f9; padding: 8px 10px 4px 10px; background: transparent;")
+        layout.addWidget(lbl)
+        layout.addWidget(inner_widget, 1)
+        return card
 
     def _go_back(self) -> None:
         from ui.screen1_sources import Screen1Sources
-
         self.app.show_screen(Screen1Sources, project=self.project)
+
+    def _set_error(self, msg: str) -> None:
+        self._error_lbl.setText(msg)
+
+    # ------------------------------------------------------------------
+    # Table selection
+    # ------------------------------------------------------------------
 
     def _refresh_tables(self) -> None:
         for table_name in self._dim_tables:
-            btn = ctk.CTkButton(
-                self._dim_list,
-                text=table_name,
-                height=34,
-                fg_color="transparent",
-                border_width=1,
-                border_color=theme.get("primary"),
-                text_color=theme.get("primary"),
-                command=lambda t=table_name: self._select_dim_table(t),
-            )
-            btn.pack(fill="x", padx=10, pady=4)
+            btn = self._nav_btn(table_name)
+            btn.clicked.connect(lambda _=False, t=table_name: self._select_dim_table(t))
+            self._dim_btn_layout.addWidget(btn)
             self._dim_buttons[table_name] = btn
 
         for table_name in self._transaction_tables:
-            btn = ctk.CTkButton(
-                self._tx_list,
-                text=table_name,
-                height=34,
-                fg_color="transparent",
-                border_width=1,
-                border_color=theme.get("primary"),
-                text_color=theme.get("primary"),
-                command=lambda t=table_name: self._select_transaction_table(t),
-            )
-            btn.pack(fill="x", padx=10, pady=4)
+            btn = self._nav_btn(table_name)
+            btn.clicked.connect(lambda _=False, t=table_name: self._select_transaction_table(t))
+            self._tx_btn_layout.addWidget(btn)
             self._transaction_buttons[table_name] = btn
+
+    @staticmethod
+    def _nav_btn(label: str) -> QPushButton:
+        btn = QPushButton(label)
+        btn.setObjectName("btn_outline")
+        btn.setFixedHeight(34)
+        return btn
+
+    def _set_button_selection(self, button_map: dict, selected_name: str) -> None:
+        for name, btn in button_map.items():
+            if name == selected_name:
+                btn.setStyleSheet(
+                    "QPushButton { background-color: #3b82f6; color: white; "
+                    "border: none; border-radius: 7px; padding: 6px 14px; font-weight: 600; }"
+                )
+            else:
+                btn.setObjectName("btn_outline")
+                btn.setStyleSheet("")  # revert to QSS
 
     def _select_dim_table(self, table_name: str) -> None:
         self._set_error("")
         self._selected_dim_table = table_name
-        self._set_button_selection(self._dim_buttons, table_name, is_dim=True)
-        self._dim_column_menu.configure(values=["Loading..."])
-        self._dim_column_menu.set("Loading...")
+        self._set_button_selection(self._dim_buttons, table_name)
+        self._dim_column_menu.clear()
+        self._dim_column_menu.addItem("Loading...")
 
         def worker():
             return self._load_dim_columns(table_name)
@@ -302,26 +293,24 @@ class Screen2Mappings(ctk.CTkFrame):
         def on_success(columns):
             if self._selected_dim_table != table_name:
                 return
-            self._dim_columns = columns
-            self._dim_column_menu.configure(values=self._dim_columns or ["Select Column"])
-            self._dim_column_menu.set("Select Column")
+            self._dim_column_menu.clear()
+            self._dim_column_menu.addItems(columns or ["Select Column"])
 
         def on_error(exc):
             if self._selected_dim_table != table_name:
                 return
-            self._dim_columns = []
-            self._dim_column_menu.configure(values=["Select Column"])
-            self._dim_column_menu.set("Select Column")
-            messagebox.showerror("Error", f"Could not load dim table '{table_name}':\n{exc}")
+            self._dim_column_menu.clear()
+            self._dim_column_menu.addItem("Select Column")
+            QMessageBox.critical(self, "Error", f"Could not load dim table '{table_name}':\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
     def _select_transaction_table(self, table_name: str) -> None:
         self._set_error("")
         self._selected_transaction_table = table_name
-        self._set_button_selection(self._transaction_buttons, table_name, is_dim=False)
-        self._tx_column_menu.configure(values=["Loading..."])
-        self._tx_column_menu.set("Loading...")
+        self._set_button_selection(self._transaction_buttons, table_name)
+        self._tx_column_menu.clear()
+        self._tx_column_menu.addItem("Loading...")
 
         def worker():
             return self._load_transaction_columns(table_name)
@@ -329,49 +318,33 @@ class Screen2Mappings(ctk.CTkFrame):
         def on_success(columns):
             if self._selected_transaction_table != table_name:
                 return
-            self._transaction_columns = columns
-            self._tx_column_menu.configure(values=self._transaction_columns or ["Select Column"])
-            self._tx_column_menu.set("Select Column")
+            self._tx_column_menu.clear()
+            self._tx_column_menu.addItems(columns or ["Select Column"])
 
         def on_error(exc):
             if self._selected_transaction_table != table_name:
                 return
-            self._transaction_columns = []
-            self._tx_column_menu.configure(values=["Select Column"])
-            self._tx_column_menu.set("Select Column")
-            messagebox.showerror("Error", f"Could not load transaction table '{table_name}':\n{exc}")
+            self._tx_column_menu.clear()
+            self._tx_column_menu.addItem("Select Column")
+            QMessageBox.critical(self, "Error", f"Could not load transaction table '{table_name}':\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
-    def _set_button_selection(self, button_map: dict[str, ctk.CTkButton], selected_name: str, is_dim: bool) -> None:
-        for name, button in button_map.items():
-            if name == selected_name:
-                button.configure(fg_color=theme.get("primary"), text_color=theme.get("text_light"))
-                if is_dim:
-                    self._selected_dim_button = button
-                else:
-                    self._selected_transaction_button = button
-            else:
-                button.configure(
-                    fg_color="transparent",
-                    border_width=1,
-                    border_color=theme.get("primary"),
-                    text_color=theme.get("primary"),
-                )
-
     def _load_dim_columns(self, table_name: str) -> list[str]:
         path = self.project_path / "data" / "dim" / f"{table_name}.json"
-        df = load_dim_json(path)
-        return list(df.columns)
+        return list(load_dim_json(path).columns)
 
     def _load_transaction_columns(self, table_name: str) -> list[str]:
         path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
-        cols = pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns
-        return [str(c) for c in cols]
+        return [str(c) for c in pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns]
+
+    # ------------------------------------------------------------------
+    # Mapping list
+    # ------------------------------------------------------------------
 
     def _on_confirm_mapping(self) -> None:
-        dim_column = self._dim_column_menu.get().strip()
-        tx_column = self._tx_column_menu.get().strip()
+        dim_column = self._dim_column_menu.currentText().strip()
+        tx_column = self._tx_column_menu.currentText().strip()
         error = validate_mapping_selection(
             transaction_table=self._selected_transaction_table,
             dim_table=self._selected_dim_table,
@@ -388,9 +361,8 @@ class Screen2Mappings(ctk.CTkFrame):
             "dim_table": self._selected_dim_table,
             "dim_column": dim_column,
         }
-
         if any(mapping_key(m) == mapping_key(candidate) for m in self._pending_mappings):
-            self._set_error("This mapping already exists in the list.")
+            self._set_error("This mapping already exists.")
             return
 
         self._pending_mappings.append(candidate)
@@ -401,209 +373,95 @@ class Screen2Mappings(ctk.CTkFrame):
     def _clear_current_selection(self) -> None:
         self._selected_dim_table = None
         self._selected_transaction_table = None
-        self._selected_dim_button = None
-        self._selected_transaction_button = None
-        self._set_button_selection(self._dim_buttons, "__none__", is_dim=True)
-        self._set_button_selection(self._transaction_buttons, "__none__", is_dim=False)
-        self._dim_columns = []
-        self._transaction_columns = []
-        self._dim_column_menu.configure(values=["Select Column"])
-        self._tx_column_menu.configure(values=["Select Column"])
-        self._dim_column_menu.set("Select Column")
-        self._tx_column_menu.set("Select Column")
+        self._set_button_selection(self._dim_buttons, "__none__")
+        self._set_button_selection(self._transaction_buttons, "__none__")
+        self._dim_column_menu.clear()
+        self._dim_column_menu.addItem("Select Column")
+        self._tx_column_menu.clear()
+        self._tx_column_menu.addItem("Select Column")
 
     def _refresh_mappings(self) -> None:
-        for widget in self._mapping_list.winfo_children():
-            widget.destroy()
+        clear_layout(self._mapping_list_layout)
 
         if not self._pending_mappings:
-            ctk.CTkLabel(
-                self._mapping_list,
-                text="No mappings added yet.",
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
-            ).pack(anchor="w", padx=10, pady=10)
+            lbl = QLabel("No mappings added yet.")
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+            self._mapping_list_layout.addWidget(lbl)
             return
 
         for idx, mapping in enumerate(self._pending_mappings):
-            row = ctk.CTkFrame(self._mapping_list, fg_color=theme.card_color(), corner_radius=8)
-            row.pack(fill="x", padx=6, pady=5)
-            row.grid_columnconfigure(0, weight=1)
+            row = QFrame()
+            row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(10, 6, 8, 6)
 
-            ctk.CTkLabel(
-                row,
-                text=(
-                    f"{mapping['transaction_table']}.{mapping['transaction_column']}  <->  "
-                    f"{mapping['dim_table']}.{mapping['dim_column']}"
-                ),
-                text_color=theme.get("text_dark"),
-                font=theme.font(12),
-                anchor="w",
-            ).grid(row=0, column=0, sticky="w", padx=10, pady=8)
+            text = (
+                f"{mapping['transaction_table']}.{mapping['transaction_column']}  ↔  "
+                f"{mapping['dim_table']}.{mapping['dim_column']}"
+            )
+            lbl = QLabel(text)
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            row_layout.addWidget(lbl, 1)
 
-            ctk.CTkButton(
-                row,
-                text="X",
-                width=32,
-                height=28,
-                fg_color="transparent",
-                border_width=1,
-                border_color=theme.get("accent"),
-                text_color=theme.get("accent"),
-                command=lambda i=idx: self._delete_pending_mapping(i),
-            ).grid(row=0, column=1, padx=8, pady=6)
+            del_btn = QPushButton("✕")
+            del_btn.setObjectName("btn_danger")
+            del_btn.setFixedSize(32, 28)
+            del_btn.clicked.connect(lambda _=False, i=idx: self._delete_pending_mapping(i))
+            row_layout.addWidget(del_btn)
+            self._mapping_list_layout.addWidget(row)
 
     def _delete_pending_mapping(self, index: int) -> None:
         if 0 <= index < len(self._pending_mappings):
             self._pending_mappings.pop(index)
             self._refresh_mappings()
 
+    # ------------------------------------------------------------------
+    # Finish setup
+    # ------------------------------------------------------------------
+
     def _on_finish_setup(self) -> None:
-        def load_existing_worker():
+        def load_existing():
             return get_mappings(self.project_path)
 
         def on_existing_loaded(existing_mappings):
-            combined_mappings = [*existing_mappings, *self._pending_mappings]
+            combined = [*existing_mappings, *self._pending_mappings]
             missing_tx, missing_dim = find_unmapped_tables(
-                transaction_tables=self._transaction_tables,
-                dim_tables=self._dim_tables,
-                mappings=combined_mappings,
+                self._transaction_tables, self._dim_tables, combined
             )
             if missing_tx or missing_dim:
                 chunks = []
                 if missing_tx:
-                    chunks.append(f"Unmapped transaction tables: {', '.join(missing_tx)}")
+                    chunks.append(f"Unmapped transaction: {', '.join(missing_tx)}")
                 if missing_dim:
-                    chunks.append(f"Unmapped dimension tables: {', '.join(missing_dim)}")
+                    chunks.append(f"Unmapped dimension: {', '.join(missing_dim)}")
                 self._set_error(" | ".join(chunks))
                 return
 
             def save_worker():
                 existing_keys = {mapping_key(m) for m in existing_mappings}
-                for mapping in self._pending_mappings:
-                    if mapping_key(mapping) not in existing_keys:
-                        add_mapping(self.project_path, mapping)
-                        existing_keys.add(mapping_key(mapping))
+                for m in self._pending_mappings:
+                    if mapping_key(m) not in existing_keys:
+                        add_mapping(self.project_path, m)
+                        existing_keys.add(mapping_key(m))
 
-            def on_save_success(_result):
+            def on_save_success(_):
                 self._pending_mappings.clear()
                 self._refresh_mappings()
                 self._set_error("")
                 try:
                     from ui.screen3_main import Screen3Main
-
                     self.app.show_screen(Screen3Main, project=self.project)
                 except ImportError:
-                    messagebox.showinfo(
-                        "Setup Complete",
-                        "Mappings saved successfully. Screen 3 is not built yet.",
-                    )
+                    QMessageBox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
 
             def on_save_error(exc):
-                messagebox.showerror("Error", f"Could not save mappings:\n{exc}")
+                QMessageBox.critical(self, "Error", f"Could not save mappings:\n{exc}")
 
             self._run_background(save_worker, on_save_success, on_save_error)
 
         def on_existing_error(exc):
-            messagebox.showerror("Error", f"Could not read existing mappings:\n{exc}")
+            QMessageBox.critical(self, "Error", f"Could not read existing mappings:\n{exc}")
 
-        self._run_background(load_existing_worker, on_existing_loaded, on_existing_error)
-
-    def _set_error(self, message: str) -> None:
-        self._error_lbl.configure(text=message)
-
-    def _build_loading_overlay(self) -> None:
-        self._loading_overlay = ctk.CTkFrame(
-            self,
-            fg_color=theme.get("secondary"),
-            corner_radius=0,
-        )
-
-        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
-        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            overlay_card,
-            text="Loading...",
-            text_color=theme.get("text_dark"),
-            font=theme.font(14, weight="bold"),
-        ).pack(padx=20, pady=(14, 8))
-
-        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=260)
-        self._loading_bar.set(0.0)
-        self._loading_bar.pack(padx=20, pady=(0, 14))
-
-    def _run_background(self, worker, on_success=None, on_error=None) -> None:
-        self._show_loading()
-
-        def _finish_success(result):
-            self._hide_loading()
-            if on_success:
-                on_success(result)
-
-        def _finish_error(exc):
-            self._hide_loading()
-            if on_error:
-                on_error(exc)
-            else:
-                self._set_error(str(exc))
-
-        def _task():
-            try:
-                result = worker()
-            except Exception as exc:
-                try:
-                    self.after(0, lambda err=exc: _finish_error(err))
-                except Exception:
-                    pass
-                return
-            try:
-                self.after(0, lambda value=result: _finish_success(value))
-            except Exception:
-                pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
-    def _show_loading(self) -> None:
-        self._loading_count += 1
-        if self._loading_count != 1:
-            return
-        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._loading_overlay.lift()
-        self._start_loading_animation()
-
-    def _hide_loading(self) -> None:
-        self._loading_count = max(0, self._loading_count - 1)
-        if self._loading_count != 0:
-            return
-        self._stop_loading_animation()
-        self._loading_overlay.place_forget()
-
-    def _start_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            return
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
-    def _stop_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            self.after_cancel(self._loading_anim_job)
-            self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(0.0)
-
-    def _animate_loading_bar(self) -> None:
-        step = 0.015
-        self._loading_anim_value += step * self._loading_anim_direction
-        if self._loading_anim_value >= 1.0:
-            self._loading_anim_value = 1.0
-            self._loading_anim_direction = -1
-        elif self._loading_anim_value <= 0.0:
-            self._loading_anim_value = 0.0
-            self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
+        self._run_background(load_existing, on_existing_loaded, on_existing_error)

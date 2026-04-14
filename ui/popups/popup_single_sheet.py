@@ -1,136 +1,134 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
-import customtkinter as ctk
+from PySide6.QtWidgets import (
+    QComboBox, QDialog, QFrame, QHBoxLayout,
+    QLabel, QPushButton, QVBoxLayout,
+)
 
 import ui.theme as theme
 
 
-class PopupSingleSheet(ctk.CTkToplevel):
+class PopupSingleSheet(QDialog):
     """Modal popup for selecting one sheet from an Excel file."""
 
-    def __init__(self, parent, excel_path: Path, sheet_names: list[str], title: str = "Select Sheet"):
+    def __init__(
+        self,
+        parent,
+        excel_path: Path,
+        sheet_names: list[str],
+        title: str = "Select Sheet",
+    ):
         super().__init__(parent)
         self._result: str | None = None
         self._sheet_names = sheet_names
 
-        self.title(title)
-        self.geometry("520x440")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.configure(fg_color=theme.get("secondary"))
+        self.setWindowTitle(title)
+        self.setFixedSize(520, 280)
+        self.setModal(True)
 
-        self._error_lbl = None
-        self._menu = None
-        self._build_header(excel_path.name, title)
-        self._build_footer()
-        self._build_body()
-        self.after(50, self.lift)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        root.addWidget(self._make_header(title, Path(excel_path).name))
+        root.addWidget(self._make_body(), 1)
+        root.addWidget(self._make_footer())
 
     @property
-    def result(self) -> str | None:
+    def result(self) -> str | None:  # type: ignore[override]
         return self._result
 
-    def _build_header(self, file_name: str, title: str) -> None:
-        header = ctk.CTkFrame(self, fg_color=theme.get("primary"), corner_radius=0, height=68)
-        header.pack(fill="x", side="top")
-        header.pack_propagate(False)
+    # ------------------------------------------------------------------
 
-        ctk.CTkLabel(
-            header,
-            text=title,
-            font=theme.font(20, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=(24, 12))
+    def _make_header(self, title: str, file_name: str) -> QFrame:
+        header = QFrame()
+        header.setFixedHeight(68)
+        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(24, 0, 24, 0)
 
-        ctk.CTkLabel(
-            header,
-            text=file_name,
-            font=theme.font(11),
-            text_color=theme.get("text_light"),
-        ).pack(side="left")
+        title_lbl = QLabel(title)
+        title_lbl.setFont(theme.font(18, "bold"))
+        title_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(title_lbl)
 
-    def _build_footer(self) -> None:
-        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0, height=68)
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
+        sub = QLabel(file_name)
+        sub.setFont(theme.font(11))
+        sub.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(sub, 1)
+        return header
 
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
-        )
-        self._error_lbl.pack(side="left", padx=24)
+    def _make_body(self) -> QFrame:
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(24, 16, 24, 16)
+        lay.setSpacing(8)
 
-        ctk.CTkButton(
-            footer,
-            text="OK",
-            width=100,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_ok,
-        ).pack(side="right", padx=(8, 24), pady=15)
+        lbl = QLabel("Choose a sheet")
+        lbl.setFont(theme.font(12, "bold"))
+        lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(lbl)
 
-        ctk.CTkButton(
-            footer,
-            text="Cancel",
-            width=100,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            command=self.destroy,
-        ).pack(side="right", pady=15)
+        self._combo = QComboBox()
+        self._combo.setFixedHeight(38)
+        values = self._sheet_names if self._sheet_names else ["No sheets found"]
+        self._combo.addItems(values)
+        self._combo.setCurrentIndex(0)
+        lay.addWidget(self._combo)
 
-    def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-        body.columnconfigure(0, weight=1)
+        lay.addStretch(1)
+        return body
 
-        ctk.CTkLabel(
-            body,
-            text="Choose a sheet",
-            text_color=theme.get("text_dark"),
-            font=theme.font(12, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", padx=24, pady=(18, 6))
+    def _make_footer(self) -> QFrame:
+        footer = QFrame()
+        footer.setFixedHeight(68)
+        footer.setStyleSheet("QFrame { background-color: #13161e; border-top: 1px solid #0f1117; }")
+        lay = QHBoxLayout(footer)
+        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setSpacing(8)
 
-        values = self._sheet_names or ["No sheets found"]
-        self._menu = ctk.CTkOptionMenu(
-            body,
-            values=values,
-            fg_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            height=38,
-        )
-        self._menu.set(values[0])
-        self._menu.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 18))
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        lay.addWidget(self._error_lbl, 1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("btn_outline")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.clicked.connect(self.reject)
+        lay.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("btn_primary")
+        ok_btn.setFixedSize(100, 38)
+        ok_btn.clicked.connect(self._on_ok)
+        lay.addWidget(ok_btn)
+
+        return footer
 
     def _on_ok(self) -> None:
         if not self._sheet_names:
-            self._show_error("No sheets available in this file.")
+            self._error_lbl.setText("No sheets available in this file.")
             return
-        choice = self._menu.get().strip()
+        choice = self._combo.currentText().strip()
         if not choice:
-            self._show_error("Select a sheet.")
+            self._error_lbl.setText("Select a sheet.")
             return
         self._result = choice
-        self.destroy()
-
-    def _show_error(self, msg: str) -> None:
-        if self._error_lbl:
-            self._error_lbl.configure(text=msg)
+        self.accept()
 
 
-def select_single_sheet(parent, excel_path: Path, sheet_names: list[str], title: str = "Select Sheet") -> str | None:
+def select_single_sheet(
+    parent,
+    excel_path: Path,
+    sheet_names: list[str],
+    title: str = "Select Sheet",
+) -> str | None:
+    """Open the single sheet picker and return the selected sheet name, or None."""
     dialog = PopupSingleSheet(parent, excel_path=excel_path, sheet_names=sheet_names, title=title)
-    dialog.wait_window()
-    return dialog.result
-
-
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        return dialog.result
+    return None

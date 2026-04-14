@@ -1,134 +1,142 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-import customtkinter as ctk
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
 
 
-class PopupAdd(ctk.CTkToplevel):
+class PopupAdd(QDialog):
     """Modal popup to add a new row to a dim table."""
 
-    def __init__(self, parent, dim_table: str, dim_columns: list[str], mapped_column: str, bad_value: str, on_confirm):
+    def __init__(
+        self,
+        parent,
+        dim_table: str,
+        dim_columns: list[str],
+        mapped_column: str,
+        bad_value: str,
+        on_confirm,
+    ):
         super().__init__(parent)
         self._dim_columns = dim_columns
         self._mapped_column = mapped_column
         self._bad_value = bad_value
         self._on_confirm = on_confirm
-        self._entries: dict[str, ctk.CTkEntry] = {}
+        self._entries: dict[str, QLineEdit] = {}
 
-        self.title("Add To Dimension")
-        self.geometry("520x440")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.configure(fg_color=theme.get("secondary"))
+        # Height grows with number of columns, capped at 600
+        height = min(600, 160 + len(dim_columns) * 74)
+        self.setWindowTitle("Add To Dimension")
+        self.setFixedSize(520, height)
+        self.setModal(True)
 
-        self._error_lbl = None
-        self._build_header(dim_table)
-        self._build_footer()
-        self._build_body()
-        self.after(50, self.lift)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-    def _build_header(self, dim_table: str) -> None:
-        header = ctk.CTkFrame(self, fg_color=theme.get("primary"), corner_radius=0, height=68)
-        header.pack(fill="x", side="top")
-        header.pack_propagate(False)
+        root.addWidget(self._make_header(dim_table))
+        root.addWidget(self._make_body(), 1)
+        root.addWidget(self._make_footer())
 
-        ctk.CTkLabel(
-            header,
-            text="Add New Dimension Row",
-            font=theme.font(20, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=(24, 12))
+    # ------------------------------------------------------------------
 
-        ctk.CTkLabel(
-            header,
-            text=f"Table: {dim_table}",
-            font=theme.font(11),
-            text_color=theme.get("text_light"),
-        ).pack(side="left")
+    def _make_header(self, dim_table: str) -> QFrame:
+        header = QFrame()
+        header.setFixedHeight(68)
+        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(24, 0, 24, 0)
 
-    def _build_footer(self) -> None:
-        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0, height=68)
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
+        title = QLabel("Add New Dimension Row")
+        title.setFont(theme.font(18, "bold"))
+        title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(title)
 
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
+        sub = QLabel(f"Table: {dim_table}")
+        sub.setFont(theme.font(11))
+        sub.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(sub, 1)
+        return header
+
+    def _make_body(self) -> QWidget:
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        body_lay = QVBoxLayout(body)
+        body_lay.setContentsMargins(16, 12, 16, 12)
+        body_lay.setSpacing(0)
+
+        # Scrollable field area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
         )
-        self._error_lbl.pack(side="left", padx=24)
 
-        ctk.CTkButton(
-            footer,
-            text="Add Row",
-            width=120,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._submit,
-        ).pack(side="right", padx=(8, 24), pady=15)
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        fields_lay = QVBoxLayout(container)
+        fields_lay.setContentsMargins(4, 4, 4, 4)
+        fields_lay.setSpacing(6)
+        fields_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        ctk.CTkButton(
-            footer,
-            text="Cancel",
-            width=100,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            command=self.destroy,
-        ).pack(side="right", pady=15)
-
-    def _build_body(self) -> None:
-        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-        body.columnconfigure(0, weight=1)
-
-        fields = ctk.CTkScrollableFrame(body, fg_color="transparent")
-        fields.pack(fill="both", expand=True, padx=8, pady=8)
-        fields.grid_columnconfigure(0, weight=1)
-        fields.grid_columnconfigure(1, weight=1)
-
-        row = 0
         for col in self._dim_columns:
-            ctk.CTkLabel(
-                fields,
-                text=col,
-                font=theme.font(12, weight="bold"),
-                text_color=theme.get("text_dark"),
-            ).grid(row=row, column=0, padx=18, pady=(10, 4), sticky="w")
+            lbl = QLabel(col)
+            lbl.setFont(theme.font(12, "bold"))
+            lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            fields_lay.addWidget(lbl)
 
-            entry = ctk.CTkEntry(
-                fields,
-                height=38,
-                corner_radius=8,
-                border_color=theme.get("primary"),
-                placeholder_text=f"Enter {col}",
-            )
+            entry = QLineEdit()
+            entry.setFixedHeight(38)
+            entry.setPlaceholderText(f"Enter {col}")
             if col == self._mapped_column:
-                entry.insert(0, self._bad_value)
-            entry.grid(row=row, column=1, padx=18, pady=(10, 4), sticky="ew")
+                entry.setText(self._bad_value)
+            fields_lay.addWidget(entry)
             self._entries[col] = entry
-            row += 1
+
+        scroll.setWidget(container)
+        body_lay.addWidget(scroll, 1)
+        return body
+
+    def _make_footer(self) -> QFrame:
+        footer = QFrame()
+        footer.setFixedHeight(68)
+        footer.setStyleSheet("QFrame { background-color: #13161e; border-top: 1px solid #0f1117; }")
+        lay = QHBoxLayout(footer)
+        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setSpacing(8)
+
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        lay.addWidget(self._error_lbl, 1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("btn_outline")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.clicked.connect(self.reject)
+        lay.addWidget(cancel_btn)
+
+        add_btn = QPushButton("Add Row")
+        add_btn.setObjectName("btn_primary")
+        add_btn.setFixedSize(120, 38)
+        add_btn.clicked.connect(self._submit)
+        lay.addWidget(add_btn)
+
+        return footer
 
     def _submit(self) -> None:
         row: dict[str, str] = {}
         for col, entry in self._entries.items():
-            value = entry.get().strip()
+            value = entry.text().strip()
             if not value:
-                self._show_error("All fields are required.")
+                self._error_lbl.setText("All fields are required.")
                 return
             row[col] = value
 
         self._on_confirm(row)
-        self.destroy()
-
-    def _show_error(self, message: str) -> None:
-        if self._error_lbl:
-            self._error_lbl.configure(text=message)
-
-
+        self.accept()

@@ -1,13 +1,17 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
-import customtkinter as ctk
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout,
+    QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
 
 
-class PopupSheetSelector(ctk.CTkToplevel):
+class PopupSheetSelector(QDialog):
     """Modal popup that lets the user select sheets and set a category for each."""
 
     CATEGORY_VALUES = ["Select Category", "Transaction", "Dimension"]
@@ -18,169 +22,150 @@ class PopupSheetSelector(ctk.CTkToplevel):
         self._rows: list[dict] = []
         self._excel_path = Path(excel_path)
 
-        self.title("Select Sheets")
-        self.geometry("520x440")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.configure(fg_color=theme.get("secondary"))
+        self.setWindowTitle("Select Sheets")
+        self.setFixedSize(520, 460)
+        self.setModal(True)
 
-        self._error_lbl = None
-        self._build_header()
-        self._build_footer()
-        self._build_body(sheet_names)
-        self.after(50, self.lift)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        root.addWidget(self._make_header())
+        root.addWidget(self._make_body(sheet_names), 1)
+        root.addWidget(self._make_footer())
 
     @property
-    def result(self) -> list[dict] | None:
+    def result(self) -> list[dict] | None:  # type: ignore[override]
         return self._result
 
-    def _build_header(self) -> None:
-        header = ctk.CTkFrame(self, fg_color=theme.get("primary"), corner_radius=0, height=68)
-        header.pack(fill="x", side="top")
-        header.pack_propagate(False)
+    # ------------------------------------------------------------------
 
-        ctk.CTkLabel(
-            header,
-            text="Select Sheets",
-            font=theme.font(20, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=(24, 12))
+    def _make_header(self) -> QFrame:
+        header = QFrame()
+        header.setFixedHeight(68)
+        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(24, 0, 24, 0)
 
-        ctk.CTkLabel(
-            header,
-            text=self._excel_path.name,
-            font=theme.font(11),
-            text_color=theme.get("text_light"),
-        ).pack(side="left")
+        title = QLabel("Select Sheets")
+        title.setFont(theme.font(18, "bold"))
+        title.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(title)
 
-    def _build_footer(self) -> None:
-        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0, height=68)
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
+        sub = QLabel(self._excel_path.name)
+        sub.setFont(theme.font(11))
+        sub.setStyleSheet("color: #f1f5f9; background: transparent;")
+        lay.addWidget(sub, 1)
+        return header
 
-        self._error_lbl = ctk.CTkLabel(
-            footer,
-            text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
+    def _make_body(self, sheet_names: list[str]) -> QWidget:
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        body_lay = QVBoxLayout(body)
+        body_lay.setContentsMargins(16, 12, 16, 12)
+        body_lay.setSpacing(8)
+
+        lbl = QLabel("Choose sheets and category")
+        lbl.setFont(theme.font(12, "bold"))
+        lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+        body_lay.addWidget(lbl)
+
+        # Scroll area for sheet rows
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
         )
-        self._error_lbl.pack(side="left", padx=24)
 
-        ctk.CTkButton(
-            footer,
-            text="OK",
-            width=100,
-            height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            command=self._on_ok,
-        ).pack(side="right", padx=(8, 24), pady=15)
-
-        ctk.CTkButton(
-            footer,
-            text="Cancel",
-            width=100,
-            height=38,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            command=self.destroy,
-        ).pack(side="right", pady=15)
-
-    def _build_body(self, sheet_names: list[str]) -> None:
-        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-
-        ctk.CTkLabel(
-            body,
-            text="Choose sheets and category",
-            text_color=theme.get("text_dark"),
-            font=theme.font(12, weight="bold"),
-        ).pack(anchor="w", padx=18, pady=(14, 8))
-
-        list_frame = ctk.CTkScrollableFrame(body, fg_color="transparent")
-        list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 12))
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        self._list_layout = QVBoxLayout(container)
+        self._list_layout.setContentsMargins(0, 0, 0, 0)
+        self._list_layout.setSpacing(6)
+        self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         for sheet_name in sheet_names:
-            self._rows.append(self._build_sheet_row(list_frame, sheet_name))
+            self._rows.append(self._build_sheet_row(sheet_name))
 
-    def _build_sheet_row(self, parent, sheet_name: str) -> dict:
-        row = ctk.CTkFrame(parent, fg_color=theme.get("secondary"), corner_radius=8)
-        row.pack(fill="x", padx=6, pady=5)
-        row.columnconfigure(1, weight=1)
+        scroll.setWidget(container)
+        body_lay.addWidget(scroll, 1)
+        return body
 
-        checkbox = ctk.CTkCheckBox(
-            row,
-            text=sheet_name,
-            text_color=theme.get("text_dark"),
-            command=lambda: self._on_toggle_row(option_menu),
-        )
-        checkbox.grid(row=0, column=0, padx=(12, 8), pady=10, sticky="w")
+    def _build_sheet_row(self, sheet_name: str) -> dict:
+        row = QFrame()
+        row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
+        row_lay = QHBoxLayout(row)
+        row_lay.setContentsMargins(12, 8, 12, 8)
+        row_lay.setSpacing(12)
 
-        option_menu = ctk.CTkOptionMenu(
-            row,
-            values=self.CATEGORY_VALUES,
-            fg_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            width=150,
-            height=32,
-        )
-        option_menu.set("Select Category")
-        option_menu.grid(row=0, column=1, padx=(4, 12), pady=10, sticky="e")
-        option_menu.grid_remove()
+        checkbox = QCheckBox(sheet_name)
+        checkbox.setFont(theme.font(12))
+        checkbox.setStyleSheet("color: #f1f5f9; background: transparent;")
+        row_lay.addWidget(checkbox, 1)
 
-        return {
-            "sheet_name": sheet_name,
-            "checkbox": checkbox,
-            "option_menu": option_menu,
-        }
+        combo = QComboBox()
+        combo.addItems(self.CATEGORY_VALUES)
+        combo.setCurrentIndex(0)
+        combo.setFixedWidth(160)
+        combo.setFixedHeight(32)
+        combo.setVisible(False)
+        row_lay.addWidget(combo)
 
-    def _on_toggle_row(self, option_menu: ctk.CTkOptionMenu) -> None:
-        for row in self._rows:
-            if row["option_menu"] == option_menu:
-                if row["checkbox"].get() == 1:
-                    option_menu.grid()
-                else:
-                    option_menu.set("Select Category")
-                    option_menu.grid_remove()
-                return
+        checkbox.stateChanged.connect(lambda state, c=combo: c.setVisible(state == Qt.CheckState.Checked.value))
+
+        self._list_layout.addWidget(row)
+        return {"sheet_name": sheet_name, "checkbox": checkbox, "combo": combo}
+
+    def _make_footer(self) -> QFrame:
+        footer = QFrame()
+        footer.setFixedHeight(68)
+        footer.setStyleSheet("QFrame { background-color: #13161e; border-top: 1px solid #0f1117; }")
+        lay = QHBoxLayout(footer)
+        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setSpacing(8)
+
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        lay.addWidget(self._error_lbl, 1)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("btn_outline")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.clicked.connect(self.reject)
+        lay.addWidget(cancel_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("btn_primary")
+        ok_btn.setFixedSize(100, 38)
+        ok_btn.clicked.connect(self._on_ok)
+        lay.addWidget(ok_btn)
+
+        return footer
 
     def _on_ok(self) -> None:
         selections = []
         for row in self._rows:
-            if row["checkbox"].get() != 1:
+            if not row["checkbox"].isChecked():
                 continue
-            category = row["option_menu"].get().strip()
+            category = row["combo"].currentText().strip()
             if category not in ("Transaction", "Dimension"):
-                self._show_error("Please choose a category for each selected sheet.")
+                self._error_lbl.setText("Please choose a category for each selected sheet.")
                 return
-            selections.append(
-                {
-                    "sheet_name": row["sheet_name"],
-                    "category": category,
-                }
-            )
+            selections.append({"sheet_name": row["sheet_name"], "category": category})
 
         if not selections:
-            self._show_error("Select at least one sheet.")
+            self._error_lbl.setText("Select at least one sheet.")
             return
 
         self._result = selections
-        self.destroy()
-
-    def _show_error(self, message: str) -> None:
-        if self._error_lbl:
-            self._error_lbl.configure(text=message)
+        QDialog.accept(self)
 
 
 def select_sheets(parent, excel_path: Path, sheet_names: list[str]) -> list[dict] | None:
     """Open the sheet selector popup and return selected rows, or None if cancelled."""
     dialog = PopupSheetSelector(parent, excel_path=excel_path, sheet_names=sheet_names)
-    dialog.wait_window()
-    return dialog.result
-
-
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        return dialog.result
+    return None

@@ -1,245 +1,226 @@
-﻿from datetime import datetime
-from pathlib import Path
-import shutil
-import threading
-from tkinter import filedialog, messagebox
+from __future__ import annotations
 
-import customtkinter as ctk
+import shutil
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+)
 
 import ui.theme as theme
 from core.mapping_manager import get_mappings
 from core.project_manager import create_project, open_project
+from ui.workers import LoadingOverlay, ScreenBase, Worker, clear_layout, make_scroll_area
 
-_PANEL_W = 340  # left sidebar width in px
+_SIDEBAR_W = 340
 
 
-class Screen0Launcher(ctk.CTkFrame):
-    """Project launcher screen - left project list, right action panel."""
+class Screen0Launcher(ScreenBase):
+    """Project launcher — left sidebar project list, right action panel."""
 
-    def __init__(self, parent, app):
-        super().__init__(parent, fg_color=theme.get("secondary"), corner_radius=0)
+    def __init__(self, app, **kwargs):
+        super().__init__()
         self.app = app
         self._selected_path: str | None = None
-        self._selected_card: ctk.CTkFrame | None = None
+        self._selected_card: QFrame | None = None
+        self._selected_labels: list[QLabel] = []
 
-        self.grid_columnconfigure(0, weight=0, minsize=_PANEL_W)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self._left = self._build_left_panel()
-        self._right = self._build_right_panel()
+        # --- Sidebar ---
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(_SIDEBAR_W)
+        sb_layout = QVBoxLayout(sidebar)
+        sb_layout.setContentsMargins(16, 20, 16, 16)
+        sb_layout.setSpacing(8)
+
+        title = QLabel("Projects")
+        title.setFont(theme.font(14, "bold"))
+        title.setStyleSheet("color: #f1f5f9;")
+        sb_layout.addWidget(title)
+
+        scroll, self._list_container, self._list_layout = make_scroll_area()
+        self._list_layout.setSpacing(4)
+        sb_layout.addWidget(scroll, 1)
+        root.addWidget(sidebar)
+
+        # --- Content ---
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setAlignment(Qt.AlignCenter)
+
+        inner = QWidget()
+        inner.setFixedWidth(320)
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(0, 0, 0, 0)
+        inner_layout.setSpacing(0)
+
+        co_lbl = QLabel(theme.company_name())
+        co_lbl.setFont(theme.font(30, "bold"))
+        co_lbl.setStyleSheet("color: #3b82f6;")
+        inner_layout.addWidget(co_lbl)
+        inner_layout.addSpacing(8)
+
+        subtitle = QLabel("Select a project or create a new one.")
+        subtitle.setFont(theme.font(13))
+        subtitle.setStyleSheet("color: #94a3b8;")
+        inner_layout.addWidget(subtitle)
+        inner_layout.addSpacing(32)
+
+        hint = QLabel(
+            "How to use: Select a project on the left, then Open Selected. "
+            "Use New Project to create a fresh workspace."
+        )
+        hint.setFont(theme.font(11))
+        hint.setStyleSheet("color: #475569;")
+        hint.setWordWrap(True)
+        inner_layout.addWidget(hint)
+        inner_layout.addSpacing(24)
+
+        new_btn = QPushButton("+ New Project")
+        new_btn.setObjectName("btn_primary")
+        new_btn.setFixedHeight(46)
+        new_btn.setFont(theme.font(14, "bold"))
+        new_btn.clicked.connect(self._on_new_click)
+        inner_layout.addWidget(new_btn)
+        inner_layout.addSpacing(8)
+
+        self._open_btn = QPushButton("Open Selected")
+        self._open_btn.setObjectName("btn_outline")
+        self._open_btn.setFixedHeight(46)
+        self._open_btn.setFont(theme.font(14))
+        self._open_btn.setEnabled(False)
+        self._open_btn.clicked.connect(self._on_open_click)
+        inner_layout.addWidget(self._open_btn)
+        inner_layout.addSpacing(8)
+
+        self._delete_btn = QPushButton("Delete Selected")
+        self._delete_btn.setObjectName("btn_danger")
+        self._delete_btn.setFixedHeight(42)
+        self._delete_btn.setFont(theme.font(13))
+        self._delete_btn.setEnabled(False)
+        self._delete_btn.clicked.connect(self._on_delete_click)
+        inner_layout.addWidget(self._delete_btn)
+
+        content_layout.addWidget(inner)
+        root.addWidget(content, 1)
+
+        self._setup_overlay("Working...")
         self._load_and_render_projects()
-
-    # ------------------------------------------------------------------
-    # Layout builders
-    # ------------------------------------------------------------------
-
-    def _build_left_panel(self) -> ctk.CTkFrame:
-        """Build and return the left sidebar frame."""
-        panel = ctk.CTkFrame(self, fg_color=theme.get("sidebar_bg"), corner_radius=0)
-        panel.grid(row=0, column=0, sticky="nsew")
-
-        ctk.CTkLabel(
-            panel, text="Projects",
-            font=theme.font(14, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(padx=16, pady=(20, 10), anchor="w")
-
-        self._list_frame = ctk.CTkScrollableFrame(
-            panel, fg_color="transparent",
-            scrollbar_button_color=theme.get("primary"),
-        )
-        self._list_frame.pack(fill="both", expand=True, padx=6, pady=(0, 8))
-        return panel
-
-    def _build_right_panel(self) -> ctk.CTkFrame:
-        """Build and return the right action panel frame."""
-        panel = ctk.CTkFrame(self, fg_color=theme.get("secondary"), corner_radius=0)
-        panel.grid(row=0, column=1, sticky="nsew")
-
-        inner = ctk.CTkFrame(panel, fg_color="transparent")
-        inner.place(relx=0.5, rely=0.45, anchor="center")
-
-        ctk.CTkLabel(
-            inner, text=theme.company_name(),
-            font=theme.font(30, weight="bold"),
-            text_color=theme.get("primary"),
-        ).pack(pady=(0, 6))
-
-        ctk.CTkLabel(
-            inner, text="Select a project or create a new one.",
-            font=theme.font(13),
-            text_color=theme.get("text_dark"),
-        ).pack(pady=(0, 36))
-
-        ctk.CTkLabel(
-            inner,
-            text="How to use: Select a project on the left, then Open Selected. Use New Project to create a fresh workspace.",
-            font=theme.font(11),
-            text_color=theme.get("text_dark"),
-            justify="left",
-            wraplength=260,
-        ).pack(pady=(0, 14), anchor="w")
-
-        self._dark_mode_switch = ctk.CTkSwitch(
-            inner,
-            text="Dark Mode",
-            text_color=theme.get("text_dark"),
-            progress_color=theme.get("primary"),
-            button_color=theme.get("primary"),
-            button_hover_color=theme.get("primary"),
-            command=self._on_toggle_dark_mode,
-        )
-        if self.app.is_dark_mode_enabled():
-            self._dark_mode_switch.select()
-        else:
-            self._dark_mode_switch.deselect()
-        self._dark_mode_switch.pack(pady=(0, 16), anchor="w")
-
-        ctk.CTkButton(
-            inner, text="+ New Project",
-            width=240, height=46,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            font=theme.font(14, weight="bold"),
-            command=self._on_new_click,
-        ).pack(pady=8)
-
-        self._open_btn = ctk.CTkButton(
-            inner, text="Open Selected",
-            width=240, height=46,
-            fg_color="transparent",
-            border_width=2,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            font=theme.font(14),
-            state="disabled",
-            command=self._on_open_click,
-        )
-        self._open_btn.pack(pady=8)
-
-        self._delete_btn = ctk.CTkButton(
-            inner, text="Delete Selected",
-            width=240, height=42,
-            fg_color="transparent",
-            border_width=1,
-            border_color=theme.get("accent"),
-            text_color=theme.get("accent"),
-            font=theme.font(13),
-            state="disabled",
-            command=self._on_delete_click,
-        )
-        self._delete_btn.pack(pady=(4, 0))
-        return panel
 
     # ------------------------------------------------------------------
     # Project list
     # ------------------------------------------------------------------
 
     def _load_and_render_projects(self) -> None:
-        """Load known projects from the registry and populate the list."""
-        for widget in self._list_frame.winfo_children():
-            widget.destroy()
+        clear_layout(self._list_layout)
         self._selected_path = None
         self._selected_card = None
-        self._open_btn.configure(state="disabled")
-        self._delete_btn.configure(state="disabled")
+        self._selected_labels = []
+        self._open_btn.setEnabled(False)
+        self._delete_btn.setEnabled(False)
 
         paths = self.app.get_known_projects()
         loaded = []
         for p in paths:
             try:
-                state = open_project(Path(p))
-                loaded.append(state)
+                loaded.append(open_project(Path(p)))
             except (FileNotFoundError, ValueError):
                 continue
 
         if not loaded:
-            ctk.CTkLabel(
-                self._list_frame, text="No projects yet.",
-                font=theme.font(12),
-                text_color=theme.get("text_light"),
-            ).pack(padx=8, pady=12, anchor="w")
+            lbl = QLabel("No projects yet.")
+            lbl.setFont(theme.font(12))
+            lbl.setStyleSheet("color: #94a3b8; padding: 12px 8px;")
+            self._list_layout.addWidget(lbl)
             return
 
         for state in loaded:
-            card = self._make_project_card(self._list_frame, state)
-            card.pack(fill="x", padx=4, pady=3)
+            self._list_layout.addWidget(self._make_project_card(state))
 
-    def _make_project_card(self, parent, state: dict) -> ctk.CTkFrame:
-        """Create and return a clickable project card frame."""
+    def _make_project_card(self, state: dict) -> QFrame:
         path = state.get("project_path", "")
-        modified = state.get("settings", {}).get("last_modified", "")
 
-        card = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=6, cursor="hand2")
-        card.columnconfigure(0, weight=1)
+        card = QFrame()
+        card.setStyleSheet("QFrame { background: transparent; border-radius: 6px; }")
+        card.setCursor(Qt.PointingHandCursor)
 
-        name_lbl = ctk.CTkLabel(
-            card, text=state.get("project_name", "Untitled"),
-            font=theme.font(13, weight="bold"),
-            text_color=theme.get("text_light"), anchor="w",
-        )
-        name_lbl.grid(row=0, column=0, padx=10, pady=(8, 0), sticky="w")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(10, 8, 10, 8)
+        card_layout.setSpacing(2)
 
-        company_lbl = ctk.CTkLabel(
-            card, text=state.get("company", ""),
-            font=theme.font(11),
-            text_color=theme.get("text_light"), anchor="w",
-        )
-        company_lbl.grid(row=1, column=0, padx=10, pady=(0, 6), sticky="w")
+        name_lbl = QLabel(state.get("project_name", "Untitled"))
+        name_lbl.setFont(theme.font(13, "bold"))
+        name_lbl.setStyleSheet("color: #94a3b8;")
+        card_layout.addWidget(name_lbl)
 
-        def on_click(_event=None):
-            self._select_card(path, card, [name_lbl, company_lbl])
+        company_lbl = QLabel(state.get("company", ""))
+        company_lbl.setFont(theme.font(11))
+        company_lbl.setStyleSheet("color: #94a3b8;")
+        card_layout.addWidget(company_lbl)
 
-        card.bind("<Button-1>", on_click)
-        for lbl in (name_lbl, company_lbl):
-            lbl.bind("<Button-1>", on_click)
+        labels = [name_lbl, company_lbl]
+
+        def _click(event=None, p=path, c=card, lbls=labels):
+            self._select_card(p, c, lbls)
+
+        card.mousePressEvent = _click
+        name_lbl.mousePressEvent = _click
+        company_lbl.mousePressEvent = _click
 
         return card
 
-    def _select_card(self, path: str, card: ctk.CTkFrame, labels: list) -> None:
-        """Deselect the previously selected card and highlight the new one."""
-        if self._selected_card and self._selected_card.winfo_exists():
-            self._selected_card.configure(fg_color="transparent")
-            for child in self._selected_card.winfo_children():
-                if isinstance(child, ctk.CTkLabel):
-                    child.configure(text_color=theme.get("text_light"))
+    def _select_card(self, path: str, card: QFrame, labels: list) -> None:
+        if self._selected_card:
+            self._selected_card.setStyleSheet(
+                "QFrame { background: transparent; border-radius: 6px; }"
+            )
+            for lbl in self._selected_labels:
+                lbl.setStyleSheet("color: #94a3b8;")
 
-        card.configure(fg_color=theme.selection_color())
+        card.setStyleSheet(
+            "QFrame { background: rgba(59,130,246,0.12); border-radius: 6px; }"
+        )
         for lbl in labels:
-            lbl.configure(text_color=theme.get("primary"))
+            lbl.setStyleSheet("color: #3b82f6;")
 
         self._selected_path = path
         self._selected_card = card
-        self._open_btn.configure(state="normal")
-        self._delete_btn.configure(state="normal")
+        self._selected_labels = labels
+        self._open_btn.setEnabled(True)
+        self._delete_btn.setEnabled(True)
 
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
 
     def _on_open_click(self) -> None:
-        """Load selected project and navigate to the appropriate continuation screen."""
         if not self._selected_path:
             return
         try:
             state = open_project(Path(self._selected_path))
             self.app.set_current_project(state)
         except Exception as exc:
-            messagebox.showerror("Error", f"Could not open project:\n{exc}")
+            QMessageBox.critical(self, "Error", f"Could not open project:\n{exc}")
             return
+
         project_path = Path(state["project_path"])
-        tx_tables = list(state.get("transaction_tables", []))
-        dim_tables = list(state.get("dim_tables", []))
         try:
             mappings = get_mappings(project_path)
         except Exception:
             mappings = []
 
-        # Resume setup where it was interrupted.
+        tx_tables = list(state.get("transaction_tables", []))
+        dim_tables = list(state.get("dim_tables", []))
+
         if not tx_tables or not dim_tables:
             target = "screen1"
-        elif len(mappings) == 0:
+        elif not mappings:
             target = "screen2"
         else:
             target = "screen3"
@@ -247,214 +228,185 @@ class Screen0Launcher(ctk.CTkFrame):
         try:
             if target == "screen1":
                 from ui.screen1_sources import Screen1Sources
-
                 self.app.show_screen(Screen1Sources, project=state)
             elif target == "screen2":
                 from ui.screen2_mappings import Screen2Mappings
-
                 self.app.show_screen(Screen2Mappings, project=state)
             else:
                 from ui.screen3_main import Screen3Main
-
                 self.app.show_screen(Screen3Main, project=state)
-        except ImportError:
-            messagebox.showerror(
-                "Navigation Error",
-                "Could not open the required screen for this project state.",
-            )
+        except ImportError as exc:
+            QMessageBox.critical(self, "Navigation Error", str(exc))
 
     def _on_new_click(self) -> None:
-        """Open the New Project creation dialog."""
-        NewProjectDialog(self, self.app, on_success=self._after_project_created)
-
-    def _on_toggle_dark_mode(self) -> None:
-        """Set global app appearance and refresh launcher visuals."""
-        enabled = bool(self._dark_mode_switch.get())
-        self.app.set_global_dark_mode(enabled)
-        self.app.show_screen(Screen0Launcher)
+        dialog = NewProjectDialog(self, self.app)
+        dialog.exec()
+        if dialog.created_state:
+            self._after_project_created(dialog.created_state)
 
     def _on_delete_click(self) -> None:
-        """Delete the selected project/workspace after explicit confirmation."""
         if not self._selected_path:
             return
-
         project_path = Path(self._selected_path)
-        project_name = project_path.name
-        confirmed = messagebox.askyesno(
+        reply = QMessageBox.question(
+            self,
             "Confirm Delete",
-            (
-                f"Delete project '{project_name}'?\n\n"
-                "This will permanently delete the workspace folder and all project data."
-            ),
+            f"Delete project '{project_path.name}'?\n\n"
+            "This will permanently delete the workspace folder and all project data.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
-        if not confirmed:
+        if reply != QMessageBox.Yes:
             return
-
         try:
             if project_path.exists():
                 shutil.rmtree(project_path)
             self.app.unregister_project(str(project_path))
         except Exception as exc:
-            messagebox.showerror("Error", f"Could not delete project:\n{exc}")
+            QMessageBox.critical(self, "Error", f"Could not delete project:\n{exc}")
             return
-
         self._load_and_render_projects()
 
     def _after_project_created(self, project_state: dict) -> None:
-        """Register the newly created project and navigate to Screen 1."""
         self.app.set_current_project(project_state)
         self.app.register_project(project_state["project_path"])
         try:
             from ui.screen1_sources import Screen1Sources
             self.app.show_screen(Screen1Sources, project=project_state)
         except ImportError:
-            self._load_and_render_projects()  # stay on Screen 0, refresh list
+            self._load_and_render_projects()
 
 
 # ---------------------------------------------------------------------------
 # New Project Dialog
 # ---------------------------------------------------------------------------
 
-class NewProjectDialog(ctk.CTkToplevel):
-    """Modal dialog for creating a new project."""
+class NewProjectDialog(QDialog):
+    """Modal dialog for creating a new project workspace."""
 
-    def __init__(self, parent, app, on_success):
+    def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
-        self.on_success = on_success
-
-        self.title("New Project")
-        self.geometry("520x440")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-        self.configure(fg_color=theme.get("secondary"))
-
-        self._folder_var = ctk.StringVar()
-        self._error_lbl = None
+        self.created_state: dict | None = None
+        self._workers: list[Worker] = []
         self._loading_count = 0
-        self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
 
-        self._build_header()
-        self._build_footer()   # footer pinned first so it anchors bottom
-        self._build_body()
-        self._build_loading_overlay()
-        self.after(50, self.lift)
+        self.setWindowTitle("New Project")
+        self.setFixedSize(520, 440)
+        self.setModal(True)
 
-    def _build_header(self) -> None:
-        """Build the coloured top header bar."""
-        header = ctk.CTkFrame(self, fg_color=theme.get("primary"),
-                              corner_radius=0, height=68)
-        header.pack(fill="x", side="top")
-        header.pack_propagate(False)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        ctk.CTkLabel(
-            header, text="New Project",
-            font=theme.font(20, weight="bold"),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=28, pady=0)
+        # Header
+        header = QFrame()
+        header.setFixedHeight(68)
+        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(28, 0, 20, 0)
+        h_layout.setSpacing(12)
 
-        ctk.CTkLabel(
-            header,
-            text="Fill in the details below to create a new workspace.",
-            font=theme.font(11),
-            text_color=theme.get("text_light"),
-        ).pack(side="left", padx=(0, 20))
+        title_lbl = QLabel("New Project")
+        title_lbl.setFont(theme.font(20, "bold"))
+        title_lbl.setStyleSheet("color: white;")
+        h_layout.addWidget(title_lbl)
 
-    def _build_footer(self) -> None:
-        """Build the button row pinned to the bottom."""
-        footer = ctk.CTkFrame(self, fg_color=theme.get("secondary"),
-                              corner_radius=0, height=68)
-        footer.pack(fill="x", side="bottom")
-        footer.pack_propagate(False)
+        sub_lbl = QLabel("Fill in the details below to create a new workspace.")
+        sub_lbl.setFont(theme.font(11))
+        sub_lbl.setStyleSheet("color: rgba(255,255,255,0.8);")
+        h_layout.addWidget(sub_lbl)
+        h_layout.addStretch()
+        outer.addWidget(header)
 
-        self._error_lbl = ctk.CTkLabel(
-            footer, text="",
-            text_color=theme.get("accent"),
-            font=theme.font(11),
-        )
-        self._error_lbl.pack(side="left", padx=28)
+        # Body
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(24, 0, 24, 0)
+        body_layout.setSpacing(4)
 
-        ctk.CTkButton(
-            footer, text="Create Project", width=140, height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            font=theme.font(13, weight="bold"),
-            command=self._on_create,
-        ).pack(side="right", padx=(8, 24), pady=15)
+        def field_label(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFont(theme.font(12, "bold"))
+            lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
+            return lbl
 
-        ctk.CTkButton(
-            footer, text="Cancel", width=100, height=38,
-            fg_color="transparent", border_width=1,
-            border_color=theme.get("primary"),
-            text_color=theme.get("primary"),
-            font=theme.font(13),
-            command=self.destroy,
-        ).pack(side="right", pady=15)
+        def entry(placeholder: str) -> QLineEdit:
+            e = QLineEdit()
+            e.setPlaceholderText(placeholder)
+            e.setFixedHeight(38)
+            return e
 
-    def _build_body(self) -> None:
-        """Build the form fields in the scrollable middle area."""
-        body = ctk.CTkFrame(self, fg_color=theme.card_color(), corner_radius=10)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
+        body_layout.addSpacing(18)
+        body_layout.addWidget(field_label("Project Name"))
+        body_layout.addSpacing(4)
+        self._name_entry = entry("e.g. Sales Module")
+        body_layout.addWidget(self._name_entry)
 
-        def field(label_text, row):
-            ctk.CTkLabel(
-                body, text=label_text,
-                font=theme.font(12, weight="bold"),
-                text_color=theme.get("text_dark"), anchor="w",
-            ).grid(row=row, column=0, padx=24, pady=(18, 4), sticky="w")
+        body_layout.addSpacing(10)
+        body_layout.addWidget(field_label("Company Name"))
+        body_layout.addSpacing(4)
+        self._company_entry = entry("e.g. Acme Corp")
+        body_layout.addWidget(self._company_entry)
 
-        field("Project Name", 0)
-        self._name_entry = ctk.CTkEntry(
-            body, placeholder_text="e.g. Sales Module",
-            height=38, corner_radius=8,
-            border_color=theme.get("primary"),
-        )
-        self._name_entry.grid(row=1, column=0, padx=24, pady=(0, 4), sticky="ew")
+        body_layout.addSpacing(10)
+        body_layout.addWidget(field_label("Save Location"))
+        body_layout.addSpacing(4)
 
-        field("Company Name", 2)
-        self._company_entry = ctk.CTkEntry(
-            body, placeholder_text="e.g. Acme Corp",
-            height=38, corner_radius=8,
-            border_color=theme.get("primary"),
-        )
-        self._company_entry.grid(row=3, column=0, padx=24, pady=(0, 4), sticky="ew")
+        path_row = QHBoxLayout()
+        path_row.setSpacing(10)
+        self._folder_entry = QLineEdit()
+        self._folder_entry.setPlaceholderText("Choose a folder...")
+        self._folder_entry.setFixedHeight(38)
+        path_row.addWidget(self._folder_entry, 1)
 
-        field("Save Location", 4)
-        path_row = ctk.CTkFrame(body, fg_color="transparent")
-        path_row.grid(row=5, column=0, padx=24, pady=(0, 18), sticky="ew")
-        path_row.columnconfigure(0, weight=1)
+        browse_btn = QPushButton("Browse...")
+        browse_btn.setObjectName("btn_primary")
+        browse_btn.setFixedSize(90, 38)
+        browse_btn.clicked.connect(self._on_browse)
+        path_row.addWidget(browse_btn)
+        body_layout.addLayout(path_row)
+        body_layout.addStretch()
+        outer.addWidget(body, 1)
 
-        ctk.CTkEntry(
-            path_row, textvariable=self._folder_var,
-            placeholder_text="Choose a folder...",
-            height=38, corner_radius=8,
-            border_color=theme.get("primary"),
-        ).grid(row=0, column=0, sticky="ew")
+        # Footer
+        footer = QFrame()
+        footer.setFixedHeight(68)
+        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
+        f_layout = QHBoxLayout(footer)
+        f_layout.setContentsMargins(28, 0, 24, 0)
+        f_layout.setSpacing(8)
 
-        ctk.CTkButton(
-            path_row, text="Browse...", width=90, height=38,
-            fg_color=theme.get("primary"),
-            text_color=theme.get("text_light"),
-            corner_radius=8,
-            command=self._on_browse,
-        ).grid(row=0, column=1, padx=(10, 0))
+        self._error_lbl = QLabel("")
+        self._error_lbl.setFont(theme.font(11))
+        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
+        f_layout.addWidget(self._error_lbl, 1)
 
-        body.columnconfigure(0, weight=1)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("btn_outline")
+        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.clicked.connect(self.reject)
+        f_layout.addWidget(cancel_btn)
+
+        create_btn = QPushButton("Create Project")
+        create_btn.setObjectName("btn_primary")
+        create_btn.setFixedSize(140, 38)
+        create_btn.clicked.connect(self._on_create)
+        f_layout.addWidget(create_btn)
+        outer.addWidget(footer)
+
+        self._overlay = LoadingOverlay(self, "Creating project...")
 
     def _on_browse(self) -> None:
-        """Open a folder browser and populate the path entry."""
-        folder = filedialog.askdirectory(title="Choose save location")
+        folder = QFileDialog.getExistingDirectory(self, "Choose save location")
         if folder:
-            self._folder_var.set(folder)
+            self._folder_entry.setText(folder)
 
     def _on_create(self) -> None:
-        """Validate inputs, create the project on disk, and call on_success."""
-        name = self._name_entry.get().strip()
-        company = self._company_entry.get().strip()
-        folder = self._folder_var.get().strip()
+        name = self._name_entry.text().strip()
+        company = self._company_entry.text().strip()
+        folder = self._folder_entry.text().strip()
 
         if not name:
             self._show_error("Project name is required.")
@@ -473,112 +425,40 @@ class NewProjectDialog(ctk.CTkToplevel):
             project_path = create_project(name, company, Path(folder))
             return open_project(project_path)
 
-        def on_success(state):
-            self.destroy()
-            self.on_success(state)
+        self._loading_count += 1
+        if self._loading_count == 1:
+            self._overlay.setGeometry(self.rect())
+            self._overlay.raise_()
+            self._overlay.show()
 
-        def on_error(exc):
+        w = Worker(worker)
+        self._workers.append(w)
+
+        def _done(state):
+            if w in self._workers:
+                self._workers.remove(w)
+            self._loading_count = max(0, self._loading_count - 1)
+            if self._loading_count == 0:
+                self._overlay.hide()
+            self.created_state = state
+            self.accept()
+
+        def _fail(exc):
+            if w in self._workers:
+                self._workers.remove(w)
+            self._loading_count = max(0, self._loading_count - 1)
+            if self._loading_count == 0:
+                self._overlay.hide()
             self._show_error(f"Could not create project: {exc}")
 
-        self._run_background(worker, on_success, on_error)
-
-    def _build_loading_overlay(self) -> None:
-        self._loading_overlay = ctk.CTkFrame(
-            self,
-            fg_color=theme.get("secondary"),
-            corner_radius=0,
-        )
-
-        overlay_card = ctk.CTkFrame(self._loading_overlay, fg_color=theme.card_color(), corner_radius=12)
-        overlay_card.place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(
-            overlay_card,
-            text="Creating project...",
-            font=theme.font(14, weight="bold"),
-            text_color=theme.get("text_dark"),
-        ).pack(padx=20, pady=(14, 8))
-
-        self._loading_bar = ctk.CTkProgressBar(overlay_card, mode="determinate", width=240)
-        self._loading_bar.set(0.0)
-        self._loading_bar.pack(padx=20, pady=(0, 14))
-
-    def _run_background(self, worker, on_success=None, on_error=None) -> None:
-        self._show_loading()
-
-        def _finish_success(result):
-            self._hide_loading()
-            if on_success:
-                on_success(result)
-
-        def _finish_error(exc):
-            self._hide_loading()
-            if on_error:
-                on_error(exc)
-            else:
-                self._show_error(str(exc))
-
-        def _task():
-            try:
-                result = worker()
-            except Exception as exc:
-                try:
-                    self.after(0, lambda err=exc: _finish_error(err))
-                except Exception:
-                    pass
-                return
-            try:
-                self.after(0, lambda value=result: _finish_success(value))
-            except Exception:
-                pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
-    def _show_loading(self) -> None:
-        self._loading_count += 1
-        if self._loading_count != 1:
-            return
-        self._loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._loading_overlay.lift()
-        self._start_loading_animation()
-
-    def _hide_loading(self) -> None:
-        self._loading_count = max(0, self._loading_count - 1)
-        if self._loading_count != 0:
-            return
-        self._stop_loading_animation()
-        self._loading_overlay.place_forget()
-
-    def _start_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            return
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
-
-    def _stop_loading_animation(self) -> None:
-        if self._loading_anim_job is not None:
-            self.after_cancel(self._loading_anim_job)
-            self._loading_anim_job = None
-        self._loading_anim_value = 0.0
-        self._loading_anim_direction = 1
-        self._loading_bar.set(0.0)
-
-    def _animate_loading_bar(self) -> None:
-        step = 0.015
-        self._loading_anim_value += step * self._loading_anim_direction
-        if self._loading_anim_value >= 1.0:
-            self._loading_anim_value = 1.0
-            self._loading_anim_direction = -1
-        elif self._loading_anim_value <= 0.0:
-            self._loading_anim_value = 0.0
-            self._loading_anim_direction = 1
-        self._loading_bar.set(self._loading_anim_value)
-        self._loading_anim_job = self.after(16, self._animate_loading_bar)
+        w.finished.connect(_done)
+        w.errored.connect(_fail)
+        w.start()
 
     def _show_error(self, msg: str) -> None:
-        """Display an inline validation error in the footer."""
-        if self._error_lbl:
-            self._error_lbl.configure(text=msg)
+        self._error_lbl.setText(msg)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._overlay and self._overlay.isVisible():
+            self._overlay.setGeometry(self.rect())
