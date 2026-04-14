@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 
 import ui.theme as theme
 
@@ -24,6 +24,9 @@ class App(QMainWindow):
 
         self.setWindowTitle(theme.company_name())
         self.setFixedSize(1280, 720)
+
+        # Apply persisted theme before showing any screen
+        theme.apply_theme(QApplication.instance(), self.is_dark_mode_enabled())
 
         from ui.screen0_launcher import Screen0Launcher
         self.show_screen(Screen0Launcher)
@@ -74,8 +77,15 @@ class App(QMainWindow):
             pass
 
     def is_dark_mode_enabled(self) -> bool:
-        """Always True — the app uses a fixed dark theme."""
-        return True
+        """Return saved dark-mode preference (defaults to True)."""
+        return bool(self._read_app_config().get("dark_mode", True))
+
+    def set_dark_mode(self, dark: bool) -> None:
+        """Persist the dark-mode preference and immediately swap the stylesheet."""
+        config = self._read_app_config()
+        config["dark_mode"] = dark
+        self._write_app_config(config)
+        theme.apply_theme(QApplication.instance(), dark)
 
     def get_known_projects(self) -> list:
         return list(self._read_app_config().get("projects", []))

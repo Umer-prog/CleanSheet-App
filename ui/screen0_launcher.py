@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
@@ -16,99 +18,415 @@ from ui.workers import LoadingOverlay, ScreenBase, Worker, clear_layout, make_sc
 
 _SIDEBAR_W = 340
 
+# Avatar color palette: (text_color, bg_color) — cycled by name hash
+_AVATAR_COLORS = [
+    ("#60a5fa", "rgba(59,130,246,0.15)"),
+    ("#22d3ee", "rgba(34,211,238,0.1)"),
+    ("#fb923c", "rgba(251,146,60,0.1)"),
+    ("#a78bfa", "rgba(167,139,250,0.1)"),
+    ("#34d399", "rgba(52,211,153,0.1)"),
+    ("#f472b6", "rgba(244,114,182,0.1)"),
+    ("#fbbf24", "rgba(251,191,36,0.1)"),
+    ("#64748b", "rgba(100,116,139,0.1)"),
+]
+
+
+def _avatar_colors(name: str) -> tuple[str, str]:
+    idx = sum(ord(c) for c in name) % len(_AVATAR_COLORS)
+    return _AVATAR_COLORS[idx]
+
+
+def _initials(name: str) -> str:
+    parts = name.split()
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[1][0]).upper()
+    return name[:2].upper() if len(name) >= 2 else (name[0].upper() if name else "?")
+
+
+class _HeroFrame(QFrame):
+    """Brand hero panel — paints an optional background image scaled to cover,
+    with a semi-transparent dark overlay so text stays readable.
+    Without an image it just shows the solid #13161e background.
+    Recommended image size: 940 × 200 px.
+    """
+
+    def __init__(self, bg_pixmap: QPixmap | None = None, parent=None):
+        super().__init__(parent)
+        self._bg = bg_pixmap
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._bg:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        scaled = self._bg.scaled(
+            self.size(),
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation,
+        )
+        x = (scaled.width() - self.width()) // 2
+        y = (scaled.height() - self.height()) // 2
+        painter.drawPixmap(-x, -y, scaled)
+        # Dark overlay so text remains readable
+        painter.fillRect(self.rect(), QColor(13, 17, 23, 200))
+        painter.end()
+
+
+class _DarkModeToggle(QFrame):
+    """Clickable pill toggle — visually on/off, emits toggled(bool)."""
+
+    toggled = Signal(bool)
+
+    def __init__(self, on: bool = True, parent=None):
+        super().__init__(parent)
+        self._on = on
+        self.setFixedSize(36, 20)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setObjectName("dm_track")
+
+        self._thumb = QFrame(self)
+        self._thumb.setObjectName("dm_thumb")
+        self._thumb.setFixedSize(14, 14)
+        self._thumb.setStyleSheet(
+            "QFrame#dm_thumb { background: white; border-radius: 7px; border: none; }"
+        )
+        self._refresh()
+
+    def _refresh(self):
+        track = "#3b82f6" if self._on else "rgba(255,255,255,0.18)"
+        self.setStyleSheet(
+            f"QFrame#dm_track {{ background: {track}; border-radius: 10px; border: none; }}"
+        )
+        self._thumb.move(19 if self._on else 3, 3)
+        self._thumb.raise_()
+
+    def mousePressEvent(self, event):
+        self._on = not self._on
+        self._refresh()
+        self.toggled.emit(self._on)
+
+
+def _format_modified(project_path: str) -> str:
+    try:
+        mtime = (Path(project_path) / "project.json").stat().st_mtime
+        dt = datetime.fromtimestamp(mtime)
+        delta = datetime.now() - dt
+        if delta.days == 0:
+            return "Today"
+        elif delta.days == 1:
+            return "Yesterday"
+        elif delta.days < 7:
+            return f"{delta.days} days ago"
+        else:
+            return dt.strftime("%d %b %Y")
+    except OSError:
+        return "Unknown"
+
 
 class Screen0Launcher(ScreenBase):
-    """Project launcher — left sidebar project list, right action panel."""
+    """Project launcher — left list panel + right brand/detail panel."""
 
     def __init__(self, app, **kwargs):
         super().__init__()
         self.app = app
         self._selected_path: str | None = None
-        self._selected_card: QFrame | None = None
-        self._selected_labels: list[QLabel] = []
+        self._selected_row: QFrame | None = None
+        self._selected_name_lbl: QLabel | None = None
+        self._project_rows: list[tuple[dict, QFrame]] = []  # (state, row_widget)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # --- Sidebar ---
-        sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(_SIDEBAR_W)
-        sb_layout = QVBoxLayout(sidebar)
-        sb_layout.setContentsMargins(16, 20, 16, 16)
-        sb_layout.setSpacing(8)
-
-        title = QLabel("Projects")
-        title.setFont(theme.font(14, "bold"))
-        title.setStyleSheet("color: #f1f5f9;")
-        sb_layout.addWidget(title)
-
-        scroll, self._list_container, self._list_layout = make_scroll_area()
-        self._list_layout.setSpacing(4)
-        sb_layout.addWidget(scroll, 1)
-        root.addWidget(sidebar)
-
-        # --- Content ---
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        content_layout.setAlignment(Qt.AlignCenter)
-
-        inner = QWidget()
-        inner.setFixedWidth(320)
-        inner_layout = QVBoxLayout(inner)
-        inner_layout.setContentsMargins(0, 0, 0, 0)
-        inner_layout.setSpacing(0)
-
-        co_lbl = QLabel(theme.company_name())
-        co_lbl.setFont(theme.font(30, "bold"))
-        co_lbl.setStyleSheet("color: #3b82f6;")
-        inner_layout.addWidget(co_lbl)
-        inner_layout.addSpacing(8)
-
-        subtitle = QLabel("Select a project or create a new one.")
-        subtitle.setFont(theme.font(13))
-        subtitle.setStyleSheet("color: #94a3b8;")
-        inner_layout.addWidget(subtitle)
-        inner_layout.addSpacing(32)
-
-        hint = QLabel(
-            "How to use: Select a project on the left, then Open Selected. "
-            "Use New Project to create a fresh workspace."
+        # ── Left panel ────────────────────────────────────────────────
+        left = QFrame()
+        left.setObjectName("launcher_left")
+        left.setFixedWidth(_SIDEBAR_W)
+        left.setStyleSheet(
+            "QFrame#launcher_left { background: #13161e; "
+            "border-right: 1px solid rgba(255,255,255,0.06); }"
         )
-        hint.setFont(theme.font(11))
-        hint.setStyleSheet("color: #475569;")
-        hint.setWordWrap(True)
-        inner_layout.addWidget(hint)
-        inner_layout.addSpacing(24)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
+        # Header: "All Projects" + count pill
+        header = QFrame()
+        header.setFixedHeight(64)
+        header.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(18, 0, 18, 0)
+        h_lay.setSpacing(0)
+
+        title_lbl = QLabel("All Projects")
+        title_lbl.setFont(theme.font(13, "bold"))
+        title_lbl.setStyleSheet("color: #f1f5f9; background: transparent; border: none;")
+        h_lay.addWidget(title_lbl)
+        h_lay.addStretch()
+
+        self._count_pill = QLabel("0 projects")
+        self._count_pill.setFont(theme.font(11))
+        self._count_pill.setStyleSheet(
+            "color: #334155; background: rgba(255,255,255,0.05); "
+            "padding: 2px 9px; border-radius: 10px; border: none;"
+        )
+        h_lay.addWidget(self._count_pill)
+        left_layout.addWidget(header)
+
+        # Search bar
+        search_frame = QFrame()
+        search_frame.setFixedHeight(54)
+        search_frame.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        s_lay = QHBoxLayout(search_frame)
+        s_lay.setContentsMargins(12, 10, 12, 10)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Search projects…")
+        self._search.setFixedHeight(34)
+        self._search.textChanged.connect(self._on_search)
+        s_lay.addWidget(self._search)
+        left_layout.addWidget(search_frame)
+
+        # Project list (scroll area)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        self._list_container = QWidget()
+        self._list_container.setStyleSheet("background: transparent;")
+        self._list_layout = QVBoxLayout(self._list_container)
+        self._list_layout.setContentsMargins(0, 0, 0, 0)
+        self._list_layout.setSpacing(0)
+        self._list_layout.setAlignment(Qt.AlignTop)
+        scroll.setWidget(self._list_container)
+        left_layout.addWidget(scroll, 1)
+
+        # Footer: New Project only
+        footer = QFrame()
+        footer.setFixedHeight(60)
+        footer.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-top: 1px solid rgba(255,255,255,0.06); }"
+        )
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(12, 12, 12, 12)
 
         new_btn = QPushButton("+ New Project")
         new_btn.setObjectName("btn_primary")
-        new_btn.setFixedHeight(46)
-        new_btn.setFont(theme.font(14, "bold"))
+        new_btn.setFixedHeight(36)
+        new_btn.setFont(theme.font(13, "bold"))
         new_btn.clicked.connect(self._on_new_click)
-        inner_layout.addWidget(new_btn)
-        inner_layout.addSpacing(8)
+        f_lay.addWidget(new_btn)
+        left_layout.addWidget(footer)
 
-        self._open_btn = QPushButton("Open Selected")
-        self._open_btn.setObjectName("btn_outline")
-        self._open_btn.setFixedHeight(46)
-        self._open_btn.setFont(theme.font(14))
+        root.addWidget(left)
+
+        # ── Right panel ───────────────────────────────────────────────
+        right = QFrame()
+        right.setObjectName("launcher_right")
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+
+        # Brand hero (200px) — supports optional background image via branding.json
+        _hero_bg: QPixmap | None = None
+        _bg_path = theme.hero_bg_path()
+        if _bg_path:
+            _abs_bg = Path(__file__).parent.parent / _bg_path
+            if _abs_bg.exists():
+                _hero_bg = QPixmap(str(_abs_bg))
+
+        hero = _HeroFrame(_hero_bg)
+        hero.setObjectName("brand_hero")
+        hero.setFixedHeight(200)
+        hero.setStyleSheet(
+            "QFrame#brand_hero { background: #13161e; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        hero_lay = QHBoxLayout(hero)
+        hero_lay.setContentsMargins(48, 0, 48, 0)
+        hero_lay.setSpacing(24)
+        hero_lay.setAlignment(Qt.AlignVCenter)
+
+        # Logo box — show branding image inside, or initials fallback
+        logo_box = QFrame()
+        logo_box.setFixedSize(64, 64)
+        logo_box.setStyleSheet(
+            "QFrame { background: #3b82f6; border-radius: 16px; border: none; }"
+        )
+        logo_inner = QVBoxLayout(logo_box)
+        logo_inner.setContentsMargins(4, 4, 4, 4)
+
+        logo_lbl = QLabel()
+        logo_lbl.setAlignment(Qt.AlignCenter)
+        logo_lbl.setStyleSheet("background: transparent; border: none;")
+        _logo_path = theme.logo_path()
+        if _logo_path:
+            _abs_logo = Path(__file__).parent.parent / _logo_path
+            if _abs_logo.exists():
+                px = QPixmap(str(_abs_logo)).scaled(
+                    52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                logo_lbl.setPixmap(px)
+            else:
+                logo_lbl.setText("CS")
+                logo_lbl.setStyleSheet(
+                    "color: white; background: transparent; border: none; "
+                    "font-size: 18px; font-weight: 700;"
+                )
+        else:
+            logo_lbl.setText("CS")
+            logo_lbl.setStyleSheet(
+                "color: white; background: transparent; border: none; "
+                "font-size: 18px; font-weight: 700;"
+            )
+        logo_inner.addWidget(logo_lbl)
+        hero_lay.addWidget(logo_box)
+
+        # App name + subtitle — font sizes set via stylesheet to override global QSS
+        text_block = QVBoxLayout()
+        text_block.setSpacing(4)
+        text_block.setAlignment(Qt.AlignVCenter)
+
+        app_name_lbl = QLabel(theme.company_name())
+        app_name_lbl.setStyleSheet(
+            "color: #f1f5f9; background: transparent; border: none; "
+            "font-size: 30px; font-weight: 700; letter-spacing: 0px;"
+        )
+        text_block.addWidget(app_name_lbl)
+
+        app_sub_lbl = QLabel("Data Mapping & Standardisation Tool")
+        app_sub_lbl.setStyleSheet(
+            "color: #64748b; background: transparent; border: none; font-size: 13px;"
+        )
+        text_block.addWidget(app_sub_lbl)
+        hero_lay.addLayout(text_block)
+        hero_lay.addStretch()
+        right_layout.addWidget(hero)
+
+        # Detail area (expanding)
+        detail_area = QFrame()
+        detail_area.setObjectName("detail_area")
+        detail_lay = QVBoxLayout(detail_area)
+        detail_lay.setContentsMargins(32, 28, 32, 16)
+        detail_lay.setSpacing(14)
+
+        section_lbl = QLabel("SELECTED PROJECT")
+        section_lbl.setFont(theme.font(10, "bold"))
+        section_lbl.setStyleSheet(
+            "color: #334155; background: transparent; border: none; letter-spacing: 1px;"
+        )
+        detail_lay.addWidget(section_lbl)
+
+        # Detail card
+        detail_card = QFrame()
+        detail_card.setObjectName("detail_card")
+        detail_card.setStyleSheet(
+            "QFrame#detail_card { background: rgba(255,255,255,0.02); "
+            "border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; }"
+        )
+        card_lay = QVBoxLayout(detail_card)
+        card_lay.setContentsMargins(0, 0, 0, 0)
+        card_lay.setSpacing(0)
+
+        def _detail_row(key: str, last: bool = False) -> tuple[QFrame, QLabel]:
+            row = QFrame()
+            sep = "" if last else "border-bottom: 1px solid rgba(255,255,255,0.04);"
+            row.setStyleSheet(
+                f"QFrame {{ background: transparent; border: none; {sep} }}"
+            )
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(18, 11, 18, 11)
+            rl.setSpacing(0)
+
+            k = QLabel(key)
+            k.setFont(theme.font(12))
+            k.setStyleSheet("color: #475569; background: transparent; border: none;")
+            k.setFixedWidth(130)
+            rl.addWidget(k)
+
+            v = QLabel("—")
+            v.setFont(theme.font(12, "bold"))
+            v.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+            rl.addWidget(v, 1)
+            return row, v
+
+        r1, self._v_name = _detail_row("Project Name")
+        r2, self._v_company = _detail_row("Company")
+        r3, self._v_modified = _detail_row("Last Modified")
+        r4, self._v_path = _detail_row("Folder Path", last=True)
+        self._v_path.setFont(theme.font(11))
+        self._v_path.setStyleSheet(
+            "color: #64748b; background: transparent; border: none; "
+            "font-family: 'Courier New', monospace;"
+        )
+        for r in (r1, r2, r3, r4):
+            card_lay.addWidget(r)
+        detail_lay.addWidget(detail_card)
+
+        # Action buttons: Open Project + Delete
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        self._open_btn = QPushButton("Open Project")
+        self._open_btn.setObjectName("btn_primary")
+        self._open_btn.setFixedHeight(38)
+        self._open_btn.setFont(theme.font(13))
         self._open_btn.setEnabled(False)
         self._open_btn.clicked.connect(self._on_open_click)
-        inner_layout.addWidget(self._open_btn)
-        inner_layout.addSpacing(8)
+        btn_row.addWidget(self._open_btn, 1)
 
-        self._delete_btn = QPushButton("Delete Selected")
+        self._delete_btn = QPushButton("Delete")
         self._delete_btn.setObjectName("btn_danger")
-        self._delete_btn.setFixedHeight(42)
+        self._delete_btn.setFixedHeight(38)
+        self._delete_btn.setFixedWidth(90)
         self._delete_btn.setFont(theme.font(13))
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete_click)
-        inner_layout.addWidget(self._delete_btn)
+        btn_row.addWidget(self._delete_btn)
+        detail_lay.addLayout(btn_row)
+        detail_lay.addStretch()
 
-        content_layout.addWidget(inner)
-        root.addWidget(content, 1)
+        right_layout.addWidget(detail_area, 1)
+
+        # Status bar (36px)
+        status_bar = QFrame()
+        status_bar.setObjectName("status_bar")
+        status_bar.setFixedHeight(36)
+        status_bar.setStyleSheet(
+            "QFrame#status_bar { background: #13161e; "
+            "border-top: 1px solid rgba(255,255,255,0.06); }"
+        )
+        sb_lay = QHBoxLayout(status_bar)
+        sb_lay.setContentsMargins(28, 0, 28, 0)
+        sb_lay.setSpacing(8)
+
+        self._status_lbl = QLabel(f"{theme.company_name()} v1.0 · 0 projects loaded")
+        self._status_lbl.setFont(theme.font(11))
+        self._status_lbl.setStyleSheet("color: #1e293b; background: transparent; border: none;")
+        sb_lay.addWidget(self._status_lbl)
+        sb_lay.addStretch()
+
+        dm_lbl = QLabel("Dark Mode")
+        dm_lbl.setFont(theme.font(11))
+        dm_lbl.setStyleSheet("color: #334155; background: transparent; border: none;")
+        sb_lay.addWidget(dm_lbl)
+
+        self._dark_toggle = _DarkModeToggle(on=self.app.is_dark_mode_enabled())
+        self._dark_toggle.toggled.connect(self.app.set_dark_mode)
+        sb_lay.addWidget(self._dark_toggle)
+
+        right_layout.addWidget(status_bar)
+        root.addWidget(right, 1)
 
         self._setup_overlay("Working...")
         self._load_and_render_projects()
@@ -119,11 +437,13 @@ class Screen0Launcher(ScreenBase):
 
     def _load_and_render_projects(self) -> None:
         clear_layout(self._list_layout)
+        self._project_rows.clear()
         self._selected_path = None
-        self._selected_card = None
-        self._selected_labels = []
+        self._selected_row = None
+        self._selected_name_lbl = None
         self._open_btn.setEnabled(False)
         self._delete_btn.setEnabled(False)
+        self._clear_detail_card()
 
         paths = self.app.get_known_projects()
         loaded = []
@@ -133,70 +453,130 @@ class Screen0Launcher(ScreenBase):
             except (FileNotFoundError, ValueError):
                 continue
 
+        count = len(loaded)
+        self._count_pill.setText(f"{count} project{'s' if count != 1 else ''}")
+        self._status_lbl.setText(
+            f"{theme.company_name()} v1.0 · {count} project{'s' if count != 1 else ''} loaded"
+        )
+
         if not loaded:
             lbl = QLabel("No projects yet.")
             lbl.setFont(theme.font(12))
-            lbl.setStyleSheet("color: #94a3b8; padding: 12px 8px;")
+            lbl.setStyleSheet("color: #475569; padding: 16px 18px; background: transparent;")
             self._list_layout.addWidget(lbl)
             return
 
         for state in loaded:
-            self._list_layout.addWidget(self._make_project_card(state))
+            row = self._make_project_row(state)
+            self._list_layout.addWidget(row)
+            self._project_rows.append((state, row))
 
-    def _make_project_card(self, state: dict) -> QFrame:
+    def _make_project_row(self, state: dict) -> QFrame:
         path = state.get("project_path", "")
+        name = state.get("project_name", "Untitled")
+        company = state.get("company", "")
+        text_col, bg_col = _avatar_colors(name)
+        inits = _initials(name)
 
-        card = QFrame()
-        card.setStyleSheet("QFrame { background: transparent; border-radius: 6px; }")
-        card.setCursor(Qt.PointingHandCursor)
+        row = QFrame()
+        row.setFixedHeight(60)
+        row.setCursor(Qt.PointingHandCursor)
+        row.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-left: 2px solid transparent; "
+            "border-bottom: 1px solid rgba(255,255,255,0.03); }"
+        )
 
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(10, 8, 10, 8)
-        card_layout.setSpacing(2)
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(18, 0, 18, 0)
+        rl.setSpacing(11)
 
-        name_lbl = QLabel(state.get("project_name", "Untitled"))
-        name_lbl.setFont(theme.font(13, "bold"))
-        name_lbl.setStyleSheet("color: #94a3b8;")
-        card_layout.addWidget(name_lbl)
+        avatar = QLabel(inits)
+        avatar.setFixedSize(36, 36)
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setFont(theme.font(12, "bold"))
+        avatar.setStyleSheet(
+            f"QLabel {{ background: {bg_col}; color: {text_col}; "
+            "border-radius: 9px; border: none; }}"
+        )
+        rl.addWidget(avatar)
 
-        company_lbl = QLabel(state.get("company", ""))
+        text_col_lay = QVBoxLayout()
+        text_col_lay.setSpacing(2)
+
+        name_lbl = QLabel(name)
+        name_lbl.setFont(theme.font(13))
+        name_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+        text_col_lay.addWidget(name_lbl)
+
+        company_lbl = QLabel(company)
         company_lbl.setFont(theme.font(11))
-        company_lbl.setStyleSheet("color: #94a3b8;")
-        card_layout.addWidget(company_lbl)
+        company_lbl.setStyleSheet("color: #334155; background: transparent; border: none;")
+        text_col_lay.addWidget(company_lbl)
 
-        labels = [name_lbl, company_lbl]
+        rl.addLayout(text_col_lay, 1)
 
-        def _click(event=None, p=path, c=card, lbls=labels):
-            self._select_card(p, c, lbls)
+        def _click(event=None, p=path, r=row, nl=name_lbl, s=state):
+            self._select_row(p, r, nl, s)
 
-        card.mousePressEvent = _click
+        row.mousePressEvent = _click
+        avatar.mousePressEvent = _click
         name_lbl.mousePressEvent = _click
         company_lbl.mousePressEvent = _click
 
-        return card
+        return row
 
-    def _select_card(self, path: str, card: QFrame, labels: list) -> None:
-        if self._selected_card:
-            self._selected_card.setStyleSheet(
-                "QFrame { background: transparent; border-radius: 6px; }"
+    def _select_row(self, path: str, row: QFrame, name_lbl: QLabel, state: dict) -> None:
+        # Deselect previous
+        if self._selected_row:
+            self._selected_row.setStyleSheet(
+                "QFrame { background: transparent; border: none; "
+                "border-left: 2px solid transparent; "
+                "border-bottom: 1px solid rgba(255,255,255,0.03); }"
             )
-            for lbl in self._selected_labels:
-                lbl.setStyleSheet("color: #94a3b8;")
+        if self._selected_name_lbl:
+            self._selected_name_lbl.setStyleSheet(
+                "color: #94a3b8; background: transparent; border: none;"
+            )
 
-        card.setStyleSheet(
-            "QFrame { background: rgba(59,130,246,0.12); border-radius: 6px; }"
+        # Select new row
+        row.setStyleSheet(
+            "QFrame { background: rgba(59,130,246,0.09); border: none; "
+            "border-left: 2px solid #3b82f6; "
+            "border-bottom: 1px solid rgba(255,255,255,0.03); }"
         )
-        for lbl in labels:
-            lbl.setStyleSheet("color: #3b82f6;")
+        name_lbl.setStyleSheet("color: #93c5fd; background: transparent; border: none;")
 
         self._selected_path = path
-        self._selected_card = card
-        self._selected_labels = labels
+        self._selected_row = row
+        self._selected_name_lbl = name_lbl
         self._open_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
+        self._update_detail_card(state)
+
+    def _update_detail_card(self, state: dict) -> None:
+        self._v_name.setText(state.get("project_name", "—"))
+        self._v_company.setText(state.get("company", "—"))
+        self._v_modified.setText(_format_modified(state.get("project_path", "")))
+        path = state.get("project_path", "—")
+        self._v_path.setText(path)
+
+    def _clear_detail_card(self) -> None:
+        for lbl in (self._v_name, self._v_company, self._v_modified, self._v_path):
+            lbl.setText("—")
 
     # ------------------------------------------------------------------
-    # Actions
+    # Search
+    # ------------------------------------------------------------------
+
+    def _on_search(self, text: str) -> None:
+        term = text.strip().lower()
+        for state, row in self._project_rows:
+            name = state.get("project_name", "").lower()
+            row.setVisible(not term or term in name)
+
+    # ------------------------------------------------------------------
+    # Actions (logic unchanged)
     # ------------------------------------------------------------------
 
     def _on_open_click(self) -> None:
@@ -239,10 +619,7 @@ class Screen0Launcher(ScreenBase):
             QMessageBox.critical(self, "Navigation Error", str(exc))
 
     def _on_new_click(self) -> None:
-        dialog = NewProjectDialog(self, self.app)
-        dialog.exec()
-        if dialog.created_state:
-            self._after_project_created(dialog.created_state)
+        self.app.show_screen(NewProjectScreen)
 
     def _on_delete_click(self) -> None:
         if not self._selected_path:
@@ -278,125 +655,189 @@ class Screen0Launcher(ScreenBase):
 
 
 # ---------------------------------------------------------------------------
-# New Project Dialog
+# New Project Screen — full 1280×720 backdrop with centred card
 # ---------------------------------------------------------------------------
 
-class NewProjectDialog(QDialog):
-    """Modal dialog for creating a new project workspace."""
+class NewProjectScreen(ScreenBase):
+    """Full-window screen: dark backdrop + centred 480px card for creating a project."""
 
-    def __init__(self, parent, app):
-        super().__init__(parent)
+    def __init__(self, app, **kwargs):
+        super().__init__()
         self.app = app
-        self.created_state: dict | None = None
-        self._workers: list[Worker] = []
-        self._loading_count = 0
 
-        self.setWindowTitle("New Project")
-        self.setFixedSize(520, 440)
-        self.setModal(True)
+        # Dark backdrop fills the full window
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setAlignment(Qt.AlignCenter)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        # ── Card ──────────────────────────────────────────────────────
+        card = QFrame()
+        card.setFixedWidth(540)
+        card.setStyleSheet(
+            "QFrame { background: #13161e; "
+            "border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; }"
+        )
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(0, 0, 0, 0)
+        card_lay.setSpacing(0)
 
         # Header
         header = QFrame()
-        header.setFixedHeight(68)
-        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(28, 0, 20, 0)
-        h_layout.setSpacing(12)
+        header.setFixedHeight(70)
+        header.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(22, 0, 18, 0)
+        h_lay.setSpacing(12)
 
+        icon_box = QFrame()
+        icon_box.setFixedSize(34, 34)
+        icon_box.setStyleSheet(
+            "QFrame { background: #3b82f6; border-radius: 8px; border: none; }"
+        )
+        ib_lay = QVBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("+")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            "color: white; background: transparent; border: none; "
+            "font-size: 18px; font-weight: 700;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        h_lay.addWidget(icon_box)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
         title_lbl = QLabel("New Project")
-        title_lbl.setFont(theme.font(20, "bold"))
-        title_lbl.setStyleSheet("color: white;")
-        h_layout.addWidget(title_lbl)
+        title_lbl.setStyleSheet(
+            "color: #f1f5f9; background: transparent; border: none; "
+            "font-size: 14px; font-weight: 600;"
+        )
+        sub_lbl = QLabel("Fill in the details to create a new workspace")
+        sub_lbl.setStyleSheet(
+            "color: #475569; background: transparent; border: none; font-size: 11px;"
+        )
+        title_col.addWidget(title_lbl)
+        title_col.addWidget(sub_lbl)
+        h_lay.addLayout(title_col, 1)
 
-        sub_lbl = QLabel("Fill in the details below to create a new workspace.")
-        sub_lbl.setFont(theme.font(11))
-        sub_lbl.setStyleSheet("color: rgba(255,255,255,0.8);")
-        h_layout.addWidget(sub_lbl)
-        h_layout.addStretch()
-        outer.addWidget(header)
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(26, 26)
+        close_btn.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+            "color: #64748b; font-size: 12px; padding: 0; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
+        )
+        close_btn.clicked.connect(self._go_back)
+        h_lay.addWidget(close_btn)
+        card_lay.addWidget(header)
 
-        # Body
+        # Body — form fields
         body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(24, 0, 24, 0)
-        body_layout.setSpacing(4)
+        body.setStyleSheet("QFrame { background: transparent; border: none; }")
+        b_lay = QVBoxLayout(body)
+        b_lay.setContentsMargins(28, 24, 28, 24)
+        b_lay.setSpacing(20)
 
-        def field_label(text: str) -> QLabel:
-            lbl = QLabel(text)
-            lbl.setFont(theme.font(12, "bold"))
-            lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
-            return lbl
+        def _field(label_text: str) -> tuple[QFrame, QLineEdit]:
+            wrap = QFrame()
+            wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
+            wl = QVBoxLayout(wrap)
+            wl.setContentsMargins(0, 0, 0, 0)
+            wl.setSpacing(7)
+            lbl = QLabel(label_text.upper())
+            lbl.setStyleSheet(
+                "color: #475569; background: transparent; border: none; "
+                "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
+            )
+            wl.addWidget(lbl)
+            entry = QLineEdit()
+            entry.setMinimumHeight(42)
+            entry.setStyleSheet("QLineEdit { padding: 2px 10px; }")
+            wl.addWidget(entry)
+            return wrap, entry
 
-        def entry(placeholder: str) -> QLineEdit:
-            e = QLineEdit()
-            e.setPlaceholderText(placeholder)
-            e.setFixedHeight(38)
-            return e
+        name_wrap, self._name_entry = _field("Project Name")
+        self._name_entry.setPlaceholderText("e.g. Sales Module")
+        b_lay.addWidget(name_wrap)
 
-        body_layout.addSpacing(18)
-        body_layout.addWidget(field_label("Project Name"))
-        body_layout.addSpacing(4)
-        self._name_entry = entry("e.g. Sales Module")
-        body_layout.addWidget(self._name_entry)
+        company_wrap, self._company_entry = _field("Company Name")
+        self._company_entry.setPlaceholderText("e.g. Acme Corp")
+        b_lay.addWidget(company_wrap)
 
-        body_layout.addSpacing(10)
-        body_layout.addWidget(field_label("Company Name"))
-        body_layout.addSpacing(4)
-        self._company_entry = entry("e.g. Acme Corp")
-        body_layout.addWidget(self._company_entry)
-
-        body_layout.addSpacing(10)
-        body_layout.addWidget(field_label("Save Location"))
-        body_layout.addSpacing(4)
-
+        # Save location row
+        loc_wrap = QFrame()
+        loc_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
+        lw_lay = QVBoxLayout(loc_wrap)
+        lw_lay.setContentsMargins(0, 0, 0, 0)
+        lw_lay.setSpacing(7)
+        loc_lbl = QLabel("SAVE LOCATION")
+        loc_lbl.setStyleSheet(
+            "color: #475569; background: transparent; border: none; "
+            "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
+        )
+        lw_lay.addWidget(loc_lbl)
         path_row = QHBoxLayout()
-        path_row.setSpacing(10)
+        path_row.setSpacing(8)
         self._folder_entry = QLineEdit()
-        self._folder_entry.setPlaceholderText("Choose a folder...")
-        self._folder_entry.setFixedHeight(38)
+        self._folder_entry.setPlaceholderText("Choose a folder…")
+        self._folder_entry.setMinimumHeight(42)
+        self._folder_entry.setStyleSheet("QLineEdit { padding: 2px 10px; }")
+        self._folder_entry.setReadOnly(True)
         path_row.addWidget(self._folder_entry, 1)
-
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton("Browse…")
         browse_btn.setObjectName("btn_primary")
-        browse_btn.setFixedSize(90, 38)
+        browse_btn.setFixedHeight(42)
+        browse_btn.setFixedWidth(90)
         browse_btn.clicked.connect(self._on_browse)
         path_row.addWidget(browse_btn)
-        body_layout.addLayout(path_row)
-        body_layout.addStretch()
-        outer.addWidget(body, 1)
+        lw_lay.addLayout(path_row)
+        b_lay.addWidget(loc_wrap)
+
+        card_lay.addWidget(body)
 
         # Footer
         footer = QFrame()
-        footer.setFixedHeight(68)
-        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
-        f_layout = QHBoxLayout(footer)
-        f_layout.setContentsMargins(28, 0, 24, 0)
-        f_layout.setSpacing(8)
+        footer.setFixedHeight(56)
+        footer.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-top: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(22, 0, 22, 0)
+        f_lay.setSpacing(8)
 
         self._error_lbl = QLabel("")
-        self._error_lbl.setFont(theme.font(11))
-        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
-        f_layout.addWidget(self._error_lbl, 1)
+        self._error_lbl.setStyleSheet(
+            "color: #f87171; background: transparent; border: none; font-size: 11px;"
+        )
+        f_lay.addWidget(self._error_lbl, 1)
 
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("btn_outline")
-        cancel_btn.setFixedSize(100, 38)
-        cancel_btn.clicked.connect(self.reject)
-        f_layout.addWidget(cancel_btn)
+        cancel_btn.setObjectName("btn_ghost")
+        cancel_btn.setFixedHeight(34)
+        cancel_btn.setFixedWidth(90)
+        cancel_btn.clicked.connect(self._go_back)
+        f_lay.addWidget(cancel_btn)
 
         create_btn = QPushButton("Create Project")
         create_btn.setObjectName("btn_primary")
-        create_btn.setFixedSize(140, 38)
+        create_btn.setFixedHeight(34)
+        create_btn.setFixedWidth(130)
         create_btn.clicked.connect(self._on_create)
-        f_layout.addWidget(create_btn)
-        outer.addWidget(footer)
+        f_lay.addWidget(create_btn)
+        card_lay.addWidget(footer)
 
-        self._overlay = LoadingOverlay(self, "Creating project...")
+        root.addWidget(card)
+        self._setup_overlay("Creating project…")
+
+    # ── Actions ───────────────────────────────────────────────────────
+
+    def _go_back(self) -> None:
+        self.app.show_screen(Screen0Launcher)
 
     def _on_browse(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Choose save location")
@@ -409,56 +850,33 @@ class NewProjectDialog(QDialog):
         folder = self._folder_entry.text().strip()
 
         if not name:
-            self._show_error("Project name is required.")
+            self._error_lbl.setText("Project name is required.")
             return
         if not company:
-            self._show_error("Company name is required.")
+            self._error_lbl.setText("Company name is required.")
             return
         if not folder:
-            self._show_error("Please choose a save location.")
+            self._error_lbl.setText("Please choose a save location.")
             return
         if not Path(folder).exists():
-            self._show_error("Save location does not exist.")
+            self._error_lbl.setText("Save location does not exist.")
             return
+        self._error_lbl.setText("")
 
         def worker():
             project_path = create_project(name, company, Path(folder))
             return open_project(project_path)
 
-        self._loading_count += 1
-        if self._loading_count == 1:
-            self._overlay.setGeometry(self.rect())
-            self._overlay.raise_()
-            self._overlay.show()
+        def on_success(state):
+            self.app.set_current_project(state)
+            self.app.register_project(state["project_path"])
+            try:
+                from ui.screen1_sources import Screen1Sources
+                self.app.show_screen(Screen1Sources, project=state)
+            except ImportError:
+                self.app.show_screen(Screen0Launcher)
 
-        w = Worker(worker)
-        self._workers.append(w)
+        def on_error(exc):
+            self._error_lbl.setText(f"Could not create project: {exc}")
 
-        def _done(state):
-            if w in self._workers:
-                self._workers.remove(w)
-            self._loading_count = max(0, self._loading_count - 1)
-            if self._loading_count == 0:
-                self._overlay.hide()
-            self.created_state = state
-            self.accept()
-
-        def _fail(exc):
-            if w in self._workers:
-                self._workers.remove(w)
-            self._loading_count = max(0, self._loading_count - 1)
-            if self._loading_count == 0:
-                self._overlay.hide()
-            self._show_error(f"Could not create project: {exc}")
-
-        w.finished.connect(_done)
-        w.errored.connect(_fail)
-        w.start()
-
-    def _show_error(self, msg: str) -> None:
-        self._error_lbl.setText(msg)
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        if self._overlay and self._overlay.isVisible():
-            self._overlay.setGeometry(self.rect())
+        self._run_background(worker, on_success, on_error)

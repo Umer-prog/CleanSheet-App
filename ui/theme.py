@@ -20,8 +20,8 @@ _COLORS = {
     "selection":      "rgba(59,130,246,0.10)",
 }
 
-# Global QSS applied once to QApplication at startup
-QSS = """
+# Global QSS — dark (default)
+DARK_QSS = """
 QMainWindow, QWidget {
     background-color: #0f1117;
     color: #f1f5f9;
@@ -152,7 +152,140 @@ QProgressBar {
 QProgressBar::chunk { background: #3b82f6; border-radius: 3px; }
 """
 
+# Alias kept for any existing references
+QSS = DARK_QSS
+
+LIGHT_QSS = """
+QMainWindow, QWidget {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    font-family: 'Segoe UI';
+    font-size: 13px;
+}
+QFrame#sidebar, QFrame#launcher_left {
+    background-color: #ffffff;
+    border-right: 1px solid rgba(0,0,0,0.08);
+}
+QFrame#topbar, QFrame#brand_hero, QFrame#status_bar {
+    background-color: #ffffff;
+    border-color: rgba(0,0,0,0.07);
+}
+QLineEdit {
+    background-color: #ffffff;
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 7px;
+    padding: 4px 10px;
+    color: #0f172a;
+    min-height: 32px;
+}
+QLineEdit:focus { border-color: #3b82f6; }
+QLineEdit:disabled { color: #94a3b8; }
+QPushButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 7px;
+    color: #0f172a;
+    padding: 6px 14px;
+}
+QPushButton#btn_primary {
+    background-color: #3b82f6;
+    color: white;
+    font-weight: 600;
+}
+QPushButton#btn_primary:hover { background-color: #2563eb; }
+QPushButton#btn_primary:disabled { background-color: rgba(59,130,246,0.35); color: rgba(255,255,255,0.6); }
+QPushButton#btn_ghost {
+    background-color: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.1);
+    color: #475569;
+}
+QPushButton#btn_ghost:hover { background-color: rgba(0,0,0,0.07); }
+QPushButton#btn_ghost:disabled { color: rgba(71,85,105,0.4); }
+QPushButton#btn_danger {
+    background-color: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.2);
+    color: #dc2626;
+}
+QPushButton#btn_danger:hover { background-color: rgba(239,68,68,0.12); }
+QPushButton#btn_danger:disabled { color: rgba(220,38,38,0.35); }
+QPushButton#btn_outline {
+    border: 1px solid #3b82f6;
+    color: #3b82f6;
+}
+QPushButton#btn_outline:hover { background-color: rgba(59,130,246,0.08); }
+QTableView {
+    background-color: #ffffff;
+    border: none;
+    gridline-color: rgba(0,0,0,0.05);
+    selection-background-color: rgba(59,130,246,0.1);
+    selection-color: #1d4ed8;
+    outline: none;
+}
+QTableView::item { padding: 8px 12px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+QHeaderView::section {
+    background-color: #f8fafc;
+    color: #64748b;
+    font-size: 11px;
+    padding: 6px 12px;
+    border: none;
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+}
+QScrollBar:vertical { background: transparent; width: 6px; margin: 0; }
+QScrollBar::handle:vertical { background: rgba(0,0,0,0.15); border-radius: 3px; min-height: 20px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: transparent; height: 6px; margin: 0; }
+QScrollBar::handle:horizontal { background: rgba(0,0,0,0.15); border-radius: 3px; min-width: 20px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollArea { border: none; background: transparent; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QListWidget { background: transparent; border: none; outline: none; }
+QListWidget::item { padding: 10px 18px; border-left: 2px solid transparent; color: #475569; }
+QListWidget::item:selected { background: rgba(59,130,246,0.08); border-left-color: #3b82f6; color: #1d4ed8; }
+QListWidget::item:hover { background: rgba(0,0,0,0.03); }
+QDialog, QDialog QWidget { background-color: #f1f5f9; }
+QComboBox {
+    background-color: #3b82f6;
+    border: none;
+    border-radius: 7px;
+    color: white;
+    padding: 4px 12px;
+    font-weight: 600;
+    min-height: 34px;
+}
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid rgba(0,0,0,0.08);
+    selection-background-color: rgba(59,130,246,0.12);
+    outline: none;
+}
+QCheckBox { color: #0f172a; spacing: 8px; }
+QCheckBox::indicator {
+    width: 18px; height: 18px;
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    background: #ffffff;
+}
+QCheckBox::indicator:checked { background: #3b82f6; border-color: #3b82f6; }
+QProgressBar {
+    background: rgba(0,0,0,0.06);
+    border: none;
+    border-radius: 3px;
+    text-align: center;
+}
+QProgressBar::chunk { background: #3b82f6; border-radius: 3px; }
+"""
+
 _FONT_FAMILY = "Segoe UI"
+
+
+def apply_theme(qapp, dark: bool) -> None:
+    """Swap the application stylesheet between dark and light."""
+    from PySide6.QtWidgets import QApplication
+    qapp = qapp or QApplication.instance()
+    if qapp:
+        qapp.setStyleSheet(DARK_QSS if dark else LIGHT_QSS)
 
 
 def load(branding_path: Path) -> None:
@@ -192,4 +325,13 @@ def company_name() -> str:
 
 def logo_path():
     p = _branding.get("logo_path")
+    return Path(p) if p else None
+
+
+def hero_bg_path():
+    """Return Path to the brand hero background image, or None if not set.
+    Add 'hero_bg' key to branding.json pointing to your image file.
+    Recommended size: 940 × 200 px (the hero panel dimensions at 1280×720).
+    """
+    p = _branding.get("hero_bg")
     return Path(p) if p else None

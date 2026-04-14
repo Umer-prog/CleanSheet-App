@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout,
+    QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
@@ -12,9 +12,7 @@ import ui.theme as theme
 
 
 class PopupSheetSelector(QDialog):
-    """Modal popup that lets the user select sheets and set a category for each."""
-
-    CATEGORY_VALUES = ["Select Category", "Transaction", "Dimension"]
+    """Modal dialog — select sheets and assign Transaction / Dimension category."""
 
     def __init__(self, parent, excel_path: Path, sheet_names: list[str]):
         super().__init__(parent)
@@ -23,8 +21,9 @@ class PopupSheetSelector(QDialog):
         self._excel_path = Path(excel_path)
 
         self.setWindowTitle("Select Sheets")
-        self.setFixedSize(520, 460)
+        self.setFixedWidth(520)
         self.setModal(True)
+        # Height is auto — capped via max-height logic below
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -34,45 +33,86 @@ class PopupSheetSelector(QDialog):
         root.addWidget(self._make_body(sheet_names), 1)
         root.addWidget(self._make_footer())
 
-    @property
-    def result(self) -> list[dict] | None:  # type: ignore[override]
-        return self._result
-
-    # ------------------------------------------------------------------
+    # ── Header ────────────────────────────────────────────────────────
 
     def _make_header(self) -> QFrame:
         header = QFrame()
-        header.setFixedHeight(68)
-        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
+        header.setFixedHeight(70)
+        header.setStyleSheet(
+            "QFrame { background: #13161e; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
         lay = QHBoxLayout(header)
-        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setContentsMargins(22, 0, 18, 0)
+        lay.setSpacing(12)
 
+        # Icon box
+        icon_box = QFrame()
+        icon_box.setFixedSize(34, 34)
+        icon_box.setStyleSheet(
+            "QFrame { background: #3b82f6; border-radius: 8px; border: none; }"
+        )
+        ib_lay = QVBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("▦")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            "color: white; background: transparent; border: none; font-size: 14px;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        lay.addWidget(icon_box)
+
+        # Title + filename
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
         title = QLabel("Select Sheets")
-        title.setFont(theme.font(18, "bold"))
-        title.setStyleSheet("color: #f1f5f9; background: transparent;")
-        lay.addWidget(title)
-
+        title.setStyleSheet(
+            "color: #f1f5f9; background: transparent; border: none; "
+            "font-size: 14px; font-weight: 600;"
+        )
         sub = QLabel(self._excel_path.name)
-        sub.setFont(theme.font(11))
-        sub.setStyleSheet("color: #f1f5f9; background: transparent;")
-        lay.addWidget(sub, 1)
+        sub.setStyleSheet(
+            "color: #3b82f6; background: transparent; border: none; "
+            "font-size: 12px; font-family: 'Courier New', monospace;"
+        )
+        text_col.addWidget(title)
+        text_col.addWidget(sub)
+        lay.addLayout(text_col, 1)
+
+        # Close button
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(26, 26)
+        close_btn.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+            "color: #64748b; font-size: 12px; padding: 0; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
+        )
+        close_btn.clicked.connect(self.reject)
+        lay.addWidget(close_btn)
         return header
+
+    # ── Body ──────────────────────────────────────────────────────────
 
     def _make_body(self, sheet_names: list[str]) -> QWidget:
         body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        body.setStyleSheet("QFrame { background: #0f1117; border: none; }")
         body_lay = QVBoxLayout(body)
-        body_lay.setContentsMargins(16, 12, 16, 12)
-        body_lay.setSpacing(8)
+        body_lay.setContentsMargins(22, 18, 22, 8)
+        body_lay.setSpacing(12)
 
-        lbl = QLabel("Choose sheets and category")
-        lbl.setFont(theme.font(12, "bold"))
-        lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
-        body_lay.addWidget(lbl)
+        section_lbl = QLabel("CHOOSE SHEETS AND ASSIGN CATEGORY")
+        section_lbl.setStyleSheet(
+            "color: #475569; background: transparent; border: none; "
+            "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
+        )
+        body_lay.addWidget(section_lbl)
 
-        # Scroll area for sheet rows
+        # Scroll area for sheet rows (max visible height ~360px)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setMaximumHeight(360)
         scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
             "QScrollArea > QWidget > QWidget { background: transparent; }"
@@ -82,89 +122,207 @@ class PopupSheetSelector(QDialog):
         container.setStyleSheet("background: transparent;")
         self._list_layout = QVBoxLayout(container)
         self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(6)
-        self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._list_layout.setSpacing(8)
+        self._list_layout.setAlignment(Qt.AlignTop)
 
         for sheet_name in sheet_names:
-            self._rows.append(self._build_sheet_row(sheet_name))
+            row_data = self._build_sheet_row(sheet_name)
+            self._rows.append(row_data)
 
         scroll.setWidget(container)
-        body_lay.addWidget(scroll, 1)
+        body_lay.addWidget(scroll)
         return body
 
     def _build_sheet_row(self, sheet_name: str) -> dict:
         row = QFrame()
-        row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
-        row_lay = QHBoxLayout(row)
-        row_lay.setContentsMargins(12, 8, 12, 8)
-        row_lay.setSpacing(12)
+        row.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.03); "
+            "border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; }"
+        )
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(14, 12, 14, 12)
+        rl.setSpacing(12)
 
-        checkbox = QCheckBox(sheet_name)
-        checkbox.setFont(theme.font(12))
-        checkbox.setStyleSheet("color: #f1f5f9; background: transparent;")
-        row_lay.addWidget(checkbox, 1)
+        # Custom checkbox frame
+        chk_frame = QFrame()
+        chk_frame.setFixedSize(18, 18)
+        chk_frame.setCursor(Qt.PointingHandCursor)
+        chk_frame.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.04); "
+            "border: 1.5px solid rgba(255,255,255,0.15); border-radius: 5px; }"
+        )
+        rl.addWidget(chk_frame)
 
-        combo = QComboBox()
-        combo.addItems(self.CATEGORY_VALUES)
-        combo.setCurrentIndex(0)
-        combo.setFixedWidth(160)
-        combo.setFixedHeight(32)
-        combo.setVisible(False)
-        row_lay.addWidget(combo)
+        # Sheet name
+        name_lbl = QLabel(sheet_name)
+        name_lbl.setStyleSheet(
+            "color: #cbd5e1; background: transparent; border: none; "
+            "font-size: 13px; font-weight: 500; font-family: 'Courier New', monospace;"
+        )
+        rl.addWidget(name_lbl, 1)
 
-        checkbox.stateChanged.connect(lambda state, c=combo: c.setVisible(state == Qt.CheckState.Checked.value))
+        # Transaction / Dimension toggle buttons
+        cat_row = QHBoxLayout()
+        cat_row.setSpacing(6)
+
+        tx_btn = QPushButton("Transaction")
+        tx_btn.setFixedHeight(28)
+        tx_btn.setStyleSheet(self._cat_btn_style(False, "transaction"))
+        tx_btn.setCursor(Qt.PointingHandCursor)
+
+        dim_btn = QPushButton("Dimension")
+        dim_btn.setFixedHeight(28)
+        dim_btn.setStyleSheet(self._cat_btn_style(False, "dimension"))
+        dim_btn.setCursor(Qt.PointingHandCursor)
+
+        cat_row.addWidget(tx_btn)
+        cat_row.addWidget(dim_btn)
+        rl.addLayout(cat_row)
+
+        # Opacity effect for dimming unchecked rows
+        opacity = QGraphicsOpacityEffect()
+        opacity.setOpacity(0.4)
+        row.setGraphicsEffect(opacity)
+
+        row_data = {
+            "sheet_name": sheet_name,
+            "checked": False,
+            "category": None,
+            "row_widget": row,
+            "chk_frame": chk_frame,
+            "tx_btn": tx_btn,
+            "dim_btn": dim_btn,
+            "opacity": opacity,
+        }
+
+        # Wire up interactions
+        def _toggle_check(event=None, d=row_data):
+            self._set_checked(d, not d["checked"])
+
+        chk_frame.mousePressEvent = _toggle_check
+        name_lbl.mousePressEvent = _toggle_check
+
+        def _pick_tx(event=None, d=row_data):
+            if d["checked"]:
+                self._set_category(d, "Transaction")
+
+        def _pick_dim(event=None, d=row_data):
+            if d["checked"]:
+                self._set_category(d, "Dimension")
+
+        tx_btn.clicked.connect(lambda _=False, d=row_data: self._set_category(d, "Transaction"))
+        dim_btn.clicked.connect(lambda _=False, d=row_data: self._set_category(d, "Dimension"))
 
         self._list_layout.addWidget(row)
-        return {"sheet_name": sheet_name, "checkbox": checkbox, "combo": combo}
+        return row_data
+
+    def _set_checked(self, row_data: dict, checked: bool) -> None:
+        row_data["checked"] = checked
+        chk = row_data["chk_frame"]
+        if checked:
+            chk.setStyleSheet(
+                "QFrame { background: #3b82f6; border: 1.5px solid #3b82f6; border-radius: 5px; }"
+            )
+            row_data["opacity"].setOpacity(1.0)
+        else:
+            chk.setStyleSheet(
+                "QFrame { background: rgba(255,255,255,0.04); "
+                "border: 1.5px solid rgba(255,255,255,0.15); border-radius: 5px; }"
+            )
+            row_data["opacity"].setOpacity(0.4)
+            # Clear category when unchecked
+            if row_data["category"]:
+                row_data["category"] = None
+                row_data["tx_btn"].setStyleSheet(self._cat_btn_style(False, "transaction"))
+                row_data["dim_btn"].setStyleSheet(self._cat_btn_style(False, "dimension"))
+        self._update_confirm_btn()
+
+    def _set_category(self, row_data: dict, category: str) -> None:
+        row_data["category"] = category
+        row_data["tx_btn"].setStyleSheet(
+            self._cat_btn_style(category == "Transaction", "transaction")
+        )
+        row_data["dim_btn"].setStyleSheet(
+            self._cat_btn_style(category == "Dimension", "dimension")
+        )
+        self._update_confirm_btn()
+
+    @staticmethod
+    def _cat_btn_style(active: bool, kind: str) -> str:
+        if active and kind == "transaction":
+            return (
+                "QPushButton { background: rgba(59,130,246,0.15); "
+                "border: 1px solid rgba(59,130,246,0.35); border-radius: 6px; "
+                "color: #60a5fa; font-size: 11px; font-weight: 500; padding: 0 12px; }"
+            )
+        if active and kind == "dimension":
+            return (
+                "QPushButton { background: rgba(34,211,153,0.12); "
+                "border: 1px solid rgba(34,211,153,0.3); border-radius: 6px; "
+                "color: #34d399; font-size: 11px; font-weight: 500; padding: 0 12px; }"
+            )
+        return (
+            "QPushButton { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); border-radius: 6px; "
+            "color: #64748b; font-size: 11px; padding: 0 12px; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.07); }"
+        )
+
+    # ── Footer ────────────────────────────────────────────────────────
 
     def _make_footer(self) -> QFrame:
         footer = QFrame()
-        footer.setFixedHeight(68)
-        footer.setStyleSheet("QFrame { background-color: #13161e; border-top: 1px solid #0f1117; }")
+        footer.setFixedHeight(56)
+        footer.setStyleSheet(
+            "QFrame { background: #13161e; border: none; "
+            "border-top: 1px solid rgba(255,255,255,0.06); }"
+        )
         lay = QHBoxLayout(footer)
-        lay.setContentsMargins(24, 0, 24, 0)
+        lay.setContentsMargins(22, 0, 22, 0)
         lay.setSpacing(8)
-
-        self._error_lbl = QLabel("")
-        self._error_lbl.setFont(theme.font(11))
-        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
-        lay.addWidget(self._error_lbl, 1)
+        lay.addStretch()
 
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("btn_outline")
-        cancel_btn.setFixedSize(100, 38)
+        cancel_btn.setObjectName("btn_ghost")
+        cancel_btn.setFixedHeight(34)
+        cancel_btn.setFixedWidth(90)
         cancel_btn.clicked.connect(self.reject)
         lay.addWidget(cancel_btn)
 
-        ok_btn = QPushButton("OK")
-        ok_btn.setObjectName("btn_primary")
-        ok_btn.setFixedSize(100, 38)
-        ok_btn.clicked.connect(self._on_ok)
-        lay.addWidget(ok_btn)
-
+        self._confirm_btn = QPushButton("Confirm Selection")
+        self._confirm_btn.setObjectName("btn_primary")
+        self._confirm_btn.setFixedHeight(34)
+        self._confirm_btn.setEnabled(False)
+        self._confirm_btn.clicked.connect(self._on_confirm)
+        lay.addWidget(self._confirm_btn)
         return footer
 
-    def _on_ok(self) -> None:
-        selections = []
-        for row in self._rows:
-            if not row["checkbox"].isChecked():
-                continue
-            category = row["combo"].currentText().strip()
-            if category not in ("Transaction", "Dimension"):
-                self._error_lbl.setText("Please choose a category for each selected sheet.")
-                return
-            selections.append({"sheet_name": row["sheet_name"], "category": category})
+    def _update_confirm_btn(self) -> None:
+        """Enable confirm only when every checked row has a category assigned."""
+        checked = [r for r in self._rows if r["checked"]]
+        can_confirm = bool(checked) and all(r["category"] for r in checked)
+        self._confirm_btn.setEnabled(can_confirm)
 
+    # ── Accept ────────────────────────────────────────────────────────
+
+    def _on_confirm(self) -> None:
+        selections = [
+            {"sheet_name": r["sheet_name"], "category": r["category"]}
+            for r in self._rows
+            if r["checked"] and r["category"]
+        ]
         if not selections:
-            self._error_lbl.setText("Select at least one sheet.")
             return
-
         self._result = selections
         QDialog.accept(self)
 
+    @property
+    def result(self) -> list[dict] | None:  # type: ignore[override]
+        return self._result
+
 
 def select_sheets(parent, excel_path: Path, sheet_names: list[str]) -> list[dict] | None:
-    """Open the sheet selector popup and return selected rows, or None if cancelled."""
+    """Open the sheet selector dialog and return selected rows, or None if cancelled."""
     dialog = PopupSheetSelector(parent, excel_path=excel_path, sheet_names=sheet_names)
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.result
