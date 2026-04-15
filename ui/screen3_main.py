@@ -112,7 +112,8 @@ class Screen3Main(QWidget):
             results: dict[str, int] = {}
             for item in mapping_items:
                 try:
-                    results[item["key"]] = len(detect_errors(project_path, item["mapping"]))
+                    _, total = detect_errors(project_path, item["mapping"])
+                    results[item["key"]] = total
                 except Exception:
                     results[item["key"]] = 0
             return results

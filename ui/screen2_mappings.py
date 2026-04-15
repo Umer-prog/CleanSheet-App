@@ -467,6 +467,7 @@ class Screen2Mappings(ScreenBase):
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         self._mappings_count_lbl = QLabel("0 mappings")
+        self._mappings_count_lbl.setFixedHeight(30)
         self._mappings_count_lbl.setStyleSheet(
             "color: #334155; background: rgba(255,255,255,0.05); border: none; "
             "font-size: 11px; padding: 2px 8px; border-radius: 10px;"
@@ -526,6 +527,7 @@ class Screen2Mappings(ScreenBase):
             tag_text_color = "#60a5fa"
 
         tag = QLabel(f"{count} table{'s' if count != 1 else ''}")
+        tag.setFixedHeight(25)
         tag.setStyleSheet(
             f"color: {tag_text_color}; background: {tag_color}; border: none; "
             "font-size: 10px; padding: 2px 7px; border-radius: 4px;"
@@ -751,7 +753,7 @@ class Screen2Mappings(ScreenBase):
         dim_vals = [str(v).strip() for v in dim_df[dim_col].dropna() if str(v).strip()]
 
         tx_path = self.project_path / "data" / "transactions" / f"{tx_table}.csv"
-        tx_df = pd.read_csv(tx_path, dtype=str, encoding="utf-8", nrows=200)
+        tx_df = pd.read_csv(tx_path, usecols=[tx_col], dtype=str, encoding="utf-8")
         if tx_col not in tx_df.columns:
             return None
         tx_vals = [str(v).strip() for v in tx_df[tx_col].dropna() if str(v).strip()]
@@ -777,13 +779,14 @@ class Screen2Mappings(ScreenBase):
                 f"Please choose a different transaction column.",
             )
 
-        # ── Tier 2: too few unique matches → hard block ────────────────
-        if unique_matches < 2:
+        # ── Tier 2: only 1 unique match → soft override ask ───────────
+        if unique_matches == 1:
             return (
-                "error",
+                "warning",
                 f"Only 1 unique value in '{tx_col}' matched '{dim_col}'.\n\n"
-                f"At least 2 distinct matching values are required before a "
-                f"mapping can be created. Please choose a different column.",
+                f"This may mean the transaction data only contains a single "
+                f"category so far, or the columns may not correspond. "
+                f"You can map anyway or choose a different column.",
             )
 
         # ── Tier 3: some matches but low coverage → soft ask ──────────

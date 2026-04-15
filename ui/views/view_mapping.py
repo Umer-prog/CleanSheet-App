@@ -50,7 +50,13 @@ def replace_transaction_values_bulk(project_path, mapping, old_value, new_value)
     df = load_csv(csv_path)
     if t_col not in df.columns:
         raise ValueError(f"Column '{t_col}' not found.")
-    mask = df[t_col].astype(str).str.strip() == str(old_value)
+    old_stripped = str(old_value).strip()
+    if old_stripped == "":
+        # Empty cells in CSVs are read as NaN by pandas even with dtype=str.
+        # Match both NaN and any whitespace-only strings.
+        mask = df[t_col].isna() | (df[t_col].astype(str).str.strip() == "")
+    else:
+        mask = df[t_col].astype(str).str.strip() == old_stripped
     count = int(mask.sum())
     if count:
         df.loc[mask, t_col] = str(new_value)
@@ -182,6 +188,7 @@ class ViewMapping(ScreenBase):
         self._selected_error: dict | None = None
         self._selected_error_frame: QFrame | None = None
         self._errors: list[dict] = []
+        self._total_errors: int = 0
         self._transaction_df: pd.DataFrame | None = None
         self._page_size = 500
         self._current_page = 0
@@ -580,13 +587,14 @@ class ViewMapping(ScreenBase):
                 / f"{self.mapping['transaction_table']}.csv"
             )
             tx_df = load_csv(csv_path)
-            errors = detect_errors(self.project_path, self.mapping)
-            return tx_df, errors
+            errors, total_found = detect_errors(self.project_path, self.mapping)
+            return tx_df, errors, total_found
 
         def on_success(result):
-            tx_df, errors = result
+            tx_df, errors, total_found = result
             self._transaction_df = tx_df
             self._errors = errors
+            self._total_errors = total_found
             self._update_table_view()
             self._render_errors()
             self._refresh_generate_state()
@@ -682,13 +690,14 @@ class ViewMapping(ScreenBase):
 
     def _render_errors(self) -> None:
         clear_layout(self._err_list_layout)
-        error_count = len(self._errors)
+        total = self._total_errors
+        truncated = total > len(self._errors)
 
-        # Notify sidebar badge
+        # Notify sidebar badge with true total
         if self._on_badge_update and self._nav_key:
-            self._on_badge_update(self._nav_key, error_count)
+            self._on_badge_update(self._nav_key, total)
 
-        if not self._errors:
+        if total == 0:
             # 6A state
             self._no_errors_widget.setVisible(True)
             self._errors_widget.setVisible(False)
@@ -700,9 +709,9 @@ class ViewMapping(ScreenBase):
             self._no_errors_widget.setVisible(False)
             self._errors_widget.setVisible(True)
             self._table_hint_lbl.setVisible(True)
-            self._err_count_badge.setText(f"{error_count} errors")
+            self._err_count_badge.setText(f"{total:,} errors")
             self._err_count_badge.setVisible(True)
-            self._errors_count_lbl.setText(f"{error_count} unresolved")
+            self._errors_count_lbl.setText(f"{total:,} unresolved")
             self._set_generate_mode(False)
 
             for error in self._errors:
@@ -712,6 +721,19 @@ class ViewMapping(ScreenBase):
                 self._err_list_layout.addWidget(
                     self._make_error_card(row_num, col_name, bad_val, error)
                 )
+
+            if truncated:
+                notice = QLabel(
+                    f"Showing first {len(self._errors):,} of {total:,} errors. "
+                    f"Fix these, then refresh to see more."
+                )
+                notice.setWordWrap(True)
+                notice.setStyleSheet(
+                    "color: #f59e0b; font-size: 11px; background: rgba(245,158,11,0.06); "
+                    "border: 1px solid rgba(245,158,11,0.2); border-radius: 6px; "
+                    "padding: 8px 12px; margin: 4px 0;"
+                )
+                self._err_list_layout.addWidget(notice)
 
     def _make_error_card(self, row_num: int, col_name: str, bad_val: str,
                           error: dict) -> QFrame:
@@ -873,7 +895,7 @@ class ViewMapping(ScreenBase):
 
         def worker():
             mappings = get_mappings(self.project_path)
-            return not any(detect_errors(self.project_path, m) for m in mappings)
+            return not any(detect_errors(self.project_path, m)[1] > 0 for m in mappings)
 
         def on_success(all_clear):
             if token != self._generate_check_token:

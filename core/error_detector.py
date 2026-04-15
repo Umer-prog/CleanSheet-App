@@ -66,15 +66,20 @@ def _build_dim_values(project_path: Path, dim_table: str, dim_column: str) -> se
     return set(df[dim_column].astype(str).str.strip())
 
 
-def detect_errors(project_path: Path, mapping: dict) -> list:
+MAX_ERRORS = 500  # max error dicts held in memory; total count is always tracked
+
+
+def detect_errors(project_path: Path, mapping: dict) -> tuple[list[dict], int]:
     """Run error detection for a single mapping against current data on disk.
 
     mapping must contain: transaction_table, transaction_column,
     dim_table, dim_column (as stored in mapping_store.json).
 
-    Returns a list of error dicts, each with:
-      row_index, transaction_table, transaction_column,
-      bad_value, dim_table, dim_column, error_type.
+    Returns (errors, total_found) where:
+      - errors        : up to MAX_ERRORS dicts (row_index, bad_value, …)
+      - total_found   : true count of all bad rows (may exceed len(errors))
+
+    Uses vectorised pandas isin() so even 100k-row files are fast.
     """
     project_path = Path(project_path)
     t_table = mapping["transaction_table"]
@@ -98,7 +103,8 @@ def detect_errors(project_path: Path, mapping: dict) -> list:
 
     dim_values = _build_dim_values(project_path, d_table, d_col)
 
-    errors = []
+    errors: list[dict] = []
+    total_found = 0
     matched_col = col_lookup[t_col_key]
     row_offset = 0
     try:
@@ -109,23 +115,36 @@ def detect_errors(project_path: Path, mapping: dict) -> list:
             chunksize=5000,
         )
         for chunk in chunk_iter:
-            values = chunk[matched_col].tolist() if matched_col in chunk.columns else []
-            for local_idx, raw in enumerate(values):
-                value = str(raw).strip() if pd.notna(raw) else ""
-                for err in run_checks(value, dim_values):
+            if matched_col not in chunk.columns:
+                row_offset += len(chunk)
+                continue
+
+            # Vectorised: normalise the whole column in one C-level pass
+            col_series = chunk[matched_col].fillna("").astype(str).str.strip()
+            bad_mask = ~col_series.isin(dim_values)
+
+            # Only iterate over the bad rows (numpy indices, not every row)
+            bad_local_positions = bad_mask.values.nonzero()[0]
+            bad_values = col_series.values[bad_mask.values]
+
+            for local_pos, value in zip(bad_local_positions, bad_values):
+                total_found += 1
+                if total_found <= MAX_ERRORS:
                     errors.append({
-                        "row_index": int(row_offset + local_idx),
+                        "row_index": int(row_offset + local_pos),
                         "transaction_table": t_table,
                         "transaction_column": t_col,
-                        "bad_value": value,
+                        "bad_value": str(value),
                         "dim_table": d_table,
                         "dim_column": d_col,
-                        "error_type": err["type"],
+                        "error_type": "value_not_in_dim",
                     })
+
             row_offset += len(chunk)
     except Exception as e:
         raise ValueError(f"Failed to stream CSV '{t_path}': {e}") from e
-    return errors
+
+    return errors, total_found
 
 
 def detect_all_errors(project_path: Path, mappings: list) -> dict:
@@ -138,7 +157,8 @@ def detect_all_errors(project_path: Path, mappings: list) -> dict:
     results = {}
     for mapping in mappings:
         try:
-            results[mapping["id"]] = detect_errors(project_path, mapping)
+            errors, _ = detect_errors(project_path, mapping)
+            results[mapping["id"]] = errors
         except (FileNotFoundError, ValueError):
             results[mapping["id"]] = []
     return results

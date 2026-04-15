@@ -7,6 +7,12 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
     """Create a new project folder structure on disk and return the project path."""
     project_path = Path(root_path) / name
 
+    if project_path.exists():
+        raise ValueError(
+            f"A project named '{name}' already exists. "
+            f"Choose a different name or open the existing project."
+        )
+
     # Create all required subdirectories
     try:
         for sub in [
