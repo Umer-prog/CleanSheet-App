@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 import pandas as pd
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PySide6.QtGui import QBrush, QColor, QFont, QPalette
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QMessageBox,
-    QPushButton, QTextEdit, QVBoxLayout, QWidget,
+    QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStyledItemDelegate,
+    QTableView, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
@@ -19,30 +21,9 @@ from core.mapping_manager import get_mappings
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 
-def format_dataframe_preview(df: pd.DataFrame) -> str:
-    if df.empty:
-        return "(No rows)"
-    preview = df.fillna("")
-    cols = list(preview.columns)
-    col_widths = {
-        col: max(len(str(col)), max((len(str(v)) for v in preview[col]), default=0))
-        for col in cols
-    }
-    max_row_num = int(preview.index[-1]) + 1 if len(preview) > 0 else 1
-    row_num_w = max(1, len(str(max_row_num)))
-
-    def _row(label, values) -> str:
-        parts = [f"{str(label):<{row_num_w}}"] + [
-            f"{str(v):<{col_widths[c]}}" for c, v in zip(cols, values)
-        ]
-        return " | ".join(parts)
-
-    sep = "-+-".join(["-" * row_num_w] + ["-" * col_widths[c] for c in cols])
-    lines = [_row("0", cols), sep]
-    for idx, row_data in preview.iterrows():
-        lines.append(_row(int(idx) + 1, [row_data[c] for c in cols]))
-    return "\n".join(lines)
-
+# ---------------------------------------------------------------------------
+# Utility helpers (kept as module-level for reuse from popup code)
+# ---------------------------------------------------------------------------
 
 def get_valid_dim_values(project_path: Path, dim_table: str, dim_column: str) -> list[str]:
     df = get_dim_dataframe(project_path, dim_table)
@@ -77,14 +58,126 @@ def replace_transaction_values_bulk(project_path, mapping, old_value, new_value)
     return count
 
 
-class ViewMapping(ScreenBase):
-    """Mapping view — transaction preview, error list, Replace / Add / Generate."""
+# ---------------------------------------------------------------------------
+# Table model
+# ---------------------------------------------------------------------------
 
-    def __init__(self, parent, project: dict, mapping: dict):
+class _PandasModel(QAbstractTableModel):
+    """Table model for transaction data with error-row and error-cell highlighting."""
+
+    _ERR_BG  = QColor(239, 68, 68, 40)
+    _ERR_FG  = QColor("#f87171")
+    _NORM_FG = QColor("#94a3b8")
+    _HDR_FG  = QColor("#475569")
+
+    def __init__(self, df: pd.DataFrame,
+                 error_rows: dict[int, str] | None = None,
+                 mapped_col: str | None = None,
+                 row_offset: int = 0):
+        """
+        df          : page slice of the transaction dataframe (already reset_index)
+        error_rows  : {page-local row index: column name with the error}
+        mapped_col  : the transaction column being mapped (for cell-level highlighting)
+        row_offset  : global start row index so row numbers are correct across pages
+        """
+        super().__init__()
+        self._df = df.reset_index(drop=True)
+        self._error_rows = error_rows or {}
+        self._mapped_col = mapped_col
+        self._row_offset = row_offset
+        self._cols = list(self._df.columns)
+
+    # -- QAbstractTableModel interface --
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._df)
+
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return len(self._cols)
+
+    def data(self, index: QModelIndex, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        row, col_idx = index.row(), index.column()
+        col_name = self._cols[col_idx]
+        is_err_row = row in self._error_rows
+        is_err_cell = is_err_row and self._error_rows.get(row) == col_name
+
+        if role == Qt.DisplayRole:
+            val = self._df.iat[row, col_idx]
+            return "" if pd.isna(val) else str(val)
+
+        if role == Qt.BackgroundRole and is_err_row:
+            return QBrush(self._ERR_BG)
+
+        if role == Qt.ForegroundRole:
+            if is_err_cell:
+                return QBrush(self._ERR_FG)
+            return QBrush(self._NORM_FG)
+
+        if role == Qt.FontRole:
+            f = QFont("Courier New")
+            f.setPixelSize(11)
+            if is_err_cell:
+                f.setBold(True)
+            return f
+
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft | Qt.AlignVCenter
+
+        return None
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                return self._cols[section]
+            if role == Qt.ForegroundRole:
+                return QBrush(self._HDR_FG)
+        if orientation == Qt.Vertical and role == Qt.DisplayRole:
+            return str(self._row_offset + section + 1)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Row delegate — needed so model BackgroundRole survives Qt stylesheet engine
+# ---------------------------------------------------------------------------
+
+class _RowDelegate(QStyledItemDelegate):
+    """Passes the model's BackgroundRole through when a QSS stylesheet is active."""
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        bg = index.data(Qt.BackgroundRole)
+        if bg is not None:
+            option.backgroundBrush = bg if isinstance(bg, QBrush) else QBrush(bg)
+
+
+# ---------------------------------------------------------------------------
+# Main view
+# ---------------------------------------------------------------------------
+
+class ViewMapping(ScreenBase):
+    """
+    Screen 6 — mapping workspace view.
+
+    6A state: no errors — green checkmark panel + green Generate Output button.
+    6B state: errors exist — red error cards + Replace/Add buttons.
+    """
+
+    def __init__(
+        self,
+        parent,
+        project: dict,
+        mapping: dict,
+        nav_key: str = "",
+        on_badge_update: Callable[[str, int], None] | None = None,
+    ):
         super().__init__(parent)
         self.project = project
         self.mapping = mapping
         self.project_path = Path(project["project_path"])
+        self._nav_key = nav_key
+        self._on_badge_update = on_badge_update
 
         self._selected_error: dict | None = None
         self._selected_error_frame: QFrame | None = None
@@ -94,152 +187,392 @@ class ViewMapping(ScreenBase):
         self._current_page = 0
         self._generate_mode = False
         self._generate_check_token = 0
+        self._col_widths: list[int] = []  # cached after first resize
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 16, 20, 18)
-        outer.setSpacing(8)
-
-        # Header
-        hdr_row = QHBoxLayout()
-        mapping_lbl = QLabel(
-            f"{mapping['transaction_table']}.{mapping['transaction_column']}  →  "
-            f"{mapping['dim_table']}.{mapping['dim_column']}"
-        )
-        mapping_lbl.setFont(theme.font(18, "bold"))
-        mapping_lbl.setStyleSheet("color: #f1f5f9;")
-        hdr_row.addWidget(mapping_lbl, 1)
-
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setObjectName("btn_primary")
-        refresh_btn.setFixedSize(90, 34)
-        refresh_btn.clicked.connect(self._reload_data)
-        hdr_row.addWidget(refresh_btn)
-        outer.addLayout(hdr_row)
-
-        hint = QLabel(
-            "How to use: Select an error, then use Replace to fix transaction values "
-            "or Add to append missing dim values."
-        )
-        hint.setFont(theme.font(11))
-        hint.setStyleSheet("color: #475569;")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
-
-        # Transaction data card
-        tx_card = QFrame()
-        tx_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
-        tx_layout = QVBoxLayout(tx_card)
-        tx_layout.setContentsMargins(12, 10, 12, 12)
-        tx_layout.setSpacing(6)
-
-        tx_top = QHBoxLayout()
-        tx_title = QLabel("Transaction Data (Preview)")
-        tx_title.setFont(theme.font(13, "bold"))
-        tx_title.setStyleSheet("color: #f1f5f9; background: transparent;")
-        tx_top.addWidget(tx_title, 1)
-
-        pagination = QHBoxLayout()
-        pagination.setSpacing(6)
-        self._tx_range_lbl = QLabel("row 0–0 of 0")
-        self._tx_range_lbl.setFont(theme.font(11))
-        self._tx_range_lbl.setStyleSheet("color: #475569; background: transparent;")
-        pagination.addWidget(self._tx_range_lbl)
-
-        self._prev_btn = QPushButton("Prev")
-        self._prev_btn.setObjectName("btn_outline")
-        self._prev_btn.setFixedSize(64, 30)
-        self._prev_btn.setEnabled(False)
-        self._prev_btn.clicked.connect(self._go_prev_page)
-        pagination.addWidget(self._prev_btn)
-
-        self._next_btn = QPushButton("Next")
-        self._next_btn.setObjectName("btn_outline")
-        self._next_btn.setFixedSize(64, 30)
-        self._next_btn.setEnabled(False)
-        self._next_btn.clicked.connect(self._go_next_page)
-        pagination.addWidget(self._next_btn)
-        tx_top.addLayout(pagination)
-        tx_layout.addLayout(tx_top)
-
-        self._data_box = QTextEdit()
-        self._data_box.setReadOnly(True)
-        self._data_box.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self._data_box.setFont(QFont("Courier New", 11))
-        self._data_box.setStyleSheet(
-            "QTextEdit { background-color: #0f1117; color: #94a3b8; border-radius: 6px; }"
-        )
-        tx_layout.addWidget(self._data_box)
-        outer.addWidget(tx_card, 1)
-
-        # Error panel card
-        err_card = QFrame()
-        err_card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
-        err_layout = QVBoxLayout(err_card)
-        err_layout.setContentsMargins(12, 10, 12, 10)
-        err_layout.setSpacing(6)
-
-        err_title = QLabel("Errors")
-        err_title.setFont(theme.font(13, "bold"))
-        err_title.setStyleSheet("color: #f1f5f9; background: transparent;")
-        err_layout.addWidget(err_title)
-
-        self._err_scroll, _, self._err_list_layout = make_scroll_area()
-        self._err_list_layout.setContentsMargins(6, 4, 6, 4)
-        self._err_list_layout.setSpacing(4)
-        err_layout.addWidget(self._err_scroll, 1)
-
-        actions = QHBoxLayout()
-        self._error_lbl = QLabel("")
-        self._error_lbl.setFont(theme.font(11))
-        self._error_lbl.setStyleSheet("color: #f87171;")
-        actions.addWidget(self._error_lbl, 1)
-
-        self._generate_msg_lbl = QLabel("All errors resolved — generate final file.")
-        self._generate_msg_lbl.setFont(theme.font(11, "bold"))
-        self._generate_msg_lbl.setStyleSheet("color: #f1f5f9;")
-        self._generate_msg_lbl.setVisible(False)
-        actions.addWidget(self._generate_msg_lbl)
-
-        self._replace_btn = QPushButton("Replace")
-        self._replace_btn.setObjectName("btn_outline")
-        self._replace_btn.setFixedSize(100, 38)
-        self._replace_btn.setEnabled(False)
-        self._replace_btn.clicked.connect(self._on_replace)
-        actions.addWidget(self._replace_btn)
-
-        self._add_btn = QPushButton("Add")
-        self._add_btn.setObjectName("btn_primary")
-        self._add_btn.setFixedSize(100, 38)
-        self._add_btn.setEnabled(False)
-        self._add_btn.clicked.connect(self._on_add)
-        actions.addWidget(self._add_btn)
-
-        self._generate_btn = QPushButton("Generate")
-        self._generate_btn.setObjectName("btn_primary")
-        self._generate_btn.setFixedSize(110, 38)
-        self._generate_btn.setVisible(False)
-        self._generate_btn.clicked.connect(self._on_generate_final_file)
-        actions.addWidget(self._generate_btn)
-
-        err_layout.addLayout(actions)
-        outer.addWidget(err_card, 1)
-
+        self._build_ui()
         self._setup_overlay("Loading...")
         self._reload_data()
 
     # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
 
-    def _set_error(self, msg: str) -> None:
-        self._error_lbl.setText(msg)
+    def _build_ui(self) -> None:
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        outer.addWidget(self._build_topbar())
+        outer.addWidget(self._build_content_split(), 1)
+        outer.addWidget(self._build_footer())
+
+    def _build_topbar(self) -> QFrame:
+        bar = QFrame()
+        bar.setFixedHeight(64)
+        bar.setStyleSheet(
+            "QFrame { background-color: #13161e; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(28, 0, 28, 0)
+        lay.setSpacing(12)
+
+        tx_t = self.mapping["transaction_table"]
+        tx_c = self.mapping["transaction_column"]
+        dim_t = self.mapping["dim_table"]
+        dim_c = self.mapping["dim_column"]
+
+        self._topbar_title = QLabel(
+            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>"
+            f"{tx_t}.{tx_c}"
+            f"</span>"
+            f"<span style='color:#334155; font-size:14px;'>  →  </span>"
+            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>"
+            f"{dim_t}.{dim_c}"
+            f"</span>"
+        )
+        self._topbar_title.setTextFormat(Qt.RichText)
+        self._topbar_title.setStyleSheet("background: transparent; border: none;")
+        lay.addWidget(self._topbar_title)
+
+        self._err_count_badge = QLabel()
+        self._err_count_badge.setFixedHeight(20)
+        self._err_count_badge.setStyleSheet(
+            "background: rgba(239,68,68,0.12); "
+            "color: #f87171; "
+            "font-size: 10px; font-weight: 600; "
+            "padding: 0 8px; "
+            "border: 1px solid rgba(239,68,68,0.25); "
+            "border-radius: 10px;"
+        )
+        self._err_count_badge.setVisible(False)
+        lay.addWidget(self._err_count_badge)
+
+        lay.addStretch()
+
+        # Pager
+        pager = QHBoxLayout()
+        pager.setSpacing(6)
+
+        self._tx_range_lbl = QLabel("row 0–0 of 0")
+        self._tx_range_lbl.setStyleSheet(
+            "color: #475569; font-size: 11px; background: transparent; border: none;"
+        )
+        pager.addWidget(self._tx_range_lbl)
+
+        self._prev_btn = QPushButton("Prev")
+        self._prev_btn.setFixedSize(52, 28)
+        self._prev_btn.setEnabled(False)
+        self._prev_btn.clicked.connect(self._go_prev_page)
+        self._prev_btn.setStyleSheet(_page_btn_style())
+        pager.addWidget(self._prev_btn)
+
+        self._next_btn = QPushButton("Next")
+        self._next_btn.setFixedSize(52, 28)
+        self._next_btn.setEnabled(False)
+        self._next_btn.clicked.connect(self._go_next_page)
+        self._next_btn.setStyleSheet(_page_btn_style())
+        pager.addWidget(self._next_btn)
+
+        lay.addLayout(pager)
+
+        refresh_btn = QPushButton("↻  Refresh")
+        refresh_btn.setFixedHeight(34)
+        refresh_btn.clicked.connect(self._reload_data)
+        refresh_btn.setStyleSheet(
+            "QPushButton { "
+            "background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); "
+            "border-radius: 7px; "
+            "color: #94a3b8; "
+            "font-size: 12px; "
+            "padding: 0 14px; "
+            "} "
+            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
+        )
+        lay.addWidget(refresh_btn)
+
+        return bar
+
+    def _build_content_split(self) -> QWidget:
+        widget = QWidget()
+        widget.setStyleSheet("background: #0f1117;")
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        lay.addWidget(self._build_table_section(), 1)
+        lay.addWidget(self._build_errors_section())
+
+        return widget
+
+    def _build_table_section(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(
+            "QFrame { background: transparent; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        # Section header
+        hdr = QFrame()
+        hdr.setFixedHeight(38)
+        hdr.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.01); "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        hdr_lay = QHBoxLayout(hdr)
+        hdr_lay.setContentsMargins(20, 0, 20, 0)
+
+        sec_title = QLabel("TRANSACTION DATA PREVIEW")
+        sec_title.setStyleSheet(
+            "color: #475569; font-size: 10px; font-weight: 600; "
+            "letter-spacing: 1px; background: transparent; border: none;"
+        )
+        hdr_lay.addWidget(sec_title)
+        hdr_lay.addStretch()
+
+        self._table_hint_lbl = QLabel("Error rows highlighted  ·  Click error to select")
+        self._table_hint_lbl.setStyleSheet(
+            "color: #334155; font-size: 11px; background: transparent; border: none;"
+        )
+        self._table_hint_lbl.setVisible(False)
+        hdr_lay.addWidget(self._table_hint_lbl)
+
+        lay.addWidget(hdr)
+
+        # Table view
+        self._table_view = QTableView()
+        self._table_view.setStyleSheet(_table_style())
+        # Set the base background via palette so model's BackgroundRole isn't
+        # overridden by the QSS background-color rule that cascades to items.
+        _tbl_pal = self._table_view.palette()
+        _tbl_pal.setColor(QPalette.ColorRole.Base, QColor("#0f1117"))
+        _tbl_pal.setColor(QPalette.ColorRole.AlternateBase, QColor("#0f1117"))
+        self._table_view.setPalette(_tbl_pal)
+        self._table_view.setSelectionMode(QAbstractItemView.NoSelection)
+        self._table_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table_view.setShowGrid(False)
+        self._table_view.setAlternatingRowColors(False)
+        self._table_view.horizontalHeader().setDefaultSectionSize(120)
+        self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self._table_view.horizontalHeader().setStretchLastSection(False)
+        self._table_view.verticalHeader().setDefaultSectionSize(34)
+        self._table_view.verticalHeader().setVisible(True)
+        self._table_view.verticalHeader().setMinimumWidth(36)
+        self._table_view.verticalHeader().setMaximumWidth(56)
+        self._table_view.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._table_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._table_view.setItemDelegate(_RowDelegate(self._table_view))
+        lay.addWidget(self._table_view, 1)
+
+        return frame
+
+    def _build_errors_section(self) -> QFrame:
+        # Fixed height: header 44px + list padding 20px + 5 cards×40px + 4 gaps×6px = 288px
+        frame = QFrame()
+        frame.setFixedHeight(288)
+        frame.setStyleSheet("QFrame { background: transparent; }")
+        self._errors_section_frame = frame
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        # 6A — no errors state
+        self._no_errors_widget = QWidget()
+        self._no_errors_widget.setStyleSheet("background: transparent;")
+        no_err_lay = QVBoxLayout(self._no_errors_widget)
+        no_err_lay.setAlignment(Qt.AlignCenter)
+        no_err_lay.setSpacing(8)
+
+        check_box = QFrame()
+        check_box.setFixedSize(40, 40)
+        check_box.setStyleSheet(
+            "QFrame { "
+            "background: rgba(34,211,153,0.1); "
+            "border: 1px solid rgba(34,211,153,0.2); "
+            "border-radius: 10px; "
+            "}"
+        )
+        check_lay = QHBoxLayout(check_box)
+        check_lay.setContentsMargins(0, 0, 0, 0)
+        check_icon = QLabel("✓")
+        check_icon.setAlignment(Qt.AlignCenter)
+        check_icon.setStyleSheet(
+            "color: #34d399; font-size: 18px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        check_lay.addWidget(check_icon)
+
+        no_err_lay.addWidget(check_box, 0, Qt.AlignCenter)
+
+        no_err_title = QLabel("No errors found")
+        no_err_title.setAlignment(Qt.AlignCenter)
+        no_err_title.setStyleSheet(
+            "color: #34d399; font-size: 13px; font-weight: 500; "
+            "background: transparent; border: none;"
+        )
+        no_err_lay.addWidget(no_err_title)
+
+        no_err_sub = QLabel("All values match the dimension table")
+        no_err_sub.setAlignment(Qt.AlignCenter)
+        no_err_sub.setStyleSheet(
+            "color: #334155; font-size: 12px; "
+            "background: transparent; border: none;"
+        )
+        no_err_lay.addWidget(no_err_sub)
+
+        lay.addWidget(self._no_errors_widget, 1)
+
+        # 6B — errors state
+        self._errors_widget = QWidget()
+        self._errors_widget.setStyleSheet("background: transparent;")
+        self._errors_widget.setVisible(False)
+        err_lay = QVBoxLayout(self._errors_widget)
+        err_lay.setContentsMargins(0, 0, 0, 0)
+        err_lay.setSpacing(0)
+
+        # Errors header (44px)
+        err_hdr = QFrame()
+        err_hdr.setFixedHeight(44)
+        err_hdr.setStyleSheet(
+            "QFrame { background: transparent; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        err_hdr_lay = QHBoxLayout(err_hdr)
+        err_hdr_lay.setContentsMargins(20, 0, 20, 0)
+
+        err_hdr_title = QLabel("⚠  ERRORS")
+        err_hdr_title.setStyleSheet(
+            "color: #f87171; font-size: 10px; font-weight: 600; "
+            "letter-spacing: 1px; background: transparent; border: none;"
+        )
+        err_hdr_lay.addWidget(err_hdr_title)
+        err_hdr_lay.addStretch()
+
+        self._errors_count_lbl = QLabel("0 unresolved")
+        self._errors_count_lbl.setFixedHeight(20)
+        self._errors_count_lbl.setStyleSheet(
+            "background: rgba(239,68,68,0.08); "
+            "color: #f87171; font-size: 11px; "
+            "padding: 0px 8px; "
+            "border: 1px solid rgba(239,68,68,0.15); "
+            "border-radius: 10px;"
+        )
+        err_hdr_lay.addWidget(self._errors_count_lbl)
+
+        err_lay.addWidget(err_hdr)
+
+        # Scrollable error list
+        self._err_scroll, _, self._err_list_layout = make_scroll_area()
+        self._err_list_layout.setContentsMargins(16, 10, 16, 10)
+        self._err_list_layout.setSpacing(6)
+        err_lay.addWidget(self._err_scroll, 1)
+
+        lay.addWidget(self._errors_widget, 1)
+
+        return frame
+
+    def _build_footer(self) -> QFrame:
+        bar = QFrame()
+        bar.setFixedHeight(56)
+        bar.setStyleSheet(
+            "QFrame { background-color: #13161e; "
+            "border-top: 1px solid rgba(255,255,255,0.06); }"
+        )
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(28, 0, 28, 0)
+        lay.setSpacing(10)
+
+        self._footer_hint = QLabel("Select an error below to resolve it.")
+        self._footer_hint.setStyleSheet(
+            "color: #475569; font-size: 12px; background: transparent; border: none;"
+        )
+        lay.addWidget(self._footer_hint, 1)
+
+        # Generate button (6A)
+        self._generate_btn = QPushButton("Generate Output  →")
+        self._generate_btn.setFixedHeight(36)
+        self._generate_btn.setVisible(False)
+        self._generate_btn.clicked.connect(self._on_generate_final_file)
+        self._generate_btn.setStyleSheet(
+            "QPushButton { "
+            "background: #059669; border: none; border-radius: 8px; "
+            "color: #fff; font-size: 13px; font-weight: 500; "
+            "padding: 0 20px; "
+            "} "
+            "QPushButton:hover { background: #047857; }"
+        )
+        lay.addWidget(self._generate_btn)
+
+        # Generate disabled (6B)
+        self._generate_disabled_btn = QPushButton("Generate Output")
+        self._generate_disabled_btn.setFixedHeight(36)
+        self._generate_disabled_btn.setEnabled(False)
+        self._generate_disabled_btn.setStyleSheet(
+            "QPushButton { "
+            "background: rgba(255,255,255,0.03); "
+            "border: 1px solid rgba(255,255,255,0.07); "
+            "border-radius: 8px; "
+            "color: #334155; font-size: 13px; "
+            "padding: 0 20px; "
+            "}"
+        )
+        lay.addWidget(self._generate_disabled_btn)
+
+        # Replace (6B)
+        self._replace_btn = QPushButton("Replace Value")
+        self._replace_btn.setFixedHeight(36)
+        self._replace_btn.setEnabled(False)
+        self._replace_btn.clicked.connect(self._on_replace)
+        self._replace_btn.setStyleSheet(
+            "QPushButton { "
+            "background: rgba(59,130,246,0.12); "
+            "border: 1px solid rgba(59,130,246,0.3); "
+            "border-radius: 8px; "
+            "color: #60a5fa; font-size: 13px; font-weight: 500; "
+            "padding: 0 20px; "
+            "} "
+            "QPushButton:hover:enabled { background: rgba(59,130,246,0.2); } "
+            "QPushButton:disabled { color: #334155; border-color: rgba(255,255,255,0.07); "
+            "background: rgba(255,255,255,0.03); }"
+        )
+        lay.addWidget(self._replace_btn)
+
+        # Add to Dimension (6B)
+        self._add_btn = QPushButton("Add to Dimension")
+        self._add_btn.setFixedHeight(36)
+        self._add_btn.setEnabled(False)
+        self._add_btn.clicked.connect(self._on_add)
+        self._add_btn.setStyleSheet(
+            "QPushButton { "
+            "background: #3b82f6; border: none; border-radius: 8px; "
+            "color: #fff; font-size: 13px; font-weight: 500; "
+            "padding: 0 20px; "
+            "} "
+            "QPushButton:hover:enabled { background: #2563eb; } "
+            "QPushButton:disabled { background: rgba(255,255,255,0.03); "
+            "color: #334155; }"
+        )
+        lay.addWidget(self._add_btn)
+
+        return bar
+
+    # ------------------------------------------------------------------
+    # Data loading
+    # ------------------------------------------------------------------
 
     def _reload_data(self) -> None:
-        self._set_error("")
         self._selected_error = None
         self._selected_error_frame = None
-        self._set_generate_mode(False)
         self._transaction_df = None
-        self._update_transaction_preview()
-        self._error_list_set_loading()
+        self._errors = []
+        self._current_page = 0
+        self._col_widths = []  # force re-measure on next load
+        self._update_table_view()
+        self._show_loading_errors()
 
         def worker():
             csv_path = (
@@ -253,56 +586,61 @@ class ViewMapping(ScreenBase):
         def on_success(result):
             tx_df, errors = result
             self._transaction_df = tx_df
-            self._current_page = 0
             self._errors = errors
-            self._update_transaction_preview()
+            self._update_table_view()
             self._render_errors()
             self._refresh_generate_state()
 
         def on_error(exc):
             self._transaction_df = None
             self._errors = []
-            self._update_transaction_preview(f"Could not load mapping data:\n{exc}")
-            self._set_error(f"Load failed: {exc}")
             self._render_errors()
+            self._set_footer_hint(f"Load failed: {exc}", error=True)
             self._set_generate_mode(False)
 
         self._run_background(worker, on_success, on_error)
 
     # ------------------------------------------------------------------
-    # Transaction preview
+    # Table view
     # ------------------------------------------------------------------
 
-    def _update_transaction_preview(self, message: str | None = None) -> None:
-        self._data_box.clear()
-        if message:
-            self._data_box.setPlainText(message)
-            self._tx_range_lbl.setText("row 0–0 of 0")
-            self._prev_btn.setEnabled(False)
-            self._next_btn.setEnabled(False)
-            return
-
-        if self._transaction_df is None:
-            self._data_box.setPlainText("Loading transaction data...")
+    def _update_table_view(self) -> None:
+        if self._transaction_df is None or self._transaction_df.empty:
+            self._table_view.setModel(None)
             self._tx_range_lbl.setText("row 0–0 of 0")
             self._prev_btn.setEnabled(False)
             self._next_btn.setEnabled(False)
             return
 
         total_rows = len(self._transaction_df)
-        if total_rows == 0:
-            self._data_box.setPlainText("(No rows)")
-            self._tx_range_lbl.setText("row 0–0 of 0")
-            self._prev_btn.setEnabled(False)
-            self._next_btn.setEnabled(False)
-            return
-
-        max_page = (total_rows - 1) // self._page_size
+        max_page = max(0, (total_rows - 1) // self._page_size)
         self._current_page = min(self._current_page, max_page)
         start = self._current_page * self._page_size
         end = min(start + self._page_size, total_rows)
         page_df = self._transaction_df.iloc[start:end].copy()
-        self._data_box.setPlainText(format_dataframe_preview(page_df))
+
+        # Build page-local error_rows dict
+        error_rows: dict[int, str] = {}
+        for err in self._errors:
+            g_idx = int(err["row_index"])
+            if start <= g_idx < end:
+                error_rows[g_idx - start] = err["transaction_column"]
+
+        model = _PandasModel(page_df, error_rows, self.mapping["transaction_column"],
+                             row_offset=start)
+        self._table_view.setModel(model)
+
+        if not self._col_widths:
+            # First load — measure once and cache
+            self._table_view.resizeColumnsToContents()
+            self._col_widths = [
+                max(60, min(self._table_view.columnWidth(c), 200))
+                for c in range(model.columnCount())
+            ]
+        # Apply cached widths on every page (instant — no cell scanning)
+        for col, width in enumerate(self._col_widths):
+            self._table_view.setColumnWidth(col, width)
+
         self._tx_range_lbl.setText(f"row {start + 1}–{end} of {total_rows}")
         self._prev_btn.setEnabled(self._current_page > 0)
         self._next_btn.setEnabled(self._current_page < max_page)
@@ -311,7 +649,7 @@ class ViewMapping(ScreenBase):
         if self._transaction_df is None or self._current_page <= 0:
             return
         self._current_page -= 1
-        self._update_transaction_preview()
+        self._update_table_view()
 
     def _go_next_page(self) -> None:
         if self._transaction_df is None:
@@ -323,75 +661,233 @@ class ViewMapping(ScreenBase):
         if self._current_page >= max_page:
             return
         self._current_page += 1
-        self._update_transaction_preview()
+        self._update_table_view()
 
     # ------------------------------------------------------------------
     # Error list
     # ------------------------------------------------------------------
 
-    def _error_list_set_loading(self) -> None:
+    def _show_loading_errors(self) -> None:
         clear_layout(self._err_list_layout)
-        lbl = QLabel("Loading errors...")
-        lbl.setFont(theme.font(12))
-        lbl.setStyleSheet("color: #94a3b8; background: transparent;")
+        lbl = QLabel("Loading…")
+        lbl.setStyleSheet(
+            "color: #475569; font-size: 12px; background: transparent; border: none;"
+        )
         self._err_list_layout.addWidget(lbl)
+        self._no_errors_widget.setVisible(False)
+        self._errors_widget.setVisible(True)
+        self._errors_count_lbl.setText("…")
+        self._table_hint_lbl.setVisible(False)
+        self._err_count_badge.setVisible(False)
 
     def _render_errors(self) -> None:
         clear_layout(self._err_list_layout)
+        error_count = len(self._errors)
+
+        # Notify sidebar badge
+        if self._on_badge_update and self._nav_key:
+            self._on_badge_update(self._nav_key, error_count)
 
         if not self._errors:
-            lbl = QLabel("No errors found for this mapping.")
-            lbl.setFont(theme.font(12))
-            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
-            self._err_list_layout.addWidget(lbl)
-            return
+            # 6A state
+            self._no_errors_widget.setVisible(True)
+            self._errors_widget.setVisible(False)
+            self._table_hint_lbl.setVisible(False)
+            self._err_count_badge.setVisible(False)
+            self._set_generate_mode(True)
+        else:
+            # 6B state
+            self._no_errors_widget.setVisible(False)
+            self._errors_widget.setVisible(True)
+            self._table_hint_lbl.setVisible(True)
+            self._err_count_badge.setText(f"{error_count} errors")
+            self._err_count_badge.setVisible(True)
+            self._errors_count_lbl.setText(f"{error_count} unresolved")
+            self._set_generate_mode(False)
 
-        for error in self._errors:
-            row = QFrame()
-            row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
-            row.setCursor(Qt.PointingHandCursor)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(10, 8, 10, 8)
+            for error in self._errors:
+                row_num = int(error["row_index"]) + 1
+                bad_val = str(error.get("bad_value", ""))
+                col_name = error.get("transaction_column", "")
+                self._err_list_layout.addWidget(
+                    self._make_error_card(row_num, col_name, bad_val, error)
+                )
 
-            text = (
-                f"Row {error['row_index'] + 1}  |  "
-                f"Column: {error['transaction_column']}  |  "
-                f"Bad value: {error['bad_value']}"
-            )
-            lbl = QLabel(text)
-            lbl.setFont(theme.font(12))
-            lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
-            row_layout.addWidget(lbl)
+    def _make_error_card(self, row_num: int, col_name: str, bad_val: str,
+                          error: dict) -> QFrame:
+        card = QFrame()
+        card.setStyleSheet(
+            "QFrame { "
+            "background: rgba(239,68,68,0.04); "
+            "border: 1px solid rgba(239,68,68,0.10); "
+            "border-radius: 8px; "
+            "}"
+        )
+        card.setCursor(Qt.PointingHandCursor)
+        card.setFixedHeight(40)
 
-            def _click(event=None, err=error, frame=row):
-                self._select_error(err, frame)
+        lay = QHBoxLayout(card)
+        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setSpacing(10)
 
-            row.mousePressEvent = _click
-            lbl.mousePressEvent = _click
+        row_pill = QLabel(f"Row {row_num}")
+        row_pill.setFixedHeight(20)
+        row_pill.setStyleSheet(
+            "color: #94a3b8; font-size: 10px; font-weight: 600; "
+            "background: rgba(255,255,255,0.05); "
+            "padding: 2px 7px; border-radius: 4px; "
+            "font-family: 'Courier New'; "
+            "border: none;"
+        )
+        lay.addWidget(row_pill)
 
-            self._err_list_layout.addWidget(row)
+        col_lbl = QLabel(col_name)
+        col_lbl.setStyleSheet(
+            "color: #64748b; font-size: 11px; background: transparent; border: none;"
+        )
+        lay.addWidget(col_lbl)
+
+        dot = QLabel("·")
+        dot.setStyleSheet("color: #334155; background: transparent; border: none;")
+        lay.addWidget(dot)
+
+        val_lbl = QLabel(bad_val if bad_val else "(empty)")
+        val_lbl.setStyleSheet(
+            "color: #f87171; font-size: 12px; font-weight: 600; "
+            "font-family: 'Courier New'; "
+            "background: transparent; border: none;"
+        )
+        lay.addWidget(val_lbl, 1)
+
+        tag = QLabel("Not in dimension")
+        tag.setFixedHeight(20)
+        tag.setStyleSheet(
+            "background: rgba(239,68,68,0.10); "
+            "color: #fca5a5; font-size: 10px; "
+            "padding: 2px 7px; border-radius: 4px; "
+            "border: none;"
+        )
+        lay.addWidget(tag)
+
+        def _click(event=None, err=error, frame=card):
+            self._select_error(err, frame)
+
+        card.mousePressEvent = _click
+        for child in card.findChildren(QLabel):
+            child.mousePressEvent = _click
+
+        return card
 
     def _select_error(self, error: dict, frame: QFrame) -> None:
         if self._generate_mode:
             return
 
         # Deselect previous
-        if self._selected_error_frame:
+        if self._selected_error_frame and self._selected_error_frame is not frame:
             self._selected_error_frame.setStyleSheet(
-                "QFrame { background-color: #0f1117; border-radius: 8px; }"
+                "QFrame { "
+                "background: rgba(239,68,68,0.04); "
+                "border: 1px solid rgba(239,68,68,0.10); "
+                "border-radius: 8px; "
+                "}"
             )
-            for lbl in self._selected_error_frame.findChildren(QLabel):
-                lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
 
         self._selected_error = error
         self._selected_error_frame = frame
-        frame.setStyleSheet("QFrame { background-color: #3b82f6; border-radius: 8px; }")
-        for lbl in frame.findChildren(QLabel):
-            lbl.setStyleSheet("color: white; background: transparent;")
+        frame.setStyleSheet(
+            "QFrame { "
+            "background: rgba(239,68,68,0.12); "
+            "border: 1px solid rgba(239,68,68,0.30); "
+            "border-radius: 8px; "
+            "}"
+        )
 
-        self._replace_btn.setEnabled(True)
         has_value = bool(str(error.get("bad_value", "")).strip())
+        self._replace_btn.setEnabled(True)
         self._add_btn.setEnabled(has_value)
+
+        self._set_footer_hint(
+            "<span style='color:#f87171; font-weight:600;'>1 error selected</span>"
+            " — choose an action to resolve it",
+            rich=True,
+        )
+
+    # ------------------------------------------------------------------
+    # Footer helpers
+    # ------------------------------------------------------------------
+
+    def _set_footer_hint(self, text: str, error: bool = False, rich: bool = False) -> None:
+        if rich:
+            self._footer_hint.setTextFormat(Qt.RichText)
+            self._footer_hint.setText(text)
+        else:
+            self._footer_hint.setTextFormat(Qt.PlainText)
+            self._footer_hint.setText(text)
+            if error:
+                self._footer_hint.setStyleSheet(
+                    "color: #f87171; font-size: 12px; "
+                    "background: transparent; border: none;"
+                )
+            else:
+                self._footer_hint.setStyleSheet(
+                    "color: #475569; font-size: 12px; "
+                    "background: transparent; border: none;"
+                )
+
+    def _set_error(self, msg: str) -> None:
+        self._set_footer_hint(msg, error=True)
+
+    # ------------------------------------------------------------------
+    # Generate mode
+    # ------------------------------------------------------------------
+
+    def _set_generate_mode(self, enabled: bool) -> None:
+        self._generate_mode = bool(enabled)
+
+        # 6A footer
+        self._generate_btn.setVisible(enabled)
+
+        # 6B footer
+        self._generate_disabled_btn.setVisible(not enabled)
+        self._replace_btn.setVisible(not enabled)
+        self._add_btn.setVisible(not enabled)
+
+        if enabled:
+            self._set_footer_hint("All errors resolved — ready to generate output")
+        else:
+            if not self._errors:
+                self._set_footer_hint("Select an error below to resolve it.")
+            else:
+                # 6B default (no selection yet)
+                if not self._selected_error:
+                    self._set_footer_hint("Select an error below to resolve it.")
+                # else — kept from _select_error
+
+    def _refresh_generate_state(self) -> None:
+        if self._errors:
+            self._set_generate_mode(False)
+            return
+
+        self._generate_check_token += 1
+        token = self._generate_check_token
+
+        def worker():
+            mappings = get_mappings(self.project_path)
+            return not any(detect_errors(self.project_path, m) for m in mappings)
+
+        def on_success(all_clear):
+            if token != self._generate_check_token:
+                return
+            self._set_generate_mode(bool(all_clear))
+            if not all_clear:
+                self._set_footer_hint(
+                    "No errors here — resolve remaining mappings to enable export."
+                )
+
+        self._run_background(
+            worker, on_success,
+            lambda exc: self._set_error(f"Could not verify: {exc}"),
+        )
 
     # ------------------------------------------------------------------
     # Actions
@@ -437,20 +933,23 @@ class ViewMapping(ScreenBase):
                                 row_index=row_index, new_value=new_value,
                             )
 
-                    self._run_background(apply_worker, lambda _: self._reload_data(),
-                                         lambda exc: QMessageBox.critical(
-                                             self, "Error", f"Could not replace:\n{exc}"
-                                         ))
+                    self._run_background(
+                        apply_worker,
+                        lambda _: self._reload_data(),
+                        lambda exc: QMessageBox.critical(
+                            self, "Error", f"Could not replace:\n{exc}"
+                        ),
+                    )
 
                 dlg = PopupReplace(
                     self, bad_value=bad_value, valid_values=values,
                     on_confirm=on_confirm, dim_df=dim_df,
                     dim_table=self.mapping["dim_table"],
+                    dim_column=self.mapping["dim_column"],
                 )
                 dlg.exec()
 
             if same_count > 1:
-                from ui.views.view_mapping import _BulkScopePopup
                 dlg = _BulkScopePopup(self, bad_value, same_count, row_index + 1)
                 dlg.exec()
                 if dlg.choice:
@@ -458,8 +957,10 @@ class ViewMapping(ScreenBase):
             else:
                 open_replace_popup("single")
 
-        self._run_background(worker, on_success,
-                             lambda exc: self._set_error(f"Could not load dim values: {exc}"))
+        self._run_background(
+            worker, on_success,
+            lambda exc: self._set_error(f"Could not load dim values: {exc}"),
+        )
 
     def _on_add(self) -> None:
         if not self._selected_error:
@@ -467,19 +968,39 @@ class ViewMapping(ScreenBase):
             return
 
         def worker():
-            return get_dim_columns(self.project_path, self.mapping["dim_table"])
+            cols = get_dim_columns(self.project_path, self.mapping["dim_table"])
+            try:
+                df = get_dim_dataframe(self.project_path, self.mapping["dim_table"])
+            except Exception:
+                df = None
+            return cols, df
 
-        def on_success(dim_columns):
+        def on_success(result):
+            dim_columns, dim_df = result
             from ui.popups.popup_add import PopupAdd
+
+            # Capture now — self._selected_error is cleared when reload starts
+            original_bad = str(self._selected_error.get("bad_value", "")).strip()
+            row_index    = int(self._selected_error["row_index"])
+            dim_col      = self.mapping["dim_column"]
 
             def on_confirm(row: dict) -> None:
                 def apply_worker():
                     append_dim_row(self.project_path, self.mapping["dim_table"], row)
+                    # If the key column was edited, keep the transaction in sync
+                    new_key = str(row.get(dim_col, "")).strip()
+                    if new_key != original_bad:
+                        replace_transaction_value(
+                            self.project_path, self.mapping, row_index, new_key
+                        )
 
-                self._run_background(apply_worker, lambda _: self._reload_data(),
-                                     lambda exc: QMessageBox.critical(
-                                         self, "Error", f"Could not append row:\n{exc}"
-                                     ))
+                self._run_background(
+                    apply_worker,
+                    lambda _: self._reload_data(),
+                    lambda exc: QMessageBox.critical(
+                        self, "Error", f"Could not add row:\n{exc}"
+                    ),
+                )
 
             dlg = PopupAdd(
                 self,
@@ -488,53 +1009,14 @@ class ViewMapping(ScreenBase):
                 mapped_column=self.mapping["dim_column"],
                 bad_value=str(self._selected_error.get("bad_value", "")),
                 on_confirm=on_confirm,
+                dim_df=dim_df,
             )
             dlg.exec()
 
-        self._run_background(worker, on_success,
-                             lambda exc: self._set_error(f"Could not load dim columns: {exc}"))
-
-    # ------------------------------------------------------------------
-    # Generate mode
-    # ------------------------------------------------------------------
-
-    def _set_generate_mode(self, enabled: bool) -> None:
-        self._generate_mode = bool(enabled)
-        self._replace_btn.setVisible(not enabled)
-        self._add_btn.setVisible(not enabled)
-        self._generate_msg_lbl.setVisible(enabled)
-        self._generate_btn.setVisible(enabled)
-
-        if not enabled:
-            if self._selected_error:
-                self._replace_btn.setEnabled(True)
-                has_val = bool(str(self._selected_error.get("bad_value", "")).strip())
-                self._add_btn.setEnabled(has_val)
-            else:
-                self._replace_btn.setEnabled(False)
-                self._add_btn.setEnabled(False)
-
-    def _refresh_generate_state(self) -> None:
-        if self._errors:
-            self._set_generate_mode(False)
-            return
-
-        self._generate_check_token += 1
-        token = self._generate_check_token
-
-        def worker():
-            mappings = get_mappings(self.project_path)
-            return not any(detect_errors(self.project_path, m) for m in mappings)
-
-        def on_success(all_clear):
-            if token != self._generate_check_token:
-                return
-            self._set_generate_mode(bool(all_clear))
-            if not all_clear:
-                self._set_error("No errors here. Resolve remaining mappings to enable export.")
-
-        self._run_background(worker, on_success,
-                             lambda exc: self._set_error(f"Could not verify: {exc}"))
+        self._run_background(
+            worker, on_success,
+            lambda exc: self._set_error(f"Could not load dim columns: {exc}"),
+        )
 
     def _on_generate_final_file(self) -> None:
         if not self._generate_mode:
@@ -553,6 +1035,90 @@ class ViewMapping(ScreenBase):
             ),
         )
 
+
+# ---------------------------------------------------------------------------
+# Style helpers
+# ---------------------------------------------------------------------------
+
+def _page_btn_style() -> str:
+    return (
+        "QPushButton { "
+        "background: rgba(255,255,255,0.04); "
+        "border: 1px solid rgba(255,255,255,0.08); "
+        "border-radius: 6px; "
+        "color: #94a3b8; font-size: 11px; "
+        "padding: 0 10px; "
+        "} "
+        "QPushButton:hover:enabled { "
+        "background: rgba(255,255,255,0.10); "
+        "border-color: rgba(255,255,255,0.18); "
+        "color: #cbd5e1; "
+        "} "
+        "QPushButton:pressed { "
+        "background: rgba(255,255,255,0.06); "
+        "border-color: rgba(255,255,255,0.12); "
+        "} "
+        "QPushButton:disabled { "
+        "color: #1e293b; "
+        "border-color: rgba(255,255,255,0.04); "
+        "background: rgba(255,255,255,0.02); "
+        "}"
+    )
+
+
+def _table_style() -> str:
+    return (
+        "QTableView { "
+        "border: none; "
+        "outline: none; "
+        "gridline-color: transparent; "
+        "selection-background-color: transparent; "
+        "} "
+        "QTableView::item { "
+        "padding: 0 12px; "
+        "border-bottom: 1px solid rgba(255,255,255,0.04); "
+        "} "
+        "QHeaderView::section:horizontal { "
+        "background-color: #13161e; "
+        "color: #475569; "
+        "font-size: 10px; "
+        "font-weight: 600; "
+        "font-family: 'Segoe UI'; "
+        "text-transform: uppercase; "
+        "letter-spacing: 1px; "
+        "padding: 0 12px; "
+        "border: none; "
+        "border-bottom: 1px solid rgba(255,255,255,0.07); "
+        "height: 34px; "
+        "} "
+        "QHeaderView::section:vertical { "
+        "background-color: #13161e; "
+        "color: #334155; "
+        "font-size: 10px; "
+        "font-family: 'Courier New'; "
+        "padding: 0 8px; "
+        "border: none; "
+        "border-right: 1px solid rgba(255,255,255,0.06); "
+        "border-bottom: 1px solid rgba(255,255,255,0.04); "
+        "} "
+        "QScrollBar:horizontal { "
+        "height: 6px; background: transparent; "
+        "} "
+        "QScrollBar::handle:horizontal { "
+        "background: rgba(255,255,255,0.1); border-radius: 3px; "
+        "} "
+        "QScrollBar:vertical { "
+        "width: 6px; background: transparent; "
+        "} "
+        "QScrollBar::handle:vertical { "
+        "background: rgba(255,255,255,0.1); border-radius: 3px; "
+        "}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bulk scope popup (unchanged)
+# ---------------------------------------------------------------------------
 
 class _BulkScopePopup:
     """Ask whether to replace all matching rows or only the selected one."""
@@ -575,8 +1141,7 @@ class _BulkScopePopup:
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(24, 0, 24, 0)
         lbl = QLabel("Multiple Occurrences Found")
-        lbl.setFont(theme.font(18, "bold"))
-        lbl.setStyleSheet("color: white;")
+        lbl.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")
         h_layout.addWidget(lbl)
         outer.addWidget(header)
 
@@ -589,8 +1154,9 @@ class _BulkScopePopup:
             f'The value "{display}" appears on {total_count} rows in this mapping.\n\n'
             f"Replace all {total_count} rows, or only Row {selected_row}?"
         )
-        msg.setFont(theme.font(13))
-        msg.setStyleSheet("color: #f1f5f9; background: transparent;")
+        msg.setStyleSheet(
+            "color: #f1f5f9; font-size: 13px; background: transparent; border: none;"
+        )
         msg.setWordWrap(True)
         b_layout.addWidget(msg)
         outer.addWidget(body, 1)

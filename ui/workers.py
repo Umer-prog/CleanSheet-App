@@ -1,72 +1,149 @@
 """Shared threading and loading overlay utilities for all UI screens and views."""
 from __future__ import annotations
 
-from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QProgressBar, QWidget
+import queue as _queue
+import threading
+
+from PySide6.QtCore import QObject, QTimer, Signal, Qt
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 
 
-class Worker(QThread):
-    """Generic background worker.  Emits finished(result) or errored(exc)."""
+class Worker(QObject):
+    """
+    Background worker using threading.Thread + QTimer polling.
+
+    Why not QThread: heavy Python work (pandas loops, CSV parsing) holds the
+    GIL and starves the main thread's event loop, freezing progress-bar
+    animations.  By running work in a plain threading.Thread and polling for
+    the result with a QTimer, the event loop gets a slot every _POLL_MS
+    milliseconds regardless of what the background thread is doing.
+
+    API is identical to the old QThread-based Worker:
+      worker.finished  — Signal(object), emitted on the main thread
+      worker.errored   — Signal(object), emitted on the main thread
+      worker.start()   — kick off background work
+    """
 
     finished = Signal(object)
-    errored = Signal(object)
+    errored  = Signal(object)
+
+    _POLL_MS = 30  # check for a result every 30 ms (~33 fps headroom)
 
     def __init__(self, fn):
         super().__init__()
-        self._fn = fn
+        self._fn     = fn
+        self._queue  = _queue.SimpleQueue()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._timer  = QTimer(self)
+        self._timer.setInterval(self._POLL_MS)
+        self._timer.timeout.connect(self._poll)
 
-    def run(self) -> None:
+    def start(self) -> None:
+        self._timer.start()
+        self._thread.start()
+
+    # ------------------------------------------------------------------
+    # Private
+    # ------------------------------------------------------------------
+
+    def _run(self) -> None:
+        """Executes on the background thread — must never touch Qt widgets."""
         try:
-            self.finished.emit(self._fn())
+            self._queue.put(("ok", self._fn()))
         except Exception as exc:  # noqa: BLE001
-            self.errored.emit(exc)
+            self._queue.put(("err", exc))
+
+    def _poll(self) -> None:
+        """Called on the main thread every _POLL_MS ms by the QTimer."""
+        try:
+            tag, value = self._queue.get_nowait()
+        except _queue.Empty:
+            return
+        self._timer.stop()
+        if tag == "ok":
+            self.finished.emit(value)
+        else:
+            self.errored.emit(value)
 
 
 class LoadingOverlay(QFrame):
-    """Full-widget translucent loading overlay with an indeterminate progress bar.
+    """Full-widget translucent loading overlay with a timer-driven dot animation.
 
-    Create as a child of the target widget, then call show_on() / hide() as needed.
+    Uses an explicit QTimer (not QProgressBar) so the animation is never
+    gated on Qt's style engine or paint-event delivery — it ticks reliably
+    even when heavy background work holds the GIL.
+
+    Create as a child of the target widget, then call show_on() / hide().
     """
+
+    # Four-step dot pulse: one lit dot sweeps left→right
+    _FRAMES = ["●  ·  ·", "·  ●  ·", "·  ·  ●", "·  ●  ·"]
+    _TICK_MS = 220   # animation frame interval
 
     def __init__(self, parent: QWidget, message: str = "Loading..."):
         super().__init__(parent)
         self.setStyleSheet(
             "LoadingOverlay { background-color: rgba(15,17,23,0.88); }"
         )
-        self.hide()
 
         card = QFrame(self)
-        card.setFixedWidth(280)
+        card.setFixedWidth(240)
         card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 12px; }")
 
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 18, 24, 18)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(24, 20, 24, 20)
+        card_layout.setSpacing(12)
 
-        lbl = QLabel(message)
-        lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet(
-            "color: #f1f5f9; font-size: 14px; font-weight: bold; background: transparent;"
+        self._msg_lbl = QLabel(message)
+        self._msg_lbl.setAlignment(Qt.AlignCenter)
+        self._msg_lbl.setStyleSheet(
+            "color: #94a3b8; font-size: 13px; background: transparent;"
         )
-        card_layout.addWidget(lbl)
+        card_layout.addWidget(self._msg_lbl)
 
-        bar = QProgressBar()
-        bar.setRange(0, 0)  # indeterminate animation
-        bar.setFixedHeight(4)
-        bar.setTextVisible(False)
-        card_layout.addWidget(bar)
+        # Dot animation row
+        dot_row = QHBoxLayout()
+        dot_row.setContentsMargins(0, 0, 0, 0)
+        self._dot_lbl = QLabel(self._FRAMES[0])
+        self._dot_lbl.setAlignment(Qt.AlignCenter)
+        self._dot_lbl.setStyleSheet(
+            "color: #3b82f6; font-size: 16px; letter-spacing: 4px; "
+            "background: transparent;"
+        )
+        dot_row.addWidget(self._dot_lbl)
+        card_layout.addLayout(dot_row)
 
         self._card = card
+        self._frame_idx = 0
         card.adjustSize()
 
+        # Self-contained animation timer — independent of style/paint system
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(self._TICK_MS)
+        self._anim_timer.timeout.connect(self._tick)
+
+        self.hide()  # must come after _anim_timer is assigned
+
     def show_on(self) -> None:
-        """Show overlay covering the parent widget."""
+        """Show overlay covering the parent widget and start animation."""
         p = self.parent()
         if p:
             self.setGeometry(p.rect())
         self._center_card()
         self.raise_()
         self.show()
+        self._frame_idx = 0
+        self._dot_lbl.setText(self._FRAMES[0])
+        self._anim_timer.start()
+
+    def hide(self) -> None:
+        """Hide overlay and stop animation timer."""
+        self._anim_timer.stop()
+        super().hide()
+
+    def _tick(self) -> None:
+        self._frame_idx = (self._frame_idx + 1) % len(self._FRAMES)
+        self._dot_lbl.setText(self._FRAMES[self._frame_idx])
 
     def _center_card(self) -> None:
         self._card.move(
@@ -93,7 +170,7 @@ class ScreenBase(QWidget):
         self._overlay = LoadingOverlay(self, message)
 
     def _run_background(self, fn, on_success=None, on_error=None) -> None:
-        """Run *fn* in a background QThread.  Results are delivered on the main thread."""
+        """Run *fn* in a background thread.  Results are delivered on the main thread."""
         self._loading_count += 1
         if self._loading_count == 1 and self._overlay:
             self._overlay.show_on()

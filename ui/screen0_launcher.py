@@ -163,16 +163,17 @@ class Screen0Launcher(ScreenBase):
         h_lay.setSpacing(0)
 
         title_lbl = QLabel("All Projects")
-        title_lbl.setFont(theme.font(13, "bold"))
+        title_lbl.setFont(theme.font(15, "bold"))
         title_lbl.setStyleSheet("color: #f1f5f9; background: transparent; border: none;")
         h_lay.addWidget(title_lbl)
         h_lay.addStretch()
 
         self._count_pill = QLabel("0 projects")
-        self._count_pill.setFont(theme.font(11))
+        self._count_pill.setFont(theme.font(13))
+        self._count_pill.setFixedHeight(30)
         self._count_pill.setStyleSheet(
             "color: #334155; background: rgba(255,255,255,0.05); "
-            "padding: 2px 9px; border-radius: 10px; border: none;"
+            "padding: 0px 8px; border-radius: 10px; border: none;"
         )
         h_lay.addWidget(self._count_pill)
         left_layout.addWidget(header)
@@ -683,7 +684,7 @@ class NewProjectScreen(ScreenBase):
 
         # Header
         header = QFrame()
-        header.setFixedHeight(70)
+        header.setFixedHeight(80)
         header.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
@@ -701,27 +702,22 @@ class NewProjectScreen(ScreenBase):
         ib_lay.setContentsMargins(0, 0, 0, 0)
         icon_lbl = QLabel("+")
         icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setContentsMargins(0, 0, 0, 6)
         icon_lbl.setStyleSheet(
             "color: white; background: transparent; border: none; "
-            "font-size: 18px; font-weight: 700;"
+            "font-size: 25px; font-weight: 700;"
         )
         ib_lay.addWidget(icon_lbl)
         h_lay.addWidget(icon_box)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        title_lbl = QLabel("New Project")
-        title_lbl.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 14px; font-weight: 600;"
+        header_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:16px; font-weight:600;'>New Project</span>"
+            "<br>"
+            "<span style='color:#475569; font-size:13px;'>Fill in the details to create a new workspace</span>"
         )
-        sub_lbl = QLabel("Fill in the details to create a new workspace")
-        sub_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 11px;"
-        )
-        title_col.addWidget(title_lbl)
-        title_col.addWidget(sub_lbl)
-        h_lay.addLayout(title_col, 1)
+        header_lbl.setTextFormat(Qt.RichText)
+        header_lbl.setStyleSheet("background: transparent; border: none;")
+        h_lay.addWidget(header_lbl, 1)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)
@@ -739,8 +735,8 @@ class NewProjectScreen(ScreenBase):
         body = QFrame()
         body.setStyleSheet("QFrame { background: transparent; border: none; }")
         b_lay = QVBoxLayout(body)
-        b_lay.setContentsMargins(28, 24, 28, 24)
-        b_lay.setSpacing(20)
+        b_lay.setContentsMargins(28, 30, 28, 30)
+        b_lay.setSpacing(24)
 
         def _field(label_text: str) -> tuple[QFrame, QLineEdit]:
             wrap = QFrame()
@@ -801,7 +797,7 @@ class NewProjectScreen(ScreenBase):
 
         # Footer
         footer = QFrame()
-        footer.setFixedHeight(56)
+        footer.setFixedHeight(66)
         footer.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-top: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
@@ -809,6 +805,7 @@ class NewProjectScreen(ScreenBase):
         f_lay = QHBoxLayout(footer)
         f_lay.setContentsMargins(22, 0, 22, 0)
         f_lay.setSpacing(8)
+        f_lay.setAlignment(Qt.AlignVCenter)
 
         self._error_lbl = QLabel("")
         self._error_lbl.setStyleSheet(
@@ -818,17 +815,17 @@ class NewProjectScreen(ScreenBase):
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("btn_ghost")
-        cancel_btn.setFixedHeight(34)
+        cancel_btn.setFixedHeight(36)
         cancel_btn.setFixedWidth(90)
         cancel_btn.clicked.connect(self._go_back)
-        f_lay.addWidget(cancel_btn)
+        f_lay.addWidget(cancel_btn, 0, Qt.AlignVCenter)
 
         create_btn = QPushButton("Create Project")
         create_btn.setObjectName("btn_primary")
-        create_btn.setFixedHeight(34)
+        create_btn.setFixedHeight(36)
         create_btn.setFixedWidth(130)
         create_btn.clicked.connect(self._on_create)
-        f_lay.addWidget(create_btn)
+        f_lay.addWidget(create_btn, 0, Qt.AlignVCenter)
         card_lay.addWidget(footer)
 
         root.addWidget(card)

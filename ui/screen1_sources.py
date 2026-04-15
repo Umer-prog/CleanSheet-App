@@ -112,30 +112,24 @@ class Screen1Sources(ScreenBase):
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(0, 0, 0, 0)
-        logo_icon = QLabel("CS")
+        logo_icon = QLabel("▦")
         logo_icon.setAlignment(Qt.AlignCenter)
+        logo_icon.setContentsMargins(0, 0, 0, 3)
         logo_icon.setStyleSheet(
             "color: white; background: transparent; border: none; "
-            "font-size: 11px; font-weight: 700;"
+            "font-size: 30px; font-weight: 200;"
         )
         logo_inner.addWidget(logo_icon)
         bl.addWidget(logo_box)
 
-        brand_text = QVBoxLayout()
-        brand_text.setSpacing(1)
-        brand_name = QLabel(theme.company_name())
-        brand_name.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 15px; font-weight: 600;"
+        brand_lbl = QLabel(
+            f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
+            "<br>"
+            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
         )
-        brand_sub = QLabel("DATA MAPPING")
-        brand_sub.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
-            "font-size: 10px; letter-spacing: 1px;"
-        )
-        brand_text.addWidget(brand_name)
-        brand_text.addWidget(brand_sub)
-        bl.addLayout(brand_text)
+        brand_lbl.setTextFormat(Qt.RichText)
+        brand_lbl.setStyleSheet("background: transparent; border: none;")
+        bl.addWidget(brand_lbl)
         sb.addWidget(brand)
 
         # Progress steps section label
@@ -233,20 +227,14 @@ class Screen1Sources(ScreenBase):
         tb_lay = QHBoxLayout(topbar)
         tb_lay.setContentsMargins(28, 0, 28, 0)
 
-        tb_text = QVBoxLayout()
-        tb_text.setSpacing(2)
-        tb_title = QLabel("Data Loader")
-        tb_title.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 15px; font-weight: 600;"
+        tb_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Data Loader</span>"
+            "<br>"
+            "<span style='color:#334155; font-size:11px;'>Add Excel files and assign each sheet as Transaction or Dimension</span>"
         )
-        tb_meta = QLabel("Add Excel files and assign each sheet as Transaction or Dimension")
-        tb_meta.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 11px;"
-        )
-        tb_text.addWidget(tb_title)
-        tb_text.addWidget(tb_meta)
-        tb_lay.addLayout(tb_text, 1)
+        tb_lbl.setTextFormat(Qt.RichText)
+        tb_lbl.setStyleSheet("background: transparent; border: none;")
+        tb_lay.addWidget(tb_lbl, 1)
 
         add_btn = QPushButton("+ Add File")
         add_btn.setObjectName("btn_primary")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +16,17 @@ from core.mapping_manager import add_mapping, get_mappings
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 260
+
+# Tiny SVG chevron written once to a temp file; referenced as a QComboBox down-arrow image.
+_ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow.svg"
+_ARROW_PATH.write_text(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+    "</svg>",
+    encoding="utf-8",
+)
+_ARROW_URL = str(_ARROW_PATH).replace("\\", "/")
 
 
 def mapping_key(mapping: dict) -> tuple:
@@ -114,27 +126,21 @@ class Screen2Mappings(ScreenBase):
         logo_inner.setContentsMargins(0, 0, 0, 0)
         logo_lbl = QLabel("▦")
         logo_lbl.setAlignment(Qt.AlignCenter)
+        logo_lbl.setContentsMargins(0, 0, 0, 3)
         logo_lbl.setStyleSheet(
-            "color: white; background: transparent; border: none; font-size: 14px;"
+            "color: white; background: transparent; border: none; font-size: 30px;"
         )
         logo_inner.addWidget(logo_lbl)
         b_lay.addWidget(logo_box)
 
-        name_col = QVBoxLayout()
-        name_col.setSpacing(0)
-        name_lbl = QLabel(theme.company_name())
-        name_lbl.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 15px; font-weight: 600;"
+        brand_lbl = QLabel(
+            f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
+            "<br>"
+            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
         )
-        sub_lbl = QLabel("DATA MAPPING")
-        sub_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
-            "font-size: 10px; letter-spacing: 1px;"
-        )
-        name_col.addWidget(name_lbl)
-        name_col.addWidget(sub_lbl)
-        b_lay.addLayout(name_col, 1)
+        brand_lbl.setTextFormat(Qt.RichText)
+        brand_lbl.setStyleSheet("background: transparent; border: none;")
+        b_lay.addWidget(brand_lbl, 1)
         lay.addWidget(brand)
 
         # "SETUP PROGRESS" label
@@ -308,23 +314,15 @@ class Screen2Mappings(ScreenBase):
         t_lay = QHBoxLayout(topbar)
         t_lay.setContentsMargins(28, 0, 28, 0)
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        title = QLabel("Mapper")
-        title.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 15px; font-weight: 600;"
+        topbar_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Mapper</span>"
+            "<br>"
+            "<span style='color:#334155; font-size:11px;'>Select one table on each side, pick columns, then confirm. "
+            "Repeat until all tables are mapped.</span>"
         )
-        meta = QLabel(
-            "Select one table on each side, pick columns, then confirm. "
-            "Repeat until all tables are mapped."
-        )
-        meta.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 11px;"
-        )
-        text_col.addWidget(title)
-        text_col.addWidget(meta)
-        t_lay.addLayout(text_col, 1)
+        topbar_lbl.setTextFormat(Qt.RichText)
+        topbar_lbl.setStyleSheet("background: transparent; border: none;")
+        t_lay.addWidget(topbar_lbl, 1)
         return topbar
 
     def _make_content(self) -> QScrollArea:
@@ -370,36 +368,69 @@ class Screen2Mappings(ScreenBase):
         col_grid = QHBoxLayout()
         col_grid.setSpacing(12)
 
+        _combo_style = (
+            "QComboBox { background: rgba(255,255,255,0.05); "
+            "border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; "
+            "color: #cbd5e1; font-size: 12px; padding: 0 12px; min-height: 36px; }"
+            "QComboBox:hover { border-color: rgba(255,255,255,0.22); }"
+            "QComboBox:on { border-color: #3b82f6; }"
+            "QComboBox::drop-down { border: none; width: 28px; "
+            "subcontrol-origin: padding; subcontrol-position: right center; }"
+            f"QComboBox::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 6px; }}"
+            "QComboBox QAbstractItemView { background: #1e2330; "
+            "border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; "
+            "selection-background-color: rgba(59,130,246,0.3); outline: none; }"
+        )
+
         dim_col_panel, dim_col_body = self._make_col_panel("Dimension Column")
         self._dim_column_menu = QComboBox()
         self._dim_column_menu.addItem("Select Column")
         self._dim_column_menu.setMinimumHeight(36)
+        self._dim_column_menu.setStyleSheet(_combo_style)
         dim_col_body.addWidget(self._dim_column_menu)
         col_grid.addWidget(dim_col_panel, 1)
 
-        # Centre: Confirm Mapping button — explicit blue styling so it always renders as a button
+        # Centre: arrow indicator + Confirm button pushed toward bottom
         confirm_wrap = QWidget()
+        confirm_wrap.setFixedWidth(130)
         confirm_wrap.setStyleSheet("background: transparent;")
         cw_lay = QVBoxLayout(confirm_wrap)
-        cw_lay.setContentsMargins(0, 0, 0, 34)
-        cw_lay.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
-        confirm_mapping_btn = QPushButton("Confirm Mapping")
-        confirm_mapping_btn.setFixedHeight(36)
+        cw_lay.setContentsMargins(0, 0, 0, 0)
+        cw_lay.setSpacing(0)
+        cw_lay.setAlignment(Qt.AlignHCenter)
 
+        cw_lay.addStretch(2)
+
+        arrow_lbl = QLabel("← map →")
+        arrow_lbl.setAlignment(Qt.AlignCenter)
+        arrow_lbl.setStyleSheet(
+            "color: #3b82f6; background: rgba(59,130,246,0.08); "
+            "border: 1px solid rgba(59,130,246,0.18); border-radius: 14px; "
+            "font-size: 12px; font-weight: 500; padding: 4px 12px;"
+        )
+        cw_lay.addWidget(arrow_lbl, 0, Qt.AlignHCenter)
+
+        cw_lay.addStretch(1)
+
+        confirm_mapping_btn = QPushButton("Confirm\nMapping")
+        confirm_mapping_btn.setFixedSize(110, 50)
         confirm_mapping_btn.setStyleSheet(
             "QPushButton { background: #3b82f6; border: none; border-radius: 8px; "
-            "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 16px; }"
+            "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 12px; }"
             "QPushButton:hover { background: #2563eb; }"
             "QPushButton:pressed { background: #1d4ed8; }"
         )
         confirm_mapping_btn.clicked.connect(self._on_confirm_mapping)
-        cw_lay.addWidget(confirm_mapping_btn)
+        cw_lay.addWidget(confirm_mapping_btn, 0, Qt.AlignHCenter)
+
+        cw_lay.addSpacing(20)
         col_grid.addWidget(confirm_wrap)
 
         tx_col_panel, tx_col_body = self._make_col_panel("Transaction Column")
         self._tx_column_menu = QComboBox()
         self._tx_column_menu.addItem("Select Column")
         self._tx_column_menu.setMinimumHeight(36)
+        self._tx_column_menu.setStyleSheet(_combo_style)
         tx_col_body.addWidget(self._tx_column_menu)
         col_grid.addWidget(tx_col_panel, 1)
 
@@ -557,11 +588,16 @@ class Screen2Mappings(ScreenBase):
         f_lay.addStretch()
 
         finish_btn = QPushButton("Finish Setup →")
-        finish_btn.setObjectName("btn_primary")
-        finish_btn.setFixedHeight(34)
+        finish_btn.setFixedHeight(36)
         finish_btn.setFixedWidth(140)
+        finish_btn.setStyleSheet(
+            "QPushButton { background: #3b82f6; border: none; border-radius: 8px; "
+            "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 16px; }"
+            "QPushButton:hover { background: #2563eb; }"
+            "QPushButton:pressed { background: #1d4ed8; }"
+        )
         finish_btn.clicked.connect(self._on_finish_setup)
-        f_lay.addWidget(finish_btn)
+        f_lay.addWidget(finish_btn, 0, Qt.AlignVCenter)
         return footer
 
     # ------------------------------------------------------------------
@@ -691,6 +727,68 @@ class Screen2Mappings(ScreenBase):
         path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
         return [str(c) for c in pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns]
 
+    def _compare_column_compatibility(
+        self, dim_table: str, dim_col: str, tx_table: str, tx_col: str
+    ) -> tuple[str, str] | None:
+        """Returns ("error"|"warning", message) or None if compatible.
+        "error"   → hard block, mapping must not proceed.
+        "warning" → soft warning, user may override.
+        """
+        dim_path = self.project_path / "data" / "dim" / f"{dim_table}.json"
+        dim_df = load_dim_json(dim_path)
+        if dim_col not in dim_df.columns:
+            return None
+        dim_vals = [str(v).strip() for v in dim_df[dim_col].dropna() if str(v).strip()]
+
+        tx_path = self.project_path / "data" / "transactions" / f"{tx_table}.csv"
+        tx_df = pd.read_csv(tx_path, dtype=str, encoding="utf-8", nrows=200)
+        if tx_col not in tx_df.columns:
+            return None
+        tx_vals = [str(v).strip() for v in tx_df[tx_col].dropna() if str(v).strip()]
+
+        if not tx_vals:
+            return ("error", f"Transaction column '{tx_col}' is empty — cannot map a column with no data.")
+        if not dim_vals:
+            return ("error", f"Dimension column '{dim_col}' is empty — cannot map a column with no data.")
+
+        def _numeric_ratio(values: list[str]) -> float:
+            sample = values[:30]
+            hits = 0
+            for v in sample:
+                try:
+                    float(v.replace(",", "").replace(" ", ""))
+                    hits += 1
+                except ValueError:
+                    pass
+            return hits / len(sample) if sample else 0.0
+
+        dim_num = _numeric_ratio(dim_vals)
+        tx_num = _numeric_ratio(tx_vals)
+
+        if (dim_num > 0.8 and tx_num < 0.2) or (dim_num < 0.2 and tx_num > 0.8):
+            dim_type = "numeric" if dim_num > 0.8 else "text"
+            tx_type = "numeric" if tx_num > 0.8 else "text"
+            return (
+                "warning",
+                f"Data type mismatch: the dimension column looks like {dim_type} data "
+                f"but the transaction column looks like {tx_type} data.",
+            )
+
+        dim_lower = {v.lower() for v in dim_vals}
+        tx_sample = tx_vals[:100]
+        matches = sum(1 for v in tx_sample if v.lower() in dim_lower)
+        overlap_pct = matches / len(tx_sample) if tx_sample else 1.0
+
+        if overlap_pct < 0.15:
+            return (
+                "warning",
+                f"Low value match: only {int(overlap_pct * 100)}% of sampled transaction "
+                f"values were found in the dimension column. These columns may not correspond "
+                f"to the same data.",
+            )
+
+        return None
+
     # ------------------------------------------------------------------
     # Mapping list
     # ------------------------------------------------------------------
@@ -718,10 +816,38 @@ class Screen2Mappings(ScreenBase):
             self._set_error("This mapping already exists.")
             return
 
-        self._pending_mappings.append(candidate)
-        self._set_error("")
-        self._refresh_mappings()
-        self._clear_current_selection()
+        def do_compare():
+            return self._compare_column_compatibility(
+                candidate["dim_table"], candidate["dim_column"],
+                candidate["transaction_table"], candidate["transaction_column"],
+            )
+
+        def _add_mapping():
+            self._pending_mappings.append(candidate)
+            self._set_error("")
+            self._refresh_mappings()
+            self._clear_current_selection()
+
+        def on_compared(result: tuple[str, str] | None) -> None:
+            if result is None:
+                _add_mapping()
+                return
+            level, message = result
+            if level == "error":
+                self._set_error(message)
+                return
+            # soft warning — user may override
+            reply = QMessageBox.warning(
+                self,
+                "Column Compatibility Warning",
+                f"{message}\n\nAdd this mapping anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                _add_mapping()
+
+        self._run_background(do_compare, on_compared, lambda *_: _add_mapping())
 
     def _clear_current_selection(self) -> None:
         self._selected_dim_table = None
