@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QVBoxLayout, QWidget,
@@ -32,6 +33,43 @@ def has_table_name_conflict(project: dict, table_name: str) -> bool:
     )
 
 
+def _btn_primary(text: str, height: int = 34) -> QPushButton:
+    b = QPushButton(text)
+    b.setFixedHeight(height)
+    b.setStyleSheet(
+        "QPushButton { background: #3b82f6; border: none; border-radius: 7px; "
+        "color: white; font-size: 12px; font-weight: 500; padding: 0 16px; }"
+        "QPushButton:hover { background: #2563eb; }"
+        "QPushButton:pressed { background: #1d4ed8; }"
+        "QPushButton:disabled { background: rgba(59,130,246,0.3); color: rgba(255,255,255,0.4); }"
+    )
+    return b
+
+
+def _btn_ghost(text: str, height: int = 34) -> QPushButton:
+    b = QPushButton(text)
+    b.setFixedHeight(height)
+    b.setStyleSheet(
+        "QPushButton { background: rgba(255,255,255,0.04); "
+        "border: 1px solid rgba(255,255,255,0.09); border-radius: 7px; "
+        "color: #94a3b8; font-size: 12px; padding: 0 14px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.08); color: #cbd5e1; }"
+    )
+    return b
+
+
+def _btn_danger(text: str, height: int = 34) -> QPushButton:
+    b = QPushButton(text)
+    b.setFixedHeight(height)
+    b.setStyleSheet(
+        "QPushButton { background: rgba(239,68,68,0.07); "
+        "border: 1px solid rgba(239,68,68,0.2); border-radius: 7px; "
+        "color: #f87171; font-size: 12px; padding: 0 14px; }"
+        "QPushButton:hover { background: rgba(239,68,68,0.14); }"
+    )
+    return b
+
+
 class ViewTSources(ScreenBase):
     """Transaction source management view."""
 
@@ -43,57 +81,102 @@ class ViewTSources(ScreenBase):
         self.on_go_mapping_setup = on_go_mapping_setup
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 16, 20, 18)
-        outer.setSpacing(8)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Header
-        hdr = QHBoxLayout()
-        title = QLabel("Transaction Sources")
-        title.setFont(theme.font(22, "bold"))
-        title.setStyleSheet("color: #f1f5f9;")
-        hdr.addWidget(title, 1)
+        # ── Topbar ───────────────────────────────────────────────────────
+        topbar = QFrame()
+        topbar.setFixedHeight(64)
+        topbar.setStyleSheet(
+            "QFrame { background: #13161e; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        tb_lay = QHBoxLayout(topbar)
+        tb_lay.setContentsMargins(28, 0, 28, 0)
+        tb_lay.setSpacing(16)
 
-        add_btn = QPushButton("Add Transaction Table")
-        add_btn.setObjectName("btn_primary")
-        add_btn.setFixedHeight(40)
-        add_btn.clicked.connect(self._on_add_transaction_table)
-        hdr.addWidget(add_btn)
-        outer.addLayout(hdr)
-
-        hint = QLabel(
-            "How to use: Upload new versions for existing tables, delete obsolete ones, "
+        tb_text = QVBoxLayout()
+        tb_text.setSpacing(2)
+        title_lbl = QLabel("Transaction Tables")
+        title_lbl.setStyleSheet(
+            "color: #f1f5f9; font-size: 15px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        meta_lbl = QLabel(
+            "Upload new versions for existing tables, delete obsolete ones, "
             "or add new transaction tables."
         )
-        hint.setFont(theme.font(11))
-        hint.setStyleSheet("color: #475569;")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
+        meta_lbl.setStyleSheet(
+            "color: #334155; font-size: 11px; background: transparent; border: none;"
+        )
+        tb_text.addWidget(title_lbl)
+        tb_text.addWidget(meta_lbl)
+        tb_lay.addLayout(tb_text, 1)
 
-        # List card
+        add_btn = _btn_primary("+ Add Transaction Table")
+        add_btn.clicked.connect(self._on_add_transaction_table)
+        tb_lay.addWidget(add_btn)
+        outer.addWidget(topbar)
+
+        # ── Content area ─────────────────────────────────────────────────
+        content = QWidget()
+        content.setStyleSheet("background: #0f1117;")
+        c_lay = QVBoxLayout(content)
+        c_lay.setContentsMargins(28, 20, 28, 20)
+        c_lay.setSpacing(16)
+
+        # Section card
         card = QFrame()
-        card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(6)
+        card.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,5); "
+            "border: 1px solid rgba(255,255,255,18); border-radius: 10px; }"
+        )
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(0, 0, 0, 0)
+        card_lay.setSpacing(0)
 
-        card_title = QLabel("Current transaction tables")
-        card_title.setFont(theme.font(13, "bold"))
-        card_title.setStyleSheet("color: #f1f5f9; background: transparent;")
-        card_layout.addWidget(card_title)
+        # Card header
+        sc_hdr = QFrame()
+        sc_hdr.setFixedHeight(44)
+        sc_hdr.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        sch_lay = QHBoxLayout(sc_hdr)
+        sch_lay.setContentsMargins(18, 0, 18, 0)
+        sc_title = QLabel("CURRENT TRANSACTION TABLES")
+        sc_title.setStyleSheet(
+            "color: #475569; font-size: 11px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        sch_lay.addWidget(sc_title, 1)
+        self._count_lbl = QLabel("")
+        self._count_lbl.setFixedHeight(20)
+        self._count_lbl.setStyleSheet(
+            "color: #334155; font-size: 11px; background: rgba(255,255,255,13); "
+            "border-radius: 10px; padding: 2px 8px; border: none;"
+        )
+        self._count_lbl.setVisible(False)
+        sch_lay.addWidget(self._count_lbl)
+        card_lay.addWidget(sc_hdr)
 
+        # Rows scroll area
         self._rows_scroll, _, self._rows_layout = make_scroll_area()
-        self._rows_layout.setContentsMargins(6, 4, 6, 4)
-        self._rows_layout.setSpacing(4)
-        card_layout.addWidget(self._rows_scroll, 1)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(0)
+        card_lay.addWidget(self._rows_scroll, 1)
+        c_lay.addWidget(card, 1)
 
         self._error_lbl = QLabel("")
-        self._error_lbl.setFont(theme.font(11))
-        self._error_lbl.setStyleSheet("color: #f87171; background: transparent;")
-        card_layout.addWidget(self._error_lbl)
-        outer.addWidget(card, 1)
+        self._error_lbl.setStyleSheet("color: #f87171; font-size: 11px; background: transparent;")
+        c_lay.addWidget(self._error_lbl)
+
+        outer.addWidget(content, 1)
 
         self._setup_overlay("Working...")
         self._render_rows()
+
+    # ------------------------------------------------------------------
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)
@@ -102,38 +185,79 @@ class ViewTSources(ScreenBase):
         clear_layout(self._rows_layout)
         tables = list(self.project.get("transaction_tables", []))
 
+        count = len(tables)
+        self._count_lbl.setText(str(count))
+        self._count_lbl.setVisible(count > 0)
+
         if not tables:
-            lbl = QLabel("No transaction tables found.")
-            lbl.setFont(theme.font(12))
-            lbl.setStyleSheet("color: #94a3b8; background: transparent;")
-            self._rows_layout.addWidget(lbl)
+            empty = QLabel("No transaction tables added yet.")
+            empty.setAlignment(Qt.AlignCenter)
+            empty.setStyleSheet(
+                "color: #334155; font-size: 12px; background: transparent; "
+                "padding: 32px; border: none;"
+            )
+            self._rows_layout.addWidget(empty)
             return
 
         for table in tables:
-            row = QFrame()
-            row.setStyleSheet("QFrame { background-color: #0f1117; border-radius: 8px; }")
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(10, 6, 8, 6)
+            self._rows_layout.addWidget(self._make_source_row(table))
 
-            name_lbl = QLabel(table)
-            name_lbl.setFont(theme.font(12, "bold"))
-            name_lbl.setStyleSheet("color: #f1f5f9; background: transparent;")
-            row_layout.addWidget(name_lbl, 1)
+    def _make_source_row(self, table_name: str) -> QFrame:
+        row = QFrame()
+        row.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.04); border-radius: 0; }"
+        )
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(18, 13, 18, 13)
+        lay.setSpacing(12)
 
-            upload_btn = QPushButton("Upload New Version")
-            upload_btn.setObjectName("btn_outline")
-            upload_btn.setFixedHeight(32)
-            upload_btn.clicked.connect(lambda _=False, t=table: self._on_upload_new_version(t))
-            row_layout.addWidget(upload_btn)
+        # Icon box
+        icon_box = QFrame()
+        icon_box.setFixedSize(32, 32)
+        icon_box.setStyleSheet(
+            "QFrame { background: rgba(59,130,246,0.1); border-radius: 7px; border: none; }"
+        )
+        ib_lay = QVBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("◧")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            "color: #3b82f6; font-size: 14px; background: transparent; border: none;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        lay.addWidget(icon_box)
 
-            del_btn = QPushButton("Delete")
-            del_btn.setObjectName("btn_danger")
-            del_btn.setFixedSize(90, 32)
-            del_btn.clicked.connect(lambda _=False, t=table: self._on_delete_table(t))
-            row_layout.addWidget(del_btn)
+        # Name + meta
+        info_col = QVBoxLayout()
+        info_col.setSpacing(2)
+        name_lbl = QLabel(table_name)
+        name_lbl.setStyleSheet(
+            "color: #cbd5e1; font-size: 13px; font-weight: 500; "
+            "background: transparent; border: none;"
+        )
+        meta_lbl = QLabel("Transaction table")
+        meta_lbl.setStyleSheet(
+            "color: #475569; font-size: 11px; background: transparent; border: none;"
+        )
+        info_col.addWidget(name_lbl)
+        info_col.addWidget(meta_lbl)
+        lay.addLayout(info_col, 1)
 
-            self._rows_layout.addWidget(row)
+        # Actions
+        upload_btn = _btn_ghost("Upload New Version")
+        upload_btn.clicked.connect(lambda _=False, t=table_name: self._on_upload_new_version(t))
+        lay.addWidget(upload_btn)
 
+        del_btn = _btn_danger("Delete")
+        del_btn.setFixedWidth(80)
+        del_btn.clicked.connect(lambda _=False, t=table_name: self._on_delete_table(t))
+        lay.addWidget(del_btn)
+
+        return row
+
+    # ------------------------------------------------------------------
+    # Business logic (unchanged)
     # ------------------------------------------------------------------
 
     def _on_upload_new_version(self, table_name: str) -> None:

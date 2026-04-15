@@ -328,6 +328,42 @@ def logo_path():
     return Path(p) if p else None
 
 
+def logo_pixmap(size: int = 24):
+    """Return a QPixmap for the brand logo scaled to *size* × *size* px.
+
+    Looks for ``logo_path`` in branding.json.  The path may be absolute or
+    relative to the project root (one level above ``ui/``).
+    Returns ``None`` if no logo is configured or the file can't be loaded.
+
+    Usage in a sidebar brand block::
+
+        px = theme.logo_pixmap(24)
+        if px:
+            lbl.setPixmap(px)
+            # hide the blue box background
+            logo_box.setStyleSheet("QFrame { background: transparent; border: none; }")
+        else:
+            lbl.setText("▦")   # fallback icon character
+    """
+    from PySide6.QtGui import QPixmap
+    p = _branding.get("logo_path")
+    if not p:
+        return None
+    path = Path(p)
+    if not path.is_absolute():
+        # resolve relative to project root (one level up from ui/)
+        path = Path(__file__).parent.parent / path
+    try:
+        px = QPixmap(str(path))
+        if px.isNull():
+            return None
+        return px.scaled(size, size,
+                         __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.KeepAspectRatio,
+                         __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.SmoothTransformation)
+    except Exception:
+        return None
+
+
 def hero_bg_path():
     """Return Path to the brand hero background image, or None if not set.
     Add 'hero_bg' key to branding.json pointing to your image file.

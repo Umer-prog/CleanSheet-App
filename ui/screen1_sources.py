@@ -108,17 +108,22 @@ class Screen1Sources(ScreenBase):
         logo_box = QFrame()
         logo_box.setFixedSize(34, 34)
         logo_box.setStyleSheet(
-            "QFrame { background: #3b82f6; border-radius: 9px; border: none; }"
+            "QFrame { background: #2161AC; border-radius: 9px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(0, 0, 0, 0)
-        logo_icon = QLabel("▦")
+        logo_icon = QLabel()
         logo_icon.setAlignment(Qt.AlignCenter)
-        logo_icon.setContentsMargins(0, 0, 0, 3)
-        logo_icon.setStyleSheet(
-            "color: white; background: transparent; border: none; "
-            "font-size: 30px; font-weight: 200;"
-        )
+        _logo_px = theme.logo_pixmap(24)
+        if _logo_px:
+            logo_icon.setPixmap(_logo_px)
+        else:
+            logo_icon.setText("▦")
+            logo_icon.setContentsMargins(0, 0, 0, 3)
+            logo_icon.setStyleSheet(
+                "color: white; background: transparent; border: none; "
+                "font-size: 30px; font-weight: 200;"
+            )
         logo_inner.addWidget(logo_icon)
         bl.addWidget(logo_box)
 

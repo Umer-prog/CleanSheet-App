@@ -120,16 +120,21 @@ class Screen2Mappings(ScreenBase):
         logo_box = QFrame()
         logo_box.setFixedSize(34, 34)
         logo_box.setStyleSheet(
-            "QFrame { background: #3b82f6; border-radius: 9px; border: none; }"
+            "QFrame { background: #2161AC; border-radius: 9px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(0, 0, 0, 0)
-        logo_lbl = QLabel("▦")
+        logo_lbl = QLabel()
         logo_lbl.setAlignment(Qt.AlignCenter)
-        logo_lbl.setContentsMargins(0, 0, 0, 3)
-        logo_lbl.setStyleSheet(
-            "color: white; background: transparent; border: none; font-size: 30px;"
-        )
+        _logo_px = theme.logo_pixmap(24)
+        if _logo_px:
+            logo_lbl.setPixmap(_logo_px)
+        else:
+            logo_lbl.setText("▦")
+            logo_lbl.setContentsMargins(0, 0, 0, 3)
+            logo_lbl.setStyleSheet(
+                "color: white; background: transparent; border: none; font-size: 30px;"
+            )
         logo_inner.addWidget(logo_lbl)
         b_lay.addWidget(logo_box)
 
@@ -401,12 +406,13 @@ class Screen2Mappings(ScreenBase):
 
         cw_lay.addStretch(2)
 
-        arrow_lbl = QLabel("← map →")
+        arrow_lbl = QLabel("\u2190\u2500\u2500\u2500\u2500\u2500\u2500\u2192")
         arrow_lbl.setAlignment(Qt.AlignCenter)
+        arrow_lbl.setFixedWidth(110)
         arrow_lbl.setStyleSheet(
             "color: #3b82f6; background: rgba(59,130,246,0.08); "
-            "border: 1px solid rgba(59,130,246,0.18); border-radius: 14px; "
-            "font-size: 12px; font-weight: 500; padding: 4px 12px;"
+            "border: 1px solid rgba(59,130,246,0.18); border-radius: 20px; "
+            "font-size: 14px; padding: 6px 0; letter-spacing: 1px;"
         )
         cw_lay.addWidget(arrow_lbl, 0, Qt.AlignHCenter)
 
@@ -731,8 +737,12 @@ class Screen2Mappings(ScreenBase):
         self, dim_table: str, dim_col: str, tx_table: str, tx_col: str
     ) -> tuple[str, str] | None:
         """Returns ("error"|"warning", message) or None if compatible.
-        "error"   → hard block, mapping must not proceed.
-        "warning" → soft warning, user may override.
+
+        Three-tier value-match logic:
+          0 unique matches   → "error"   (hard block — wrong column)
+          1 unique match     → "error"   (hard block — not enough signal)
+          2+ matches, < 60%  → "warning" (soft ask — proceed or change?)
+          ≥ 60% match rate   → None      (auto-proceed, no popup)
         """
         dim_path = self.project_path / "data" / "dim" / f"{dim_table}.json"
         dim_df = load_dim_json(dim_path)
@@ -747,46 +757,47 @@ class Screen2Mappings(ScreenBase):
         tx_vals = [str(v).strip() for v in tx_df[tx_col].dropna() if str(v).strip()]
 
         if not tx_vals:
-            return ("error", f"Transaction column '{tx_col}' is empty — cannot map a column with no data.")
+            return ("error", f"'{tx_col}' is empty — choose a column that contains data.")
         if not dim_vals:
-            return ("error", f"Dimension column '{dim_col}' is empty — cannot map a column with no data.")
-
-        def _numeric_ratio(values: list[str]) -> float:
-            sample = values[:30]
-            hits = 0
-            for v in sample:
-                try:
-                    float(v.replace(",", "").replace(" ", ""))
-                    hits += 1
-                except ValueError:
-                    pass
-            return hits / len(sample) if sample else 0.0
-
-        dim_num = _numeric_ratio(dim_vals)
-        tx_num = _numeric_ratio(tx_vals)
-
-        if (dim_num > 0.8 and tx_num < 0.2) or (dim_num < 0.2 and tx_num > 0.8):
-            dim_type = "numeric" if dim_num > 0.8 else "text"
-            tx_type = "numeric" if tx_num > 0.8 else "text"
-            return (
-                "warning",
-                f"Data type mismatch: the dimension column looks like {dim_type} data "
-                f"but the transaction column looks like {tx_type} data.",
-            )
+            return ("error", f"Dimension column '{dim_col}' is empty — cannot use an empty reference column.")
 
         dim_lower = {v.lower() for v in dim_vals}
-        tx_sample = tx_vals[:100]
-        matches = sum(1 for v in tx_sample if v.lower() in dim_lower)
-        overlap_pct = matches / len(tx_sample) if tx_sample else 1.0
+        tx_sample  = tx_vals[:100]
 
-        if overlap_pct < 0.15:
+        matching_rows    = [v for v in tx_sample if v.lower() in dim_lower]
+        unique_matches   = len({v.lower() for v in matching_rows})
+        overlap_pct      = len(matching_rows) / len(tx_sample)
+
+        # ── Tier 1: no signal at all → hard block ─────────────────────
+        if unique_matches == 0:
             return (
-                "warning",
-                f"Low value match: only {int(overlap_pct * 100)}% of sampled transaction "
-                f"values were found in the dimension column. These columns may not correspond "
-                f"to the same data.",
+                "error",
+                f"None of the sampled values in '{tx_col}' appear in the "
+                f"'{dim_col}' dimension column.\n\n"
+                f"Please choose a different transaction column.",
             )
 
+        # ── Tier 2: too few unique matches → hard block ────────────────
+        if unique_matches < 2:
+            return (
+                "error",
+                f"Only 1 unique value in '{tx_col}' matched '{dim_col}'.\n\n"
+                f"At least 2 distinct matching values are required before a "
+                f"mapping can be created. Please choose a different column.",
+            )
+
+        # ── Tier 3: some matches but low coverage → soft ask ──────────
+        if overlap_pct < 0.60:
+            return (
+                "warning",
+                f"Only {int(overlap_pct * 100)}% of sampled rows in '{tx_col}' "
+                f"({unique_matches} unique value{'s' if unique_matches != 1 else ''} matched) "
+                f"align with '{dim_col}'.\n\n"
+                f"These columns may not correspond to the same data. "
+                f"You can proceed anyway or choose a different column.",
+            )
+
+        # ── Tier 4: ≥ 60% match → auto-proceed, no popup ──────────────
         return None
 
     # ------------------------------------------------------------------
@@ -837,14 +848,15 @@ class Screen2Mappings(ScreenBase):
                 self._set_error(message)
                 return
             # soft warning — user may override
-            reply = QMessageBox.warning(
-                self,
-                "Column Compatibility Warning",
-                f"{message}\n\nAdd this mapping anyway?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply == QMessageBox.StandardButton.Yes:
+            box = QMessageBox(self)
+            box.setWindowTitle("Low Column Match")
+            box.setText(message)
+            box.setIcon(QMessageBox.Icon.Warning)
+            map_btn    = box.addButton("Map Anyway",     QMessageBox.ButtonRole.AcceptRole)
+            change_btn = box.addButton("Change Column",  QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(change_btn)
+            box.exec()
+            if box.clickedButton() is map_btn:
                 _add_mapping()
 
         self._run_background(do_compare, on_compared, lambda *_: _add_mapping())

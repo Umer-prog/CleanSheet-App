@@ -43,8 +43,10 @@ def build_nav_items(mappings: list[dict]) -> list[dict]:
         })
     items.extend([
         {"kind": "separator"},
-        {"kind": "view", "key": "t_sources", "label": "T Sources"},
-        {"kind": "view", "key": "d_sources", "label": "D Sources"},
+        {"kind": "section_label", "label": "TABLES"},
+        {"kind": "view", "key": "t_sources", "label": "Transaction Tables"},
+        {"kind": "view", "key": "d_sources", "label": "Dimension Tables"},
+        {"kind": "section_label", "label": "MANAGE"},
         {"kind": "view", "key": "history",   "label": "History / Revert"},
         {"kind": "view", "key": "settings",  "label": "Settings"},
     ])
@@ -154,16 +156,21 @@ class Screen3Main(QWidget):
         logo_box = QFrame()
         logo_box.setFixedSize(34, 34)
         logo_box.setStyleSheet(
-            "QFrame { background: #3b82f6; border-radius: 9px; border: none; }"
+            "QFrame { background: #2161AC; border-radius: 9px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(0, 0, 0, 0)
-        logo_lbl = QLabel("▦")
+        logo_lbl = QLabel()
         logo_lbl.setAlignment(Qt.AlignCenter)
-        logo_lbl.setContentsMargins(0, 0, 0, 3)
-        logo_lbl.setStyleSheet(
-            "color: white; background: transparent; border: none; font-size: 30px;"
-        )
+        _logo_px = theme.logo_pixmap(24)
+        if _logo_px:
+            logo_lbl.setPixmap(_logo_px)
+        else:
+            logo_lbl.setText("▦")
+            logo_lbl.setContentsMargins(0, 0, 0, 3)
+            logo_lbl.setStyleSheet(
+                "color: white; background: transparent; border: none; font-size: 30px;"
+            )
         logo_inner.addWidget(logo_lbl)
         b_lay.addWidget(logo_box)
 
@@ -260,6 +267,16 @@ class Screen3Main(QWidget):
                     "QFrame { background: rgba(255,255,255,0.05); border: none; margin: 6px 0; }"
                 )
                 nav_lay.addWidget(sep)
+                continue
+
+            if item["kind"] == "section_label":
+                sec = QLabel(item["label"])
+                sec.setStyleSheet(
+                    "color: #334155; background: transparent; border: none; "
+                    "font-size: 10px; font-weight: 600; letter-spacing: 1px; "
+                    "padding: 14px 18px 6px 18px;"
+                )
+                nav_lay.addWidget(sec)
                 continue
 
             key = item["key"]

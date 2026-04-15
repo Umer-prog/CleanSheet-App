@@ -326,7 +326,7 @@ class ViewMapping(ScreenBase):
         hdr_lay = QHBoxLayout(hdr)
         hdr_lay.setContentsMargins(20, 0, 20, 0)
 
-        sec_title = QLabel("TRANSACTION DATA PREVIEW")
+        sec_title = QLabel("TABLES")
         sec_title.setStyleSheet(
             "color: #475569; font-size: 10px; font-weight: 600; "
             "letter-spacing: 1px; background: transparent; border: none;"
