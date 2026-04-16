@@ -1,20 +1,20 @@
 import sys
-from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 import ui.theme as theme
+from utils.paths import resource_path, user_data_path
 
 
 def main() -> None:
     """Entry point: load branding, apply QSS, launch the app."""
-    theme.load(Path(__file__).parent / "branding.json")
+    theme.load(resource_path("branding.json"))
 
     app = QApplication(sys.argv)
 
     # Read persisted dark-mode preference before any window is shown
     import json
-    _cfg_path = Path(__file__).parent / "app_config.json"
+    _cfg_path = user_data_path("app_config.json")
     _dark = True
     try:
         with open(_cfg_path, encoding="utf-8") as _f:

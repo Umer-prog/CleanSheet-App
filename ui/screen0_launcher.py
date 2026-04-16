@@ -242,7 +242,8 @@ class Screen0Launcher(ScreenBase):
         _hero_bg: QPixmap | None = None
         _bg_path = theme.hero_bg_path()
         if _bg_path:
-            _abs_bg = Path(__file__).parent.parent / _bg_path
+            from utils.paths import resource_path
+            _abs_bg = resource_path(str(_bg_path))
             if _abs_bg.exists():
                 _hero_bg = QPixmap(str(_abs_bg))
 
@@ -272,7 +273,8 @@ class Screen0Launcher(ScreenBase):
         logo_lbl.setStyleSheet("background: transparent; border: none;")
         _logo_path = theme.logo_path()
         if _logo_path:
-            _abs_logo = Path(__file__).parent.parent / _logo_path
+            from utils.paths import resource_path
+            _abs_logo = resource_path(str(_logo_path))
             if _abs_logo.exists():
                 px = QPixmap(str(_abs_logo)).scaled(
                     52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation

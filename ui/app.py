@@ -6,8 +6,9 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 
 import ui.theme as theme
+from utils.paths import user_data_path
 
-_APP_CONFIG = Path(__file__).parent.parent / "app_config.json"
+_APP_CONFIG = user_data_path("app_config.json")
 
 
 class App(QMainWindow):

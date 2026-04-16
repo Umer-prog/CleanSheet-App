@@ -34,19 +34,27 @@ def _write_settings(project_path: Path, settings: dict) -> None:
         raise OSError(f"Failed to write settings.json: {e}") from e
 
 
-def _next_manifest_id(history_path: Path) -> str:
-    """Return the next sequential manifest ID (e.g. 'manifest_003')."""
+def _next_commit_id(history_path: Path) -> str:
+    """Return the next sequential commit ID (e.g. 'commit_003').
+
+    Scans both 'commit_*' and legacy 'manifest_*' folders so numbering
+    stays contiguous even on projects created before the rename.
+    """
     numbers = []
     try:
         for d in history_path.iterdir():
-            if d.is_dir() and d.name.startswith("manifest_"):
-                try:
-                    numbers.append(int(d.name.split("_")[1]))
-                except (IndexError, ValueError):
-                    continue
+            if not d.is_dir():
+                continue
+            for prefix in ("commit_", "manifest_"):
+                if d.name.startswith(prefix):
+                    try:
+                        numbers.append(int(d.name.split("_")[1]))
+                    except (IndexError, ValueError):
+                        pass
+                    break
     except OSError as e:
         raise OSError(f"Failed to read history folder: {e}") from e
-    return f"manifest_{max(numbers, default=0) + 1:03d}"
+    return f"commit_{max(numbers, default=0) + 1:03d}"
 
 
 def _write_snapshot_files(manifest_dir: Path, tables: dict) -> dict:
@@ -83,10 +91,10 @@ def create_snapshot(
     tables: dict,
     label: str = "",
 ) -> str | None:
-    """Save tables to data/transactions/ and optionally create a history manifest.
+    """Save tables to data/transactions/ and optionally create a history commit.
 
     tables: {table_name: pd.DataFrame}
-    Returns the manifest_id if history is enabled, else None.
+    Returns the commit_id if history is enabled, else None.
     Always updates data/transactions/ regardless of history setting.
     """
     project_path = Path(project_path)
@@ -107,28 +115,68 @@ def create_snapshot(
     history_path = project_path / "history"
     try:
         history_path.mkdir(parents=True, exist_ok=True)
-        manifest_id = _next_manifest_id(history_path)
-        manifest_dir = history_path / manifest_id
-        manifest_dir.mkdir(parents=True, exist_ok=True)
+        commit_id = _next_commit_id(history_path)
+        commit_dir = history_path / commit_id
+        commit_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise OSError(f"Failed to create manifest folder: {e}") from e
+        raise OSError(f"Failed to create commit folder: {e}") from e
 
-    table_refs = _write_snapshot_files(manifest_dir, tables)
+    table_refs = _write_snapshot_files(commit_dir, tables)
 
-    _write_manifest_json(manifest_dir, {
-        "manifest_id": manifest_id,
+    _write_manifest_json(commit_dir, {
+        "manifest_id": commit_id,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "label": label,
         "tables": table_refs,
     })
 
-    settings["current_manifest"] = manifest_id
+    settings["current_manifest"] = commit_id
     _write_settings(project_path, settings)
-    return manifest_id
+    return commit_id
+
+
+def create_initial_commit(project_path: Path) -> str | None:
+    """Create the first commit from existing transaction CSVs if no commits exist yet.
+
+    Safe to call multiple times — does nothing if a commit already exists.
+    Returns the new commit_id or None if skipped / history disabled.
+    """
+    project_path = Path(project_path)
+    settings = _read_settings(project_path)
+    if not settings.get("history_enabled", True):
+        return None
+
+    # Only create if history is empty
+    if list_manifests(project_path):
+        return None
+
+    transactions_dir = project_path / "data" / "transactions"
+    if not transactions_dir.exists():
+        return None
+
+    tables: dict = {}
+    for csv_file in sorted(transactions_dir.glob("*.csv")):
+        try:
+            tables[csv_file.stem] = pd.read_csv(csv_file, encoding="utf-8")
+        except Exception:
+            continue
+
+    if not tables:
+        return None
+
+    return create_snapshot(project_path, tables, label="Initial commit")
+
+
+def get_current_commit_id(project_path: Path) -> str | None:
+    """Return the commit_id that is currently checked out, or None."""
+    try:
+        return _read_settings(Path(project_path)).get("current_manifest")
+    except Exception:
+        return None
 
 
 def get_manifest(project_path: Path, manifest_id: str) -> dict:
-    """Read and return the manifest.json for the given manifest_id."""
+    """Read and return the manifest.json for the given commit/manifest id."""
     project_path = Path(project_path)
     manifest_file = project_path / "history" / manifest_id / "manifest.json"
     if not manifest_file.exists():
@@ -137,11 +185,14 @@ def get_manifest(project_path: Path, manifest_id: str) -> dict:
         with open(manifest_file, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        raise ValueError(f"Failed to read manifest '{manifest_id}': {e}") from e
+        raise ValueError(f"Failed to read commit '{manifest_id}': {e}") from e
 
 
 def list_manifests(project_path: Path) -> list:
-    """Return all manifests in chronological order (oldest first)."""
+    """Return all commits in chronological order (oldest first).
+
+    Reads both 'commit_*' and legacy 'manifest_*' folders.
+    """
     project_path = Path(project_path)
     history_path = project_path / "history"
     if not history_path.exists():
@@ -154,7 +205,9 @@ def list_manifests(project_path: Path) -> list:
 
     manifests = []
     for folder in folders:
-        if not folder.is_dir() or not folder.name.startswith("manifest_"):
+        if not folder.is_dir():
+            continue
+        if not (folder.name.startswith("commit_") or folder.name.startswith("manifest_")):
             continue
         manifest_file = folder / "manifest.json"
         if not manifest_file.exists():
@@ -168,14 +221,14 @@ def list_manifests(project_path: Path) -> list:
 
 
 def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
-    """Restore transaction files from a manifest back into data/transactions/.
+    """Restore transaction files from a commit back into data/transactions/.
 
-    Updates settings.json current_manifest. Does not delete newer manifests.
+    Updates settings.json current_manifest. Does not delete newer commits.
     """
     project_path = Path(project_path)
     manifest_dir = project_path / "history" / manifest_id
     if not manifest_dir.exists():
-        raise FileNotFoundError(f"Manifest not found: '{manifest_id}'")
+        raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
 
     manifest = get_manifest(project_path, manifest_id)
     transactions_dir = project_path / "data" / "transactions"
@@ -193,7 +246,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
         for table_name, filename in manifest["tables"].items():
             shutil.copy2(manifest_dir / filename, transactions_dir / f"{table_name}.csv")
     except OSError as e:
-        raise OSError(f"Failed to revert to manifest '{manifest_id}': {e}") from e
+        raise OSError(f"Failed to revert to commit '{manifest_id}': {e}") from e
 
     settings = _read_settings(project_path)
     settings["current_manifest"] = manifest_id
@@ -201,11 +254,11 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
 
 
 def update_manifest_label(project_path: Path, manifest_id: str, label: str) -> None:
-    """Update the human-readable label for a manifest."""
+    """Update the human-readable label for a commit."""
     project_path = Path(project_path)
     manifest_dir = project_path / "history" / manifest_id
     if not manifest_dir.exists():
-        raise FileNotFoundError(f"Manifest not found: '{manifest_id}'")
+        raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
 
     manifest = get_manifest(project_path, manifest_id)
     manifest["label"] = str(label)

@@ -399,8 +399,8 @@ def logo_pixmap(size: int = 24):
         return None
     path = Path(p)
     if not path.is_absolute():
-        # resolve relative to project root (one level up from ui/)
-        path = Path(__file__).parent.parent / path
+        from utils.paths import resource_path
+        path = resource_path(str(path))
     try:
         px = QPixmap(str(path))
         if px.isNull():

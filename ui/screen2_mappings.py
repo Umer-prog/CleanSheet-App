@@ -972,6 +972,10 @@ class Screen2Mappings(ScreenBase):
                     if mapping_key(m) not in existing_keys:
                         add_mapping(self.project_path, m)
                         existing_keys.add(mapping_key(m))
+                # Create the initial commit from the transaction CSVs that
+                # were loaded during setup — only runs if history is empty.
+                from core.snapshot_manager import create_initial_commit
+                create_initial_commit(self.project_path)
 
             def on_save_success(_):
                 self._pending_mappings.clear()

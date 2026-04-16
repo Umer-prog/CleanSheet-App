@@ -9,21 +9,31 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.snapshot_manager import list_manifests, revert_to_manifest, update_manifest_label
+from core.snapshot_manager import (
+    get_current_commit_id,
+    list_manifests,
+    revert_to_manifest,
+    update_manifest_label,
+)
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 
-def manifest_title(manifest: dict) -> str:
+def _commit_display_id(manifest: dict) -> str:
+    """Return the display ID, normalising legacy 'manifest_NNN' → 'commit_NNN'."""
     mid = str(manifest.get("manifest_id", "")).strip()
+    return mid.replace("manifest_", "commit_")
+
+
+def commit_title(manifest: dict) -> str:
     created = str(manifest.get("created_at", "")).strip()
-    return f"{mid} | {created}"
+    return f"{_commit_display_id(manifest)}  ·  {created}"
 
 
-def manifest_tables_text(manifest: dict) -> str:
+def commit_tables_text(manifest: dict) -> str:
     tables = manifest.get("tables", {})
     if not tables:
         return "(No tables)"
-    return "\n".join(f"{name} → {filename}" for name, filename in tables.items())
+    return "\n".join(f"  {name}  →  {filename}" for name, filename in tables.items())
 
 
 def _btn_ghost(text: str, height: int = 34) -> QPushButton:
@@ -53,7 +63,7 @@ def _btn_revert(text: str, height: int = 34) -> QPushButton:
 
 
 class ViewHistory(ScreenBase):
-    """History list and revert view."""
+    """Commit history list and revert view."""
 
     def __init__(self, parent, project: dict, on_project_changed):
         super().__init__(parent)
@@ -63,6 +73,7 @@ class ViewHistory(ScreenBase):
         self._selected_manifest: dict | None = None
         self._selected_row_frame: QFrame | None = None
         self._manifests: list[dict] = []
+        self._current_commit_id: str | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -81,13 +92,13 @@ class ViewHistory(ScreenBase):
 
         tb_text = QVBoxLayout()
         tb_text.setSpacing(2)
-        title_lbl = QLabel("History / Revert")
+        title_lbl = QLabel("Commit History")
         title_lbl.setStyleSheet(
             "color: #f1f5f9; font-size: 15px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         meta_lbl = QLabel(
-            "Select a snapshot to inspect its details, edit the label, "
+            "Select a commit to inspect its details, edit the label, "
             "or revert the project to that version."
         )
         meta_lbl.setStyleSheet(
@@ -108,7 +119,7 @@ class ViewHistory(ScreenBase):
         split.setContentsMargins(0, 0, 0, 0)
         split.setSpacing(0)
 
-        # Left — snapshot list
+        # Left — commit list
         left = QFrame()
         left.setFixedWidth(340)
         left.setStyleSheet(
@@ -128,7 +139,7 @@ class ViewHistory(ScreenBase):
         )
         lh_lay = QHBoxLayout(lh)
         lh_lay.setContentsMargins(18, 0, 18, 0)
-        lh_title = QLabel("SNAPSHOTS")
+        lh_title = QLabel("COMMITS")
         lh_title.setStyleSheet(
             "color: #475569; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
@@ -167,12 +178,24 @@ class ViewHistory(ScreenBase):
         )
         rh_lay = QHBoxLayout(rh)
         rh_lay.setContentsMargins(18, 0, 18, 0)
-        rh_title = QLabel("SNAPSHOT DETAILS")
+        rh_lay.setSpacing(12)
+        rh_title = QLabel("COMMIT DETAILS")
         rh_title.setStyleSheet(
             "color: #475569; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
-        rh_lay.addWidget(rh_title)
+        rh_lay.addWidget(rh_title, 1)
+
+        # HEAD badge — shows the current checked-out commit
+        self._head_badge = QLabel("")
+        self._head_badge.setFixedHeight(30)
+        self._head_badge.setStyleSheet(
+            "color: #34d399; background: rgba(5,150,105,0.12); "
+            "border: 1px solid rgba(5,150,105,0.25); border-radius: 5px; "
+            "font-size: 10px; font-weight: 600; padding: 2px 8px;"
+        )
+        self._head_badge.setVisible(False)
+        rh_lay.addWidget(self._head_badge)
         right_lay.addWidget(rh)
 
         # Right body
@@ -182,19 +205,29 @@ class ViewHistory(ScreenBase):
         rb_lay.setContentsMargins(18, 16, 18, 16)
         rb_lay.setSpacing(10)
 
-        self._detail_title = QLabel("Select a snapshot")
+        self._detail_title = QLabel("Select a commit")
         self._detail_title.setStyleSheet(
             "color: #f1f5f9; font-size: 13px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         rb_lay.addWidget(self._detail_title)
 
+        # Current commit status line
+        self._current_commit_lbl = QLabel("")
+        self._current_commit_lbl.setTextFormat(Qt.RichText)
+        self._current_commit_lbl.setStyleSheet(
+            "color: #475569; font-size: 11px; background: transparent; border: none;"
+        )
+        self._current_commit_lbl.setVisible(False)
+        rb_lay.addWidget(self._current_commit_lbl)
+
         self._detail_box = QTextEdit()
         self._detail_box.setReadOnly(True)
         self._detail_box.setStyleSheet(
             "QTextEdit { background: rgba(255,255,255,5); "
             "border: 1px solid rgba(255,255,255,0.07); "
-            "border-radius: 8px; color: #94a3b8; font-size: 12px; padding: 8px; }"
+            "border-radius: 8px; color: #94a3b8; font-size: 12px; padding: 8px; "
+            "font-family: 'Courier New'; }"
         )
         rb_lay.addWidget(self._detail_box, 1)
         right_lay.addWidget(right_body, 1)
@@ -231,7 +264,7 @@ class ViewHistory(ScreenBase):
         )
         rf_lay.addWidget(self._error_lbl, 1)
 
-        self._revert_btn = _btn_revert("Revert To This Version")
+        self._revert_btn = _btn_revert("Revert to This Commit")
         self._revert_btn.setFixedWidth(170)
         self._revert_btn.setEnabled(False)
         self._revert_btn.clicked.connect(self._confirm_revert)
@@ -259,8 +292,10 @@ class ViewHistory(ScreenBase):
         self._selected_row_frame = None
         self._revert_btn.setEnabled(False)
         self._label_entry.clear()
-        self._detail_title.setText("Select a snapshot")
+        self._detail_title.setText("Select a commit")
         self._detail_box.clear()
+        self._current_commit_lbl.setVisible(False)
+        self._head_badge.setVisible(False)
         self._snap_count_lbl.setVisible(False)
 
         clear_layout(self._list_layout)
@@ -277,21 +312,28 @@ class ViewHistory(ScreenBase):
             return
 
         def worker():
-            return list_manifests(self.project_path)
+            return list_manifests(self.project_path), get_current_commit_id(self.project_path)
 
-        def on_success(manifests):
+        def on_success(result):
+            manifests, current_id = result
             self._manifests = manifests
+            self._current_commit_id = current_id
             count = len(manifests)
             self._snap_count_lbl.setText(str(count))
             self._snap_count_lbl.setVisible(count > 0)
+            # Update the persistent HEAD badge in the panel header
+            if current_id:
+                display = current_id.replace("manifest_", "commit_")
+                self._head_badge.setText(f"HEAD  →  {display}")
+                self._head_badge.setVisible(True)
             self._render_manifest_rows()
 
         self._run_background(worker, on_success,
-                             lambda exc: self._set_error(f"Could not load manifests: {exc}"))
+                             lambda exc: self._set_error(f"Could not load commits: {exc}"))
 
     def _render_manifest_rows(self) -> None:
         if not self._manifests:
-            lbl = QLabel("No snapshots available.")
+            lbl = QLabel("No commits yet.")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet(
                 "color: #334155; font-size: 12px; background: transparent; "
@@ -300,7 +342,10 @@ class ViewHistory(ScreenBase):
             self._list_layout.addWidget(lbl)
             return
 
-        for manifest in self._manifests:
+        for manifest in reversed(self._manifests):   # newest first
+            raw_id = str(manifest.get("manifest_id", ""))
+            is_current = (raw_id == self._current_commit_id)
+
             row = QFrame()
             row.setStyleSheet(
                 "QFrame { background: transparent; border: none; "
@@ -312,16 +357,35 @@ class ViewHistory(ScreenBase):
             row_lay.setContentsMargins(18, 10, 18, 10)
             row_lay.setSpacing(3)
 
-            title = manifest_title(manifest)
-            label_text = str(manifest.get("label", "")).strip() or "(no label)"
+            # Top row: commit id + HEAD badge
+            top_row = QHBoxLayout()
+            top_row.setSpacing(8)
+            top_row.setContentsMargins(0, 0, 0, 0)
 
-            title_lbl = QLabel(title)
-            title_lbl.setStyleSheet(
+            display_id = _commit_display_id(manifest)
+            created = str(manifest.get("created_at", "")).strip()
+            id_lbl = QLabel(f"{display_id}  ·  {created}")
+            id_lbl.setStyleSheet(
                 "color: #cbd5e1; font-size: 12px; font-weight: 500; "
                 "background: transparent; border: none;"
             )
-            row_lay.addWidget(title_lbl)
+            top_row.addWidget(id_lbl, 1)
 
+            if is_current:
+                head_lbl = QLabel("HEAD")
+                head_lbl.setStyleSheet(
+                    "color: #34d399; background: rgba(5,150,105,0.12); "
+                    "border: 1px solid rgba(5,150,105,0.25); border-radius: 4px; "
+                    "font-size: 10px; font-weight: 600; padding: 1px 6px;"
+                )
+                top_row.addWidget(head_lbl)
+
+            top_widget = QWidget()
+            top_widget.setStyleSheet("background: transparent;")
+            top_widget.setLayout(top_row)
+            row_lay.addWidget(top_widget)
+
+            label_text = str(manifest.get("label", "")).strip() or "(no label)"
             label_lbl = QLabel(label_text)
             label_lbl.setStyleSheet(
                 "color: #475569; font-size: 11px; background: transparent; border: none;"
@@ -331,8 +395,9 @@ class ViewHistory(ScreenBase):
             def _click(event=None, m=manifest, frame=row):
                 self._select_manifest(m, frame)
 
-            row.mousePressEvent  = _click
-            title_lbl.mousePressEvent = _click
+            row.mousePressEvent   = _click
+            top_widget.mousePressEvent = _click
+            id_lbl.mousePressEvent    = _click
             label_lbl.mousePressEvent = _click
 
             self._list_layout.addWidget(row)
@@ -345,12 +410,13 @@ class ViewHistory(ScreenBase):
                 "border-bottom: 1px solid rgba(255,255,255,0.04); border-radius: 0; }"
             )
             for lbl in self._selected_row_frame.findChildren(QLabel):
-                if lbl.font().bold() or lbl.styleSheet().find("font-weight: 500") != -1:
+                ss = lbl.styleSheet()
+                if "font-weight: 500" in ss or "font-size: 12px" in ss:
                     lbl.setStyleSheet(
                         "color: #cbd5e1; font-size: 12px; font-weight: 500; "
                         "background: transparent; border: none;"
                     )
-                else:
+                elif "34d399" not in ss:   # leave the HEAD pill alone
                     lbl.setStyleSheet(
                         "color: #475569; font-size: 11px; background: transparent; border: none;"
                     )
@@ -363,16 +429,55 @@ class ViewHistory(ScreenBase):
             "border-radius: 0; }"
         )
         for lbl in frame.findChildren(QLabel):
-            lbl.setStyleSheet("color: #93c5fd; background: transparent; border: none; font-size: 12px;")
+            if "34d399" not in lbl.styleSheet():   # leave HEAD pill colour
+                lbl.setStyleSheet("color: #93c5fd; background: transparent; border: none; font-size: 12px;")
 
-        self._revert_btn.setEnabled(True)
-        self._label_entry.setText(str(manifest.get("label", "")))
-        self._detail_title.setText(manifest_title(manifest))
-        self._detail_box.setPlainText(manifest_tables_text(manifest))
+        # Build detail text
+        raw_id = str(manifest.get("manifest_id", ""))
+        display_id = _commit_display_id(manifest)
+        is_current = (raw_id == self._current_commit_id)
+
+        self._detail_title.setText(commit_title(manifest))
+
+        if is_current:
+            self._current_commit_lbl.setText(
+                f"<span style='color:#34d399;'>●  HEAD</span>"
+                f"  <span style='color:#334155;'>— this is the currently active commit</span>"
+            )
+        else:
+            current_display = (
+                self._current_commit_id.replace("manifest_", "commit_")
+                if self._current_commit_id else "none"
+            )
+            self._current_commit_lbl.setText(
+                f"<span style='color:#475569;'>Current HEAD:</span>"
+                f"  <span style='color:#60a5fa;'>{current_display}</span>"
+            )
+        self._current_commit_lbl.setVisible(True)
+
+        label_val = str(manifest.get("label", "")).strip()
+        tables = manifest.get("tables", {})
+        lines = [
+            f"commit    {display_id}",
+            f"date      {manifest.get('created_at', '')}",
+            f"label     {label_val or '(none)'}",
+            "",
+            "tables",
+        ]
+        for name, filename in tables.items():
+            lines.append(f"  {name}  →  {filename}")
+
+        self._detail_box.setPlainText("\n".join(lines))
+
+        self._revert_btn.setEnabled(not is_current)
+        self._revert_btn.setToolTip(
+            "Already at this commit." if is_current else ""
+        )
+        self._label_entry.setText(label_val)
 
     def _save_label(self) -> None:
         if not self._selected_manifest:
-            self._set_error("Select a snapshot first.")
+            self._set_error("Select a commit first.")
             return
         new_label = self._label_entry.text().strip()
         manifest_id = self._selected_manifest["manifest_id"]
@@ -386,9 +491,10 @@ class ViewHistory(ScreenBase):
 
     def _confirm_revert(self) -> None:
         if not self._selected_manifest:
-            self._set_error("Select a snapshot first.")
+            self._set_error("Select a commit first.")
             return
         manifest_id = self._selected_manifest["manifest_id"]
+        display_id = _commit_display_id(self._selected_manifest)
 
         from ui.popups.popup_revert_confirm import PopupRevertConfirm
 
@@ -399,7 +505,9 @@ class ViewHistory(ScreenBase):
             self._run_background(
                 worker,
                 lambda _: (
-                    QMessageBox.information(self, "Reverted", f"Reverted to {manifest_id}."),
+                    QMessageBox.information(
+                        self, "Reverted", f"Reverted to {display_id}."
+                    ),
                     self.on_project_changed(target_key="history"),
                 ),
                 lambda exc: QMessageBox.critical(
@@ -407,5 +515,5 @@ class ViewHistory(ScreenBase):
                 ),
             )
 
-        dlg = PopupRevertConfirm(self, manifest_id=manifest_id, on_confirm=do_revert)
+        dlg = PopupRevertConfirm(self, manifest_id=display_id, on_confirm=do_revert)
         dlg.exec()
