@@ -406,20 +406,20 @@ class Screen2Mappings(ScreenBase):
 
         cw_lay.addStretch(2)
 
-        arrow_lbl = QLabel("\u2190\u2500\u2500\u2500\u2500\u2500\u2500\u2192")
+        arrow_lbl = QLabel("\u2190\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192")
         arrow_lbl.setAlignment(Qt.AlignCenter)
         arrow_lbl.setFixedWidth(110)
         arrow_lbl.setStyleSheet(
-            "color: #3b82f6; background: rgba(59,130,246,0.08); "
-            "border: 1px solid rgba(59,130,246,0.18); border-radius: 20px; "
+            "color: #6b7280; background: transparent; "
+            "border: none; "
             "font-size: 14px; padding: 6px 0; letter-spacing: 1px;"
         )
         cw_lay.addWidget(arrow_lbl, 0, Qt.AlignHCenter)
 
         cw_lay.addStretch(1)
 
-        confirm_mapping_btn = QPushButton("Confirm\nMapping")
-        confirm_mapping_btn.setFixedSize(110, 50)
+        confirm_mapping_btn = QPushButton("Confirm Mapping")
+        confirm_mapping_btn.setFixedSize(120, 50)
         confirm_mapping_btn.setStyleSheet(
             "QPushButton { background: #3b82f6; border: none; border-radius: 8px; "
             "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 12px; }"
