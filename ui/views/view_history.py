@@ -8,9 +8,9 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QVBoxLayout, QWidget,
 )
 
-import ui.theme as theme
 from core.snapshot_manager import (
     get_current_commit_id,
+    get_missing_dim_sources,
     list_manifests,
     revert_to_manifest,
     update_manifest_label,
@@ -98,8 +98,8 @@ class ViewHistory(ScreenBase):
             "background: transparent; border: none;"
         )
         meta_lbl = QLabel(
-            "Select a commit to inspect its details, edit the label, "
-            "or revert the project to that version."
+            "Select a commit to inspect its details, edit the label, or revert — "
+            "reverting restores transactions, dimension tables, and mappings together."
         )
         meta_lbl.setStyleSheet(
             "color: #334155; font-size: 11px; background: transparent; border: none;"
@@ -392,7 +392,7 @@ class ViewHistory(ScreenBase):
             )
             row_lay.addWidget(label_lbl)
 
-            def _click(event=None, m=manifest, frame=row):
+            def _click(_=None, m=manifest, frame=row):
                 self._select_manifest(m, frame)
 
             row.mousePressEvent   = _click
@@ -457,15 +457,37 @@ class ViewHistory(ScreenBase):
 
         label_val = str(manifest.get("label", "")).strip()
         tables = manifest.get("tables", {})
+        dim_tables = manifest.get("dim_tables", {})
+        mappings = manifest.get("mappings", [])
+
         lines = [
             f"commit    {display_id}",
             f"date      {manifest.get('created_at', '')}",
             f"label     {label_val or '(none)'}",
             "",
-            "tables",
+            f"transactions  ({len(tables)})",
         ]
         for name, filename in tables.items():
             lines.append(f"  {name}  →  {filename}")
+
+        lines.append("")
+        lines.append(f"dimensions  ({len(dim_tables)})")
+        if dim_tables:
+            for name, filename in dim_tables.items():
+                lines.append(f"  {name}  →  {filename}")
+        else:
+            lines.append("  (not captured — legacy commit)")
+
+        lines.append("")
+        lines.append(f"mappings  ({len(mappings)})")
+        if mappings:
+            for m in mappings:
+                lines.append(
+                    f"  {m.get('transaction_table', '?')}.{m.get('transaction_column', '?')}"
+                    f"  →  {m.get('dim_table', '?')}.{m.get('dim_column', '?')}"
+                )
+        else:
+            lines.append("  (not captured — legacy commit)")
 
         self._detail_box.setPlainText("\n".join(lines))
 
@@ -496,6 +518,25 @@ class ViewHistory(ScreenBase):
         manifest_id = self._selected_manifest["manifest_id"]
         display_id = _commit_display_id(self._selected_manifest)
 
+        # Check whether any dim sources in this commit were subsequently deleted
+        missing_dims = get_missing_dim_sources(self.project_path, manifest_id)
+        if missing_dims:
+            names = ", ".join(missing_dims)
+            answer = QMessageBox.warning(
+                self,
+                "Deleted Dimension Sources",
+                f"The following dimension table(s) present in <b>{display_id}</b> "
+                f"were permanently deleted from this project and cannot be restored:"
+                f"<br><br><b>{names}</b><br><br>"
+                f"The revert will proceed without restoring those tables. "
+                f"All other data — transactions, remaining dimensions, and mappings — "
+                f"will be restored normally.<br><br>Continue?",
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
         from ui.popups.popup_revert_confirm import PopupRevertConfirm
 
         def do_revert():
@@ -506,7 +547,9 @@ class ViewHistory(ScreenBase):
                 worker,
                 lambda _: (
                     QMessageBox.information(
-                        self, "Reverted", f"Reverted to {display_id}."
+                        self, "Reverted",
+                        f"Reverted to {display_id}.\n"
+                        f"Transactions, dimension tables, and mappings have been restored."
                     ),
                     self.on_project_changed(target_key="history"),
                 ),

@@ -33,6 +33,19 @@ def get_dim_columns(project_path: Path, dim_table: str) -> list:
     return list(df.columns)
 
 
+def delete_dim_table(project_path: Path, dim_table: str) -> None:
+    """Delete a dim table's JSON file from disk.
+
+    Raises OSError if the file cannot be deleted.
+    """
+    path = _dim_path(Path(project_path), dim_table)
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError as e:
+        raise OSError(f"Failed to delete dim table '{dim_table}': {e}") from e
+
+
 def append_dim_row(project_path: Path, dim_table: str, row: dict) -> None:
     """Append a new row to an existing dim table JSON file.
 

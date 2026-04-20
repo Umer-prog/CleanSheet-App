@@ -4,13 +4,13 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
 from core.error_detector import detect_errors
-from core.mapping_manager import get_mappings
+from core.mapping_manager import delete_mapping, get_active_dim_tables, get_mappings
 from core.project_manager import open_project
 from ui.screen2_mappings import Screen2Mappings
 from ui.workers import Worker
@@ -51,6 +51,107 @@ def build_nav_items(mappings: list[dict]) -> list[dict]:
         {"kind": "view", "key": "settings",  "label": "Settings"},
     ])
     return items
+
+
+class _MappingDeleteConfirm:
+    """Dark-themed confirmation dialog for deleting a mapping."""
+
+    def __init__(self, parent, mapping: dict):
+        self._dlg = QDialog(parent)
+        self._dlg.setWindowTitle("Delete Mapping")
+        self._dlg.setFixedSize(500, 250)
+        self._dlg.setModal(True)
+        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
+        self.confirmed = False
+
+        tx_t = mapping.get("transaction_table", "")
+        tx_c = mapping.get("transaction_column", "")
+        dim_t = mapping.get("dim_table", "")
+        dim_c = mapping.get("dim_column", "")
+
+        outer = QVBoxLayout(self._dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Header
+        header = QFrame()
+        header.setFixedHeight(56)
+        header.setStyleSheet("QFrame { background-color: #ef4444; }")
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(22, 0, 22, 0)
+        h_lbl = QLabel("Delete Mapping")
+        h_lbl.setStyleSheet(
+            "color: #fff; font-size: 15px; font-weight: 700; "
+            "background: transparent; border: none;"
+        )
+        h_lay.addWidget(h_lbl)
+        outer.addWidget(header)
+
+        # Body
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        b_lay = QVBoxLayout(body)
+        b_lay.setContentsMargins(22, 18, 22, 18)
+        b_lay.setSpacing(12)
+
+        mapping_lbl = QLabel(
+            f"<span style='color:#94a3b8;'>Mapping to delete:</span><br>"
+            f"<span style='color:#60a5fa; font-weight:600;'>{tx_t}.{tx_c}</span>"
+            f"<span style='color:#334155;'>  →  </span>"
+            f"<span style='color:#60a5fa; font-weight:600;'>{dim_t}.{dim_c}</span>"
+        )
+        mapping_lbl.setTextFormat(Qt.RichText)
+        mapping_lbl.setStyleSheet("background: transparent; border: none;")
+        b_lay.addWidget(mapping_lbl)
+
+        warn_lbl = QLabel(
+            "This mapping will be permanently removed. If this was the only mapping "
+            "referencing the dimension table, it will become orphaned and eligible for deletion."
+        )
+        warn_lbl.setWordWrap(True)
+        warn_lbl.setStyleSheet(
+            "color: #64748b; font-size: 12px; background: transparent; border: none;"
+        )
+        b_lay.addWidget(warn_lbl)
+        outer.addWidget(body, 1)
+
+        # Footer
+        footer = QFrame()
+        footer.setFixedHeight(60)
+        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(22, 0, 22, 0)
+        f_lay.setSpacing(8)
+        f_lay.addStretch()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.setStyleSheet(
+            "QPushButton { background: transparent; "
+            "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
+            "color: #64748b; font-size: 13px; padding: 0 18px; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
+        )
+        cancel_btn.clicked.connect(self._dlg.reject)
+        f_lay.addWidget(cancel_btn)
+
+        delete_btn = QPushButton("Delete Mapping")
+        delete_btn.setFixedHeight(36)
+        delete_btn.setStyleSheet(
+            "QPushButton { background: #ef4444; border: none; border-radius: 7px; "
+            "color: #fff; font-size: 13px; font-weight: 600; padding: 0 18px; }"
+            "QPushButton:hover { background: #dc2626; }"
+        )
+        delete_btn.clicked.connect(self._confirm)
+        f_lay.addWidget(delete_btn)
+        outer.addWidget(footer)
+
+    def _confirm(self) -> None:
+        self.confirmed = True
+        self._dlg.accept()
+
+    def exec(self) -> None:
+        self._dlg.exec()
 
 
 class Screen3Main(QWidget):
@@ -296,15 +397,15 @@ class Screen3Main(QWidget):
     def _make_mapping_nav_item(self, item: dict) -> QFrame:
         key   = item["key"]
         frame = QFrame()
-        frame.setFixedHeight(36)
+        frame.setFixedHeight(44)
         frame.setCursor(Qt.PointingHandCursor)
         frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-left: 2px solid transparent; }"
         )
         f_lay = QHBoxLayout(frame)
-        f_lay.setContentsMargins(26, 0, 12, 0)
-        f_lay.setSpacing(6)
+        f_lay.setContentsMargins(26, 0, 10, 0)
+        f_lay.setSpacing(5)
 
         lbl = QLabel(item["label"])
         lbl.setStyleSheet(
@@ -312,6 +413,21 @@ class Screen3Main(QWidget):
         )
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
+
+        # Delete button — clicking it does NOT navigate, only deletes
+        del_btn = QPushButton("×")
+        del_btn.setFixedSize(20, 20)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet(
+            "QPushButton { background: rgba(239,68,68,0.0); border: none; "
+            "border-radius: 4px; color: #475569; font-size: 14px; font-weight: 700; "
+            "padding: 0; }"
+            "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
+        )
+        del_btn.clicked.connect(
+            lambda _=None, m=item["mapping"]: self._on_delete_mapping(m)
+        )
+        f_lay.addWidget(del_btn)
 
         badge = QLabel("✓")
         badge.setFixedHeight(18)
@@ -323,7 +439,7 @@ class Screen3Main(QWidget):
         f_lay.addWidget(badge)
         self._nav_badges[key] = badge
 
-        def _click(event=None, it=item):
+        def _click(_=None, it=item):
             self._on_nav_click(it)
 
         frame.mousePressEvent  = _click
@@ -361,7 +477,7 @@ class Screen3Main(QWidget):
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
 
-        def _click(event=None, it=item):
+        def _click(_=None, it=item):
             self._on_nav_click(it)
 
         frame.mousePressEvent    = _click
@@ -446,6 +562,60 @@ class Screen3Main(QWidget):
                 "border: 1px solid rgba(239,68,68,0.2); border-radius: 9px; "
                 "font-size: 10px; padding: 0 5px;"
             )
+
+    # ------------------------------------------------------------------
+    # Mapping deletion
+    # ------------------------------------------------------------------
+
+    def _on_delete_mapping(self, mapping: dict) -> None:
+        """Show confirmation popup, delete the mapping, then check for orphaned dims."""
+        dlg = _MappingDeleteConfirm(self, mapping)
+        dlg.exec()
+        if not dlg.confirmed:
+            return
+
+        mapping_id   = mapping["id"]
+        dim_table    = mapping.get("dim_table", "")
+        project_path = self.project_path
+
+        def worker():
+            # Capture which dim tables were active BEFORE deletion
+            active_before = get_active_dim_tables(project_path)
+            delete_mapping(project_path, mapping_id)
+            active_after = get_active_dim_tables(project_path)
+            # Newly orphaned = was active before, not active now, and matches our dim
+            newly_orphaned = (active_before - active_after) & {dim_table}
+            return newly_orphaned
+
+        def on_done(newly_orphaned: set):
+            if newly_orphaned:
+                answer = QMessageBox.information(
+                    self,
+                    "Dimension Table Now Orphaned",
+                    f"The dimension table <b>{dim_table}</b> is no longer referenced "
+                    f"by any mapping.<br><br>"
+                    f"It can now be permanently deleted from the "
+                    f"<b>Dimension Tables</b> panel.",
+                    QMessageBox.Ok | QMessageBox.Ignore,
+                    QMessageBox.Ok,
+                )
+                # Navigate to d_sources if user clicked Ok (not Ignore)
+                go_to_dims = (answer == QMessageBox.Ok)
+            else:
+                go_to_dims = False
+
+            target = "d_sources" if go_to_dims else None
+            self._reload_from_disk(target_key=target)
+
+        w = Worker(worker)
+        w.finished.connect(on_done)
+        w.errored.connect(
+            lambda exc: QMessageBox.critical(
+                self, "Error", f"Could not delete mapping:\n{exc}"
+            )
+        )
+        w.start()
+        self._delete_worker = w   # keep reference
 
     # ------------------------------------------------------------------
     # Navigation & view switching

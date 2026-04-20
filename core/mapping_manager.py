@@ -85,6 +85,11 @@ def delete_mapping(project_path: Path, mapping_id: str) -> None:
     _write_store(project_path, store)
 
 
+def get_active_dim_tables(project_path: Path) -> set:
+    """Return the set of dim_table names referenced by at least one active mapping."""
+    return {m["dim_table"] for m in get_mappings(project_path)}
+
+
 def delete_mappings_for_table(project_path: Path, table_name: str) -> int:
     """Remove all mappings that reference table_name (transaction or dim side).
 
