@@ -52,8 +52,40 @@ def load_excel_sheets(file_path: Path) -> list:
         raise ValueError(f"Failed to open Excel file '{file_path}': {e}") from e
 
 
+def _find_header_row(ws) -> int:
+    """Detect which row contains the column headers in a worksheet.
+
+    Scans the first 20 rows and returns the 1-based index of the first row
+    that reaches at least 80% of the maximum non-empty cell count seen.
+    This correctly handles files where rows above the header are titles,
+    logos, blank spacers, or other decorative content.
+    Falls back to row 1 if the sheet is empty or detection is inconclusive.
+    """
+    scan_limit = min(ws.max_row or 1, 20)
+    counts = []
+    for r in range(1, scan_limit + 1):
+        count = sum(1 for cell in ws[r] if cell.value is not None)
+        counts.append(count)
+
+    if not counts or max(counts) == 0:
+        return 1
+
+    max_count = max(counts)
+    threshold = max_count * 0.8
+
+    for i, count in enumerate(counts):
+        if count >= threshold:
+            return i + 1  # convert to 1-based row index
+
+    return 1
+
+
 def get_sheet_as_dataframe(file_path: Path, sheet_name: str) -> pd.DataFrame:
     """Read a single sheet from an Excel file and return a DataFrame.
+
+    Automatically detects the header row (it may not always be row 1 — some
+    files have title rows, blank rows, or logos above the actual columns).
+    All rows below the detected header row are loaded as data/transaction rows.
 
     Date/time cells are formatted as strings that match their original Excel
     display format (e.g. dd/mm/yyyy), so the value round-trips correctly
@@ -74,17 +106,21 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str) -> pd.DataFrame:
             wb.close()
             return pd.DataFrame()
 
-        # --- headers (row 1) ---
+        # --- auto-detect the header row ---
+        header_row = _find_header_row(ws)
+        data_start_row = header_row + 1
+
+        # --- headers (detected row) ---
         headers = [
             str(cell.value).strip() if cell.value is not None else f"Col{i}"
-            for i, cell in enumerate(ws[1], start=1)
+            for i, cell in enumerate(ws[header_row], start=1)
         ]
 
         # --- detect per-column strftime format from first ~20 data rows ---
         col_strftime: dict[int, str] = {}   # 0-based column index → strftime
-        scan_end = min(ws.max_row, 21)
+        scan_end = min(ws.max_row, data_start_row + 19)
         for ci in range(len(headers)):
-            for row_cells in ws.iter_rows(min_row=2, max_row=scan_end,
+            for row_cells in ws.iter_rows(min_row=data_start_row, max_row=scan_end,
                                           min_col=ci + 1, max_col=ci + 1):
                 for cell in row_cells:
                     if cell.value is not None and isinstance(cell.value, (date, datetime)):
@@ -95,9 +131,9 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str) -> pd.DataFrame:
                 if ci in col_strftime:
                     break
 
-        # --- build data rows ---
+        # --- build data rows (everything below the header) ---
         data_rows = []
-        for row_cells in ws.iter_rows(min_row=2, values_only=False):
+        for row_cells in ws.iter_rows(min_row=data_start_row, values_only=False):
             row_data = []
             for ci in range(len(headers)):
                 cell = row_cells[ci] if ci < len(row_cells) else None

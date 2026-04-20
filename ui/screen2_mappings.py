@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 from core.data_loader import load_dim_json
-from core.mapping_manager import add_mapping, get_mappings
+from core.mapping_manager import add_mapping, delete_mappings_for_table, get_mappings
+from core.project_manager import save_project_json
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 260
@@ -625,26 +626,33 @@ class Screen2Mappings(ScreenBase):
     # ------------------------------------------------------------------
 
     def _refresh_tables(self) -> None:
+        clear_layout(self._dim_btn_layout)
+        clear_layout(self._tx_btn_layout)
+        self._dim_buttons.clear()
+        self._transaction_buttons.clear()
+
         for table_name in self._dim_tables:
-            btn = self._nav_btn(table_name, "dim")
+            row, btn = self._make_table_row(table_name, "dim")
             btn.clicked.connect(lambda _=False, t=table_name: self._select_dim_table(t))
-            self._dim_btn_layout.addWidget(btn)
+            self._dim_btn_layout.addWidget(row)
             self._dim_buttons[table_name] = btn
 
         for table_name in self._transaction_tables:
-            btn = self._nav_btn(table_name, "tx")
+            row, btn = self._make_table_row(table_name, "tx")
             btn.clicked.connect(lambda _=False, t=table_name: self._select_transaction_table(t))
-            self._tx_btn_layout.addWidget(btn)
+            self._tx_btn_layout.addWidget(row)
             self._transaction_buttons[table_name] = btn
 
-    @staticmethod
-    def _nav_btn(label: str, kind: str = "dim") -> QPushButton:
-        btn = QPushButton(label)
+    def _make_table_row(self, table_name: str, kind: str) -> tuple[QFrame, QPushButton]:
+        """Return a (row_frame, select_button) pair — the row also contains an X remove button."""
+        row = QFrame()
+        row.setStyleSheet("QFrame { background: transparent; border: none; }")
+        r_lay = QHBoxLayout(row)
+        r_lay.setContentsMargins(0, 0, 0, 0)
+        r_lay.setSpacing(4)
+
+        btn = QPushButton(table_name)
         btn.setFixedHeight(36)
-        if kind == "dim":
-            dot_color = "#34d399"
-        else:
-            dot_color = "#60a5fa"
         btn.setStyleSheet(
             "QPushButton { background: rgba(255,255,255,0.03); "
             "border: 1px solid rgba(255,255,255,0.07); border-radius: 7px; "
@@ -652,7 +660,22 @@ class Screen2Mappings(ScreenBase):
             "QPushButton:hover { background: rgba(255,255,255,0.06); }"
         )
         btn.setCursor(Qt.PointingHandCursor)
-        return btn
+        r_lay.addWidget(btn, 1)
+
+        x_btn = QPushButton("✕")
+        x_btn.setFixedSize(28, 36)
+        x_btn.setToolTip(f"Remove '{table_name}' from this project")
+        x_btn.setStyleSheet(
+            "QPushButton { background: rgba(239,68,68,0.07); "
+            "border: 1px solid rgba(239,68,68,0.18); border-radius: 7px; "
+            "color: #f87171; font-size: 11px; padding: 0; }"
+            "QPushButton:hover { background: rgba(239,68,68,0.20); }"
+        )
+        x_btn.setCursor(Qt.PointingHandCursor)
+        x_btn.clicked.connect(lambda _=False, t=table_name, k=kind: self._confirm_remove_table(t, k))
+        r_lay.addWidget(x_btn)
+
+        return row, btn
 
     def _set_button_selection(self, button_map: dict, selected_name: str, kind: str) -> None:
         for name, btn in button_map.items():
@@ -676,6 +699,81 @@ class Screen2Mappings(ScreenBase):
                     "color: #94a3b8; font-size: 12px; text-align: left; padding: 0 12px; }"
                     "QPushButton:hover { background: rgba(255,255,255,0.06); }"
                 )
+
+    def _confirm_remove_table(self, table_name: str, kind: str) -> None:
+        """Ask for confirmation then remove the table from disk, project.json, and mappings."""
+        kind_label = "dimension" if kind == "dim" else "transaction"
+        reply = QMessageBox.question(
+            self,
+            "Remove Table",
+            f"Remove '{table_name}' from this project?\n\n"
+            f"This will delete the {kind_label} data file from disk "
+            f"and remove any mappings that reference it.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        def worker():
+            self._do_remove_table(table_name, kind)
+
+        def on_success(_):
+            if kind == "dim":
+                self._dim_tables = [t for t in self._dim_tables if t != table_name]
+                if self._selected_dim_table == table_name:
+                    self._selected_dim_table = None
+                self._pending_mappings = [
+                    m for m in self._pending_mappings if m.get("dim_table") != table_name
+                ]
+            else:
+                self._transaction_tables = [t for t in self._transaction_tables if t != table_name]
+                if self._selected_transaction_table == table_name:
+                    self._selected_transaction_table = None
+                self._pending_mappings = [
+                    m for m in self._pending_mappings if m.get("transaction_table") != table_name
+                ]
+            # Keep project dict in sync — Screen 1 reads this when navigating back
+            self.project["transaction_tables"] = list(self._transaction_tables)
+            self.project["dim_tables"] = list(self._dim_tables)
+            self._refresh_tables()
+            self._refresh_mappings()
+            self._clear_current_selection()
+
+        def on_error(exc):
+            QMessageBox.critical(self, "Error", f"Could not remove '{table_name}':\n{exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _do_remove_table(self, table_name: str, kind: str) -> None:
+        """Disk-side removal: delete data file, update project.json, purge saved mappings."""
+        if kind == "dim":
+            file_path = self.project_path / "data" / "dim" / f"{table_name}.json"
+        else:
+            file_path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
+
+        try:
+            if file_path.exists():
+                file_path.unlink()
+        except OSError as e:
+            raise OSError(f"Could not delete '{file_path.name}': {e}") from e
+
+        # Build updated project.json contents
+        project_data = {
+            "project_name": self.project.get("project_name", ""),
+            "created_at": self.project.get("created_at", ""),
+            "company": self.project.get("company", ""),
+            "transaction_tables": [
+                t for t in self.project.get("transaction_tables", []) if t != table_name
+            ] if kind == "tx" else list(self.project.get("transaction_tables", [])),
+            "dim_tables": [
+                t for t in self.project.get("dim_tables", []) if t != table_name
+            ] if kind == "dim" else list(self.project.get("dim_tables", [])),
+        }
+        save_project_json(self.project_path, project_data)
+
+        # Remove all saved mappings that reference this table
+        delete_mappings_for_table(self.project_path, table_name)
 
     def _select_dim_table(self, table_name: str) -> None:
         self._set_error("")
