@@ -102,18 +102,6 @@ def _read_commit_json(commit_dir: Path) -> dict:
 # Per-commit data writers
 # ---------------------------------------------------------------------------
 
-def _write_transactions(transactions_dir: Path, tables: dict) -> list[str]:
-    """Write transaction CSVs. Returns list of table names written."""
-    written = []
-    for table_name, df in tables.items():
-        dest = transactions_dir / f"{table_name}.csv"
-        try:
-            df.to_csv(dest, index=False, encoding="utf-8")
-            written.append(table_name)
-        except OSError as e:
-            raise OSError(f"Failed to write transaction '{table_name}': {e}") from e
-    return written
-
 
 def _write_dimensions(dimensions_dir: Path, dim_data: dict) -> list[str]:
     """Write dimension JSONs. Returns list of dim names written."""
@@ -253,11 +241,27 @@ def create_snapshot(
     except OSError as e:
         raise OSError(f"Failed to create commit folder: {e}") from e
 
-    tx_names = _write_transactions(commit_dir / "transactions", tables)
+    # Snapshot ALL transaction tables from the live dir (not only the ones passed in)
+    tx_names = []
+    for csv_file in sorted(live_tx_dir.glob("*.csv")):
+        try:
+            shutil.copy2(csv_file, commit_dir / "transactions" / csv_file.name)
+            tx_names.append(csv_file.stem)
+        except OSError as e:
+            raise OSError(f"Failed to snapshot transaction '{csv_file.stem}': {e}") from e
+
     dim_data = _load_dim_tables(project_path)
     dim_names = _write_dimensions(commit_dir / "dimensions", dim_data)
     mappings = _load_mappings(project_path)
     _write_mappings_to_commit(commit_dir / "mappings", mappings)
+
+    # Save ignored errors snapshot
+    ignored_src = project_path / "metadata" / "data" / "ignored_errors.json"
+    if ignored_src.exists():
+        try:
+            shutil.copy2(ignored_src, commit_dir / "ignored" / "ignored_errors.json")
+        except OSError:
+            pass  # non-critical
 
     parent = settings.get("current_manifest")
 
@@ -394,11 +398,9 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
 
     manifest = get_manifest(project_path, manifest_id)
     project_data = _load_project_json(project_path)
-    deleted_dims: set[str] = set(project_data.get("deleted_dim_tables", []))
 
-    tx_tables      = manifest.get("tables", [])
-    all_dim_tables = manifest.get("dim_tables", [])
-    restored_dims  = [d for d in all_dim_tables if d not in deleted_dims]
+    tx_tables     = manifest.get("tables", [])
+    restored_dims = list(manifest.get("dim_tables", []))  # restore ALL dims, including previously-deleted ones
 
     # Validate all files exist before touching anything
     for name in tx_tables:
@@ -438,10 +440,24 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     except OSError as e:
         raise OSError(f"Failed to restore mappings: {e}") from e
 
+    # Restore ignored errors — always update the live file to match the commit's state
+    ignored_commit = commit_dir / "ignored" / "ignored_errors.json"
+    live_ignored   = project_path / "metadata" / "data" / "ignored_errors.json"
+    try:
+        if ignored_commit.exists():
+            shutil.copy2(ignored_commit, live_ignored)
+        elif live_ignored.exists():
+            live_ignored.unlink()
+    except OSError:
+        pass  # non-critical
+
     # Update project.json and pointer
     if project_data:
         project_data["transaction_tables"] = tx_tables
         project_data["dim_tables"] = restored_dims
+        # Remove restored dims from deleted_dim_tables — revert brings them back
+        current_deleted = set(project_data.get("deleted_dim_tables", []))
+        project_data["deleted_dim_tables"] = sorted(current_deleted - set(restored_dims))
         _write_project_json(project_path, project_data)
 
     settings = _read_settings(project_path)

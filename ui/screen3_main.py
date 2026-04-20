@@ -210,11 +210,23 @@ class Screen3Main(QWidget):
         project_path = self.project_path
 
         def worker():
+            import json as _json
+            ignored_file = project_path / "metadata" / "data" / "ignored_errors.json"
+            try:
+                with open(ignored_file, encoding="utf-8") as fh:
+                    ignored_map = {k: set(v) for k, v in _json.load(fh).items()}
+            except Exception:
+                ignored_map = {}
+
             results: dict[str, int] = {}
             for item in mapping_items:
                 try:
-                    _, total = detect_errors(project_path, item["mapping"])
-                    results[item["key"]] = total
+                    errors, total = detect_errors(project_path, item["mapping"])
+                    m = item["mapping"]
+                    key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
+                    ignored = ignored_map.get(key, set())
+                    visible_count = len([e for e in errors if int(e["row_index"]) not in ignored])
+                    results[item["key"]] = max(0, total - (len(errors) - visible_count))
                 except Exception:
                     results[item["key"]] = 0
             return results

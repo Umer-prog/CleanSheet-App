@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
 
 from core.snapshot_manager import (
     get_current_commit_id,
-    get_missing_dim_sources,
     list_manifests,
     revert_to_manifest,
     update_manifest_label,
@@ -517,25 +516,6 @@ class ViewHistory(ScreenBase):
             return
         manifest_id = self._selected_manifest["manifest_id"]
         display_id = _commit_display_id(self._selected_manifest)
-
-        # Check whether any dim sources in this commit were subsequently deleted
-        missing_dims = get_missing_dim_sources(self.project_path, manifest_id)
-        if missing_dims:
-            names = ", ".join(missing_dims)
-            answer = QMessageBox.warning(
-                self,
-                "Deleted Dimension Sources",
-                f"The following dimension table(s) present in <b>{display_id}</b> "
-                f"were permanently deleted from this project and cannot be restored:"
-                f"<br><br><b>{names}</b><br><br>"
-                f"The revert will proceed without restoring those tables. "
-                f"All other data — transactions, remaining dimensions, and mappings — "
-                f"will be restored normally.<br><br>Continue?",
-                QMessageBox.Yes | QMessageBox.Cancel,
-                QMessageBox.Cancel,
-            )
-            if answer != QMessageBox.Yes:
-                return
 
         from ui.popups.popup_revert_confirm import PopupRevertConfirm
 
