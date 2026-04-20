@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Callable
 
 import pandas as pd
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
+    QAbstractItemView, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QTableView, QVBoxLayout, QWidget,
 )
 
@@ -243,13 +243,43 @@ class PopupReplace(QDialog):
         _lbl(th_lay, self._dim_table,
              "color:#60a5fa; font-size:11px; font-family:'Courier New';")
         th_lay.addStretch()
-        _lbl(th_lay, f"{len(self._dim_df)} rows", "color:#334155; font-size:11px;")
+        self._row_count_lbl = _lbl(th_lay, f"{len(self._dim_df)} rows",
+                                   "color:#334155; font-size:11px;")
         lay.addWidget(tbl_hdr)
 
-        # ── QTableView — virtualised, all rows accessible ─────────────
+        # ── Search bar ────────────────────────────────────────────────
+        search_frame = QFrame()
+        search_frame.setFixedHeight(44)
+        search_frame.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        sf_lay = QHBoxLayout(search_frame)
+        sf_lay.setContentsMargins(12, 6, 12, 6)
+        self._table_search = QLineEdit()
+        self._table_search.setPlaceholderText("Search values...")
+        self._table_search.setFixedHeight(30)
+        self._table_search.setStyleSheet(
+            "QLineEdit { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
+            "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
+            "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
+            "QLineEdit::placeholder { color: #334155; }"
+        )
+        self._table_search.textChanged.connect(self._on_table_search)
+        sf_lay.addWidget(self._table_search)
+        lay.addWidget(search_frame)
+
+        # ── QTableView — virtualised, filtered via proxy ──────────────
         self._table_model = _DataFrameModel(self._dim_df)
+        self._proxy_model = QSortFilterProxyModel()
+        self._proxy_model.setSourceModel(self._table_model)
+        self._proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        self._proxy_model.setFilterKeyColumn(-1)  # search all columns
+
         self._table_view = QTableView()
-        self._table_view.setModel(self._table_model)
+        self._table_view.setModel(self._proxy_model)
         self._table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -283,11 +313,21 @@ class PopupReplace(QDialog):
         lay.addWidget(self._table_view, 1)
         return wrap
 
+    def _on_table_search(self, text: str) -> None:
+        self._proxy_model.setFilterFixedString(text)
+        visible = self._proxy_model.rowCount()
+        total = len(self._dim_df)
+        self._row_count_lbl.setText(
+            f"{visible} / {total} rows" if text.strip() else f"{total} rows"
+        )
+
     def _on_dim_selection(self, selected, deselected) -> None:
         indexes = self._table_view.selectionModel().selectedRows()
         if not indexes:
             return
-        df_row = self._dim_df.iloc[indexes[0].row()]
+        # Map filtered proxy index → original source DataFrame index
+        source_index = self._proxy_model.mapToSource(indexes[0])
+        df_row = self._dim_df.iloc[source_index.row()]
         val = (str(df_row[self._dim_column])
                if self._dim_column in df_row.index else str(df_row.iloc[0]))
         self._selected_value = val
@@ -296,7 +336,7 @@ class PopupReplace(QDialog):
         self._confirm_btn.setEnabled(True)
 
     def _build_fallback_list(self) -> QFrame:
-        """Shown when no dim_df is available — simple list of valid_values."""
+        """Shown when no dim_df is available — simple list of valid_values with search."""
         wrap = QFrame()
         wrap.setStyleSheet(
             "QFrame { background: rgba(255,255,255,0.02); "
@@ -306,19 +346,58 @@ class PopupReplace(QDialog):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameStyle(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        # ── Search bar ────────────────────────────────────────────────
+        search_frame = QFrame()
+        search_frame.setFixedHeight(44)
+        search_frame.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); }"
+        )
+        sf_lay = QHBoxLayout(search_frame)
+        sf_lay.setContentsMargins(12, 6, 12, 6)
+        self._fallback_search = QLineEdit()
+        self._fallback_search.setPlaceholderText("Search values...")
+        self._fallback_search.setFixedHeight(30)
+        self._fallback_search.setStyleSheet(
+            "QLineEdit { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
+            "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
+            "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
+            "QLineEdit::placeholder { color: #334155; }"
+        )
+        self._fallback_search.textChanged.connect(self._on_fallback_search)
+        sf_lay.addWidget(self._fallback_search)
+        lay.addWidget(search_frame)
 
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        rows_lay = QVBoxLayout(container)
-        rows_lay.setContentsMargins(0, 0, 0, 0)
-        rows_lay.setSpacing(0)
-        rows_lay.setAlignment(Qt.AlignTop)
+        # ── Scrollable value list ─────────────────────────────────────
+        self._fallback_scroll = QScrollArea()
+        self._fallback_scroll.setWidgetResizable(True)
+        self._fallback_scroll.setFrameStyle(QFrame.NoFrame)
+        self._fallback_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
-        for i, val in enumerate(self._valid_values):
+        self._fallback_container = QWidget()
+        self._fallback_container.setStyleSheet("background: transparent;")
+        self._fallback_rows_lay = QVBoxLayout(self._fallback_container)
+        self._fallback_rows_lay.setContentsMargins(0, 0, 0, 0)
+        self._fallback_rows_lay.setSpacing(0)
+        self._fallback_rows_lay.setAlignment(Qt.AlignTop)
+
+        self._build_fallback_rows(self._valid_values)
+
+        self._fallback_scroll.setWidget(self._fallback_container)
+        lay.addWidget(self._fallback_scroll, 1)
+        return wrap
+
+    def _build_fallback_rows(self, values: list[str]) -> None:
+        """Populate the fallback list with the given values (clears first)."""
+        while self._fallback_rows_lay.count():
+            item = self._fallback_rows_lay.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._row_frames.clear()
+
+        for i, val in enumerate(values):
             frame = QFrame()
             frame.setFixedHeight(36)
             frame.setCursor(Qt.PointingHandCursor)
@@ -338,11 +417,12 @@ class PopupReplace(QDialog):
             frame.mousePressEvent = _click
             lbl.mousePressEvent   = _click
             self._row_frames.append((frame, val))
-            rows_lay.addWidget(frame)
+            self._fallback_rows_lay.addWidget(frame)
 
-        scroll.setWidget(container)
-        lay.addWidget(scroll, 1)
-        return wrap
+    def _on_fallback_search(self, text: str) -> None:
+        query = text.strip().lower()
+        filtered = [v for v in self._valid_values if query in v.lower()] if query else self._valid_values
+        self._build_fallback_rows(filtered)
 
     def _build_preview_strip(self) -> QFrame:
         strip = QFrame()

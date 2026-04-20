@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -136,6 +136,7 @@ class ViewDSources(ScreenBase):
         self.on_project_changed = on_project_changed
         self.on_go_mapping_setup = on_go_mapping_setup
         self._orphaned_dims: set[str] = set()
+        self._search_text = ""
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -217,6 +218,30 @@ class ViewDSources(ScreenBase):
         sch_lay.addWidget(self._count_lbl)
         card_lay.addWidget(sc_hdr)
 
+        # Search bar
+        search_frame = QFrame()
+        search_frame.setFixedHeight(46)
+        search_frame.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        sf_lay = QHBoxLayout(search_frame)
+        sf_lay.setContentsMargins(14, 7, 14, 7)
+        self._search_bar = QLineEdit()
+        self._search_bar.setPlaceholderText("Search dimension tables...")
+        self._search_bar.setFixedHeight(30)
+        self._search_bar.setStyleSheet(
+            "QLineEdit { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
+            "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
+            "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
+            "QLineEdit::placeholder { color: #334155; }"
+        )
+        self._search_bar.textChanged.connect(self._on_search_changed)
+        sf_lay.addWidget(self._search_bar)
+        card_lay.addWidget(search_frame)
+
         # Rows scroll area
         self._rows_scroll, _, self._rows_layout = make_scroll_area()
         self._rows_layout.setContentsMargins(0, 0, 0, 0)
@@ -238,6 +263,10 @@ class ViewDSources(ScreenBase):
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)
 
+    def _on_search_changed(self, text: str) -> None:
+        self._search_text = text.strip().lower()
+        self._render_rows()
+
     def _load_orphan_state(self) -> None:
         """Detect which dim tables are orphaned (no mappings), then render."""
         def worker():
@@ -256,14 +285,24 @@ class ViewDSources(ScreenBase):
 
     def _render_rows(self) -> None:
         clear_layout(self._rows_layout)
-        dims = list(self.project.get("dim_tables", []))
+        all_dims = list(self.project.get("dim_tables", []))
 
-        count = len(dims)
-        self._count_lbl.setText(str(count))
-        self._count_lbl.setVisible(count > 0)
+        # Update count badge (always shows total, not filtered count)
+        self._count_lbl.setText(str(len(all_dims)))
+        self._count_lbl.setVisible(len(all_dims) > 0)
+
+        # Apply search filter
+        if self._search_text:
+            dims = [d for d in all_dims if self._search_text in d.lower()]
+        else:
+            dims = all_dims
 
         if not dims:
-            empty = QLabel("No dimension tables added yet.")
+            if self._search_text:
+                msg = f'No tables match "{self._search_text}".'
+            else:
+                msg = "No dimension tables added yet."
+            empty = QLabel(msg)
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
                 "color: #334155; font-size: 12px; background: transparent; "
