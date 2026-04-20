@@ -117,7 +117,7 @@ class ViewSettings(ScreenBase):
 
         # Form constrained to max 520px width
         form_wrap = QWidget()
-        form_wrap.setFixedWidth(520)
+        form_wrap.setFixedWidth(620)
         form_wrap.setStyleSheet("background: transparent;")
         form_lay = QVBoxLayout(form_wrap)
         form_lay.setContentsMargins(0, 0, 0, 0)

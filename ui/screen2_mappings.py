@@ -17,7 +17,7 @@ from core.project_manager import save_project_json
 from core.project_paths import active_dim_dir, active_transactions_dir
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
-_SIDEBAR_W = 260
+_SIDEBAR_W = 300
 
 # Tiny SVG chevron written once to a temp file; referenced as a QComboBox down-arrow image.
 _ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow.svg"

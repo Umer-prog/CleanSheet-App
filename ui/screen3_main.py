@@ -15,7 +15,7 @@ from core.project_manager import open_project
 from ui.screen2_mappings import Screen2Mappings
 from ui.workers import Worker
 
-_NAV_WIDTH = 260
+_NAV_WIDTH = 350
 
 # Icon characters for bottom nav items
 _NAV_ICONS = {
@@ -409,19 +409,19 @@ class Screen3Main(QWidget):
     def _make_mapping_nav_item(self, item: dict) -> QFrame:
         key   = item["key"]
         frame = QFrame()
-        frame.setFixedHeight(44)
+        frame.setFixedHeight(48)
         frame.setCursor(Qt.PointingHandCursor)
         frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-left: 2px solid transparent; }"
         )
         f_lay = QHBoxLayout(frame)
-        f_lay.setContentsMargins(26, 0, 10, 0)
-        f_lay.setSpacing(5)
+        f_lay.setContentsMargins(28, 0, 12, 0)
+        f_lay.setSpacing(6)
 
         lbl = QLabel(item["label"])
         lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 11px;"
+            "color: #475569; background: transparent; border: none; font-size: 12px;"
         )
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
@@ -463,28 +463,28 @@ class Screen3Main(QWidget):
         key   = item["key"]
         icon  = _NAV_ICONS.get(key, "◈")
         frame = QFrame()
-        frame.setFixedHeight(38)
+        frame.setFixedHeight(42)
         frame.setCursor(Qt.PointingHandCursor)
         frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-left: 2px solid transparent; }"
         )
         f_lay = QHBoxLayout(frame)
-        f_lay.setContentsMargins(16, 0, 16, 0)
-        f_lay.setSpacing(9)
+        f_lay.setContentsMargins(18, 0, 18, 0)
+        f_lay.setSpacing(10)
 
         icon_lbl = QLabel(icon)
-        icon_lbl.setFixedWidth(14)
+        icon_lbl.setFixedWidth(16)
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 10px;"
+            "color: #475569; background: transparent; border: none; font-size: 11px;"
         )
         f_lay.addWidget(icon_lbl)
         self._nav_icons[key] = icon_lbl
 
         lbl = QLabel(item["label"])
         lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 12px;"
+            "color: #64748b; background: transparent; border: none; font-size: 13px;"
         )
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
@@ -514,7 +514,7 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #60a5fa; background: transparent; border: none; font-size: 11px;"
+                            "color: #60a5fa; background: transparent; border: none; font-size: 12px;"
                         )
                 else:
                     frame.setStyleSheet(
@@ -523,7 +523,7 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #475569; background: transparent; border: none; font-size: 11px;"
+                            "color: #475569; background: transparent; border: none; font-size: 12px;"
                         )
             else:
                 if is_active:
@@ -533,11 +533,11 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #93c5fd; background: transparent; border: none; font-size: 12px;"
+                            "color: #93c5fd; background: transparent; border: none; font-size: 13px;"
                         )
                     if key in self._nav_icons:
                         self._nav_icons[key].setStyleSheet(
-                            "color: #93c5fd; background: transparent; border: none; font-size: 10px;"
+                            "color: #93c5fd; background: transparent; border: none; font-size: 11px;"
                         )
                 else:
                     frame.setStyleSheet(
@@ -546,11 +546,11 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #64748b; background: transparent; border: none; font-size: 12px;"
+                            "color: #64748b; background: transparent; border: none; font-size: 13px;"
                         )
                     if key in self._nav_icons:
                         self._nav_icons[key].setStyleSheet(
-                            "color: #475569; background: transparent; border: none; font-size: 10px;"
+                            "color: #475569; background: transparent; border: none; font-size: 11px;"
                         )
 
         self._active_nav_key = active_key

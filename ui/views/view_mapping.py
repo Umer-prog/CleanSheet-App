@@ -246,11 +246,11 @@ class ViewMapping(ScreenBase):
         dim_c = self.mapping["dim_column"]
 
         self._topbar_title = QLabel(
-            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>"
+            f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{tx_t}.{tx_c}"
             f"</span>"
-            f"<span style='color:#334155; font-size:14px;'>  →  </span>"
-            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>"
+            f"<span style='color:#334155; font-size:15px;'>  →  </span>"
+            f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{dim_t}.{dim_c}"
             f"</span>"
         )
@@ -379,7 +379,7 @@ class ViewMapping(ScreenBase):
         self._table_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table_view.setShowGrid(False)
         self._table_view.setAlternatingRowColors(False)
-        self._table_view.horizontalHeader().setDefaultSectionSize(120)
+        self._table_view.horizontalHeader().setDefaultSectionSize(140)
         self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self._table_view.horizontalHeader().setStretchLastSection(False)
         self._table_view.verticalHeader().setDefaultSectionSize(34)
@@ -394,9 +394,9 @@ class ViewMapping(ScreenBase):
         return frame
 
     def _build_errors_section(self) -> QFrame:
-        # Fixed height: header 44px + list padding 20px + 5 cards×48px + 4 gaps×6px = 308px
+        # Fixed height: header 44px + list padding 20px + 6 cards×48px + 5 gaps×6px = 382px
         frame = QFrame()
-        frame.setFixedHeight(308)
+        frame.setFixedHeight(382)
         frame.setStyleSheet("QFrame { background: transparent; }")
         self._errors_section_frame = frame
         lay = QVBoxLayout(frame)

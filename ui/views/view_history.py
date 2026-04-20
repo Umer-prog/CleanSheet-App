@@ -120,7 +120,7 @@ class ViewHistory(ScreenBase):
 
         # Left — commit list
         left = QFrame()
-        left.setFixedWidth(340)
+        left.setFixedWidth(380)
         left.setStyleSheet(
             "QFrame { background: #0f1117; border: none; "
             "border-right: 1px solid rgba(255,255,255,0.06); }"

@@ -249,7 +249,7 @@ class Screen0Launcher(ScreenBase):
 
         hero = _HeroFrame(_hero_bg)
         hero.setObjectName("brand_hero")
-        hero.setFixedHeight(200)
+        hero.setFixedHeight(240)
         hero.setStyleSheet(
             "QFrame#brand_hero { background: #13161e; "
             "border-bottom: 1px solid rgba(255,255,255,0.06); }"
@@ -261,9 +261,9 @@ class Screen0Launcher(ScreenBase):
 
         # Logo box — show branding image inside, or initials fallback
         logo_box = QFrame()
-        logo_box.setFixedSize(64, 64)
+        logo_box.setFixedSize(76, 76)
         logo_box.setStyleSheet(
-            "QFrame { background: #2161AC; border-radius: 16px; border: none; }"
+            "QFrame { background: #2161AC; border-radius: 18px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(4, 4, 4, 4)
@@ -277,7 +277,7 @@ class Screen0Launcher(ScreenBase):
             _abs_logo = resource_path(str(_logo_path))
             if _abs_logo.exists():
                 px = QPixmap(str(_abs_logo)).scaled(
-                    52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                    62, 62, Qt.KeepAspectRatio, Qt.SmoothTransformation
                 )
                 logo_lbl.setPixmap(px)
             else:
@@ -303,7 +303,7 @@ class Screen0Launcher(ScreenBase):
         app_name_lbl = QLabel(theme.company_name())
         app_name_lbl.setStyleSheet(
             "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 30px; font-weight: 700; letter-spacing: 0px;"
+            "font-size: 34px; font-weight: 700; letter-spacing: 0px;"
         )
         text_block.addWidget(app_name_lbl)
 
@@ -482,7 +482,7 @@ class Screen0Launcher(ScreenBase):
         inits = _initials(name)
 
         row = QFrame()
-        row.setFixedHeight(60)
+        row.setFixedHeight(66)
         row.setCursor(Qt.PointingHandCursor)
         row.setStyleSheet(
             "QFrame { background: transparent; border: none; "

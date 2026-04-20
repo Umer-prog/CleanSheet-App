@@ -14,7 +14,7 @@ from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_
 from core.project_manager import open_project, save_project_json
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
-_SIDEBAR_W = 260
+_SIDEBAR_W = 300
 
 
 # ── Helper functions (logic unchanged) ────────────────────────────────────────
