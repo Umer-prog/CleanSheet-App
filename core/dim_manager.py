@@ -3,10 +3,12 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.project_paths import active_dim_dir
+
 
 def _dim_path(project_path: Path, dim_table: str) -> Path:
-    """Return the path to a dim table's JSON file."""
-    return Path(project_path) / "data" / "dim" / f"{dim_table}.json"
+    """Return the path to a dim table's JSON file in the active dim directory."""
+    return active_dim_dir(Path(project_path)) / f"{dim_table}.json"
 
 
 def dim_exists(project_path: Path, dim_table: str) -> bool:

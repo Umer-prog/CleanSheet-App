@@ -30,10 +30,10 @@ def commit_title(manifest: dict) -> str:
 
 
 def commit_tables_text(manifest: dict) -> str:
-    tables = manifest.get("tables", {})
+    tables = manifest.get("tables", [])
     if not tables:
         return "(No tables)"
-    return "\n".join(f"  {name}  →  {filename}" for name, filename in tables.items())
+    return "\n".join(f"  {name}" for name in tables)
 
 
 def _btn_ghost(text: str, height: int = 34) -> QPushButton:
@@ -456,8 +456,8 @@ class ViewHistory(ScreenBase):
         self._current_commit_lbl.setVisible(True)
 
         label_val = str(manifest.get("label", "")).strip()
-        tables = manifest.get("tables", {})
-        dim_tables = manifest.get("dim_tables", {})
+        tables = manifest.get("tables", [])
+        dim_tables = manifest.get("dim_tables", [])
         mappings = manifest.get("mappings", [])
 
         lines = [
@@ -467,14 +467,14 @@ class ViewHistory(ScreenBase):
             "",
             f"transactions  ({len(tables)})",
         ]
-        for name, filename in tables.items():
-            lines.append(f"  {name}  →  {filename}")
+        for name in tables:
+            lines.append(f"  {name}")
 
         lines.append("")
         lines.append(f"dimensions  ({len(dim_tables)})")
         if dim_tables:
-            for name, filename in dim_tables.items():
-                lines.append(f"  {name}  →  {filename}")
+            for name in dim_tables:
+                lines.append(f"  {name}")
         else:
             lines.append("  (not captured — legacy commit)")
 

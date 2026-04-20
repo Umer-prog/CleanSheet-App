@@ -16,10 +16,10 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
     # Create all required subdirectories
     try:
         for sub in [
-            "data/transactions",
-            "data/dim",
+            "metadata/data/transactions",
+            "metadata/data/dim",
+            "metadata/mappings",
             "history",
-            "mappings",
         ]:
             (project_path / sub).mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -54,7 +54,7 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
     # Write empty mapping store
     mapping_store = {"mappings": []}
     try:
-        with open(project_path / "mappings" / "mapping_store.json", "w", encoding="utf-8") as f:
+        with open(project_path / "metadata" / "mappings" / "mapping_store.json", "w", encoding="utf-8") as f:
             json.dump(mapping_store, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write mapping_store.json: {e}") from e

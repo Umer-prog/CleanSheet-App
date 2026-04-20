@@ -6,6 +6,7 @@ import pandas as pd
 
 from core.data_loader import load_csv, load_dim_json
 from core.project_manager import open_project
+from core.project_paths import active_dim_dir, active_transactions_dir
 
 
 def _safe_sheet_name(name: str) -> str:
@@ -37,7 +38,7 @@ def export_final_workbook(project_path: Path, file_name: str = "final_updated.xl
     try:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             for table in tx_tables:
-                csv_path = project_path / "data" / "transactions" / f"{table}.csv"
+                csv_path = active_transactions_dir(project_path) / f"{table}.csv"
                 if not csv_path.exists():
                     continue
                 df = load_csv(csv_path)
@@ -45,7 +46,7 @@ def export_final_workbook(project_path: Path, file_name: str = "final_updated.xl
                 written += 1
 
             for table in dim_tables:
-                json_path = project_path / "data" / "dim" / f"{table}.json"
+                json_path = active_dim_dir(project_path) / f"{table}.json"
                 if not json_path.exists():
                     continue
                 df = load_dim_json(json_path)

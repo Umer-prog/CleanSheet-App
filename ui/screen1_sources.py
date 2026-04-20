@@ -486,7 +486,7 @@ class Screen1Sources(ScreenBase):
             "color: #64748b; background: transparent; border: none; "
             "font-size: 14px; font-weight: 500;"
         )
-        sub = QLabel("Click Add File or drag & drop an Excel file here")
+        sub = QLabel("Click Add File to add an Excel file here")
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet(
             "color: #334155; background: transparent; border: none; font-size: 12px;"
@@ -573,7 +573,7 @@ class Screen1Sources(ScreenBase):
             "border-bottom: 1px solid rgba(255,255,255,0.04); }"
         )
         rl = QHBoxLayout(row)
-        rl.setContentsMargins(18, 13, 18, 13)
+        rl.setContentsMargins(18, 16, 18, 16)
         rl.setSpacing(12)
 
         # File icon
@@ -601,12 +601,14 @@ class Screen1Sources(ScreenBase):
         )
         info_col.addWidget(fname)
 
-        badges_row = QHBoxLayout()
-        badges_row.setSpacing(6)
-        badges_row.setAlignment(Qt.AlignLeft)
+        badges_col = QVBoxLayout()
+        badges_col.setSpacing(5)
+        badges_col.setAlignment(Qt.AlignTop)
         for sheet in source.get("sheets", []):
             cat = sheet.get("category", "")
             badge = QLabel(f"{sheet['sheet_name']} · {'T' if cat == 'Transaction' else 'D'}")
+            badge.setSizePolicy(badge.sizePolicy().horizontalPolicy(), badge.sizePolicy().verticalPolicy())
+            badge.setFixedHeight(20)
             if cat == "Transaction":
                 badge.setStyleSheet(
                     "color: #60a5fa; background: rgba(59,130,246,0.1); "
@@ -619,9 +621,8 @@ class Screen1Sources(ScreenBase):
                     "border: 1px solid rgba(34,211,153,0.2); border-radius: 4px; "
                     "font-size: 10px; font-weight: 500; padding: 1px 6px;"
                 )
-            badges_row.addWidget(badge)
-        badges_row.addStretch()
-        info_col.addLayout(badges_row)
+            badges_col.addWidget(badge, 0, Qt.AlignLeft)
+        info_col.addLayout(badges_col)
         rl.addLayout(info_col, 1)
 
         # Remove button
@@ -767,11 +768,11 @@ class Screen1Sources(ScreenBase):
                 table_name = normalize_table_name(sheet["sheet_name"])
                 df = get_sheet_as_dataframe(file_path, sheet["sheet_name"])
                 if sheet["category"] == "Transaction":
-                    save_as_csv(df, self.project_path / "data" / "transactions" / f"{table_name}.csv")
+                    save_as_csv(df, self.project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv")
                     if table_name not in tx_names:
                         tx_names.append(table_name)
                 elif sheet["category"] == "Dimension":
-                    save_as_json(df, self.project_path / "data" / "dim" / f"{table_name}.json")
+                    save_as_json(df, self.project_path / "metadata" / "data" / "dim" / f"{table_name}.json")
                     if table_name not in dim_names:
                         dim_names.append(table_name)
 

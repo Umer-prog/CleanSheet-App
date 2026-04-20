@@ -13,6 +13,7 @@ from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_
 from core.dim_manager import delete_dim_table
 from core.mapping_manager import get_active_dim_tables
 from core.project_manager import save_project_json
+from core.project_paths import active_dim_dir
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -405,7 +406,7 @@ class ViewDSources(ScreenBase):
     def _on_view_table(self, dim_name: str) -> None:
         def worker():
             import pandas as pd
-            path = self.project_path / "data" / "dim" / f"{dim_name}.json"
+            path = active_dim_dir(self.project_path) / f"{dim_name}.json"
             return pd.read_json(path, orient="records")
 
         def on_success(df):
@@ -478,7 +479,7 @@ class ViewDSources(ScreenBase):
 
             def add_worker():
                 df = get_sheet_as_dataframe(excel_path, selected)
-                save_as_json(df, self.project_path / "data" / "dim" / f"{dim_name}.json")
+                save_as_json(df, active_dim_dir(self.project_path) / f"{dim_name}.json")
                 save_project_json(self.project_path, {
                     "project_name": self.project.get("project_name", ""),
                     "created_at": self.project.get("created_at", ""),

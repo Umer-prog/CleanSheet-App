@@ -18,6 +18,7 @@ from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
 from core.final_export_manager import export_final_workbook
 from core.project_manager import save_project_json
+from core.project_paths import active_transactions_dir
 from core.snapshot_manager import create_snapshot
 from core.mapping_manager import get_mappings
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
@@ -35,7 +36,7 @@ def get_valid_dim_values(project_path: Path, dim_table: str, dim_column: str) ->
 def replace_transaction_value(project_path, mapping, row_index, new_value):
     t_table = mapping["transaction_table"]
     t_col = mapping["transaction_column"]
-    csv_path = Path(project_path) / "data" / "transactions" / f"{t_table}.csv"
+    csv_path = active_transactions_dir(project_path) / f"{t_table}.csv"
     df = load_csv(csv_path)
     if t_col not in df.columns:
         raise ValueError(f"Column '{t_col}' not found.")
@@ -48,7 +49,7 @@ def replace_transaction_value(project_path, mapping, row_index, new_value):
 def delete_transaction_row(project_path, mapping, row_index: int) -> None:
     """Delete a single row from the transaction CSV by its 0-based index."""
     t_table = mapping["transaction_table"]
-    csv_path = Path(project_path) / "data" / "transactions" / f"{t_table}.csv"
+    csv_path = active_transactions_dir(project_path) / f"{t_table}.csv"
     df = load_csv(csv_path)
     if row_index < 0 or row_index >= len(df):
         raise IndexError(f"Row index {row_index} out of bounds.")
@@ -59,7 +60,7 @@ def delete_transaction_row(project_path, mapping, row_index: int) -> None:
 def replace_transaction_values_bulk(project_path, mapping, old_value, new_value) -> int:
     t_table = mapping["transaction_table"]
     t_col = mapping["transaction_column"]
-    csv_path = Path(project_path) / "data" / "transactions" / f"{t_table}.csv"
+    csv_path = active_transactions_dir(project_path) / f"{t_table}.csv"
     df = load_csv(csv_path)
     if t_col not in df.columns:
         raise ValueError(f"Column '{t_col}' not found.")
@@ -202,6 +203,7 @@ class ViewMapping(ScreenBase):
         self._selected_error_frame: QFrame | None = None
         self._errors: list[dict] = []
         self._total_errors: int = 0
+        self._visible_total: int = 0
         self._transaction_df: pd.DataFrame | None = None
         self._page_size = 500
         self._current_page = 0
@@ -598,7 +600,7 @@ class ViewMapping(ScreenBase):
 
         def worker():
             csv_path = (
-                self.project_path / "data" / "transactions"
+                active_transactions_dir(self.project_path)
                 / f"{self.mapping['transaction_table']}.csv"
             )
             tx_df = load_csv(csv_path)
@@ -627,6 +629,12 @@ class ViewMapping(ScreenBase):
     # Table view
     # ------------------------------------------------------------------
 
+    def _visible_errors(self) -> list[dict]:
+        """Return self._errors filtered to exclude ignored rows."""
+        ignored_key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
+        ignored = self._ignored_rows.get(ignored_key, set())
+        return [e for e in self._errors if int(e["row_index"]) not in ignored]
+
     def _update_table_view(self) -> None:
         if self._transaction_df is None or self._transaction_df.empty:
             self._table_view.setModel(None)
@@ -642,9 +650,9 @@ class ViewMapping(ScreenBase):
         end = min(start + self._page_size, total_rows)
         page_df = self._transaction_df.iloc[start:end].copy()
 
-        # Build page-local error_rows dict
+        # Build page-local error_rows dict (excluding ignored rows)
         error_rows: dict[int, str] = {}
-        for err in self._errors:
+        for err in self._visible_errors():
             g_idx = int(err["row_index"])
             if start <= g_idx < end:
                 error_rows[g_idx - start] = err["transaction_column"]
@@ -706,10 +714,7 @@ class ViewMapping(ScreenBase):
     def _render_errors(self) -> None:
         clear_layout(self._err_list_layout)
 
-        # Filter out ignored rows before rendering
-        ignored_key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
-        ignored = self._ignored_rows.get(ignored_key, set())
-        visible_errors = [e for e in self._errors if int(e["row_index"]) not in ignored]
+        visible_errors = self._visible_errors()
         visible_total = self._total_errors - (len(self._errors) - len(visible_errors))
         truncated = self._total_errors > len(self._errors)
 
@@ -940,7 +945,9 @@ class ViewMapping(ScreenBase):
                 # else — kept from _select_error
 
     def _refresh_generate_state(self) -> None:
-        if self._errors:
+        visible = self._visible_errors()
+        visible_total = self._total_errors - (len(self._errors) - len(visible))
+        if visible or visible_total > 0:
             self._set_generate_mode(False)
             return
 
@@ -948,8 +955,24 @@ class ViewMapping(ScreenBase):
         token = self._generate_check_token
 
         def worker():
+            import json as _json
             mappings = get_mappings(self.project_path)
-            return not any(detect_errors(self.project_path, m)[1] > 0 for m in mappings)
+            ignored_file = self.project_path / "metadata" / "data" / "ignored_errors.json"
+            try:
+                with open(ignored_file, encoding="utf-8") as fh:
+                    ignored_map = {k: set(v) for k, v in _json.load(fh).items()}
+            except Exception:
+                ignored_map = {}
+            for m in mappings:
+                errors, total = detect_errors(self.project_path, m)
+                if total <= 0:
+                    continue
+                key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
+                ignored = ignored_map.get(key, set())
+                visible = [e for e in errors if int(e["row_index"]) not in ignored]
+                if visible:
+                    return False
+            return True
 
         def on_success(all_clear):
             if token != self._generate_check_token:
@@ -1099,7 +1122,7 @@ class ViewMapping(ScreenBase):
     # ------------------------------------------------------------------
 
     def _ignored_file(self) -> Path:
-        return self.project_path / "data" / "ignored_errors.json"
+        return self.project_path / "metadata" / "data" / "ignored_errors.json"
 
     def _load_ignored(self) -> dict[str, set[int]]:
         import json as _json

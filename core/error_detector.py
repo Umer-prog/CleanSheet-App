@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from core.dim_manager import get_dim_dataframe
+from core.project_paths import active_transactions_dir
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +88,7 @@ def detect_errors(project_path: Path, mapping: dict) -> tuple[list[dict], int]:
     d_table = mapping["dim_table"]
     d_col = mapping["dim_column"]
 
-    t_path = project_path / "data" / "transactions" / f"{t_table}.csv"
+    t_path = active_transactions_dir(project_path) / f"{t_table}.csv"
     if not t_path.exists():
         raise FileNotFoundError(f"Transaction table not found: '{t_table}'")
 

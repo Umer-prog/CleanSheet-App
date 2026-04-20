@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
 
+from core.project_paths import active_mappings_dir
+
 
 def _store_path(project_path: Path) -> Path:
-    """Return the path to mapping_store.json."""
-    return Path(project_path) / "mappings" / "mapping_store.json"
+    """Return the path to the active mapping_store.json."""
+    return active_mappings_dir(Path(project_path)) / "mapping_store.json"
 
 
 def _read_store(project_path: Path) -> dict:
@@ -20,7 +22,7 @@ def _read_store(project_path: Path) -> dict:
 
 
 def _write_store(project_path: Path, store: dict) -> None:
-    """Write store dict to mapping_store.json."""
+    """Write store dict to the active mapping_store.json."""
     path = _store_path(project_path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

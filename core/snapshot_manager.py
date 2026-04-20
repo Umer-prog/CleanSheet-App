@@ -8,22 +8,22 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.project_paths import (
+    active_dim_dir,
+    active_mappings_dir,
+    metadata_transactions_dir,
+)
+
 MAX_COMMITS = 30
 
 
 # ---------------------------------------------------------------------------
-# Hashing helpers
+# Hashing helper (kept for external callers)
 # ---------------------------------------------------------------------------
 
 def hash_dataframe(df: pd.DataFrame) -> str:
     """Return an 8-character MD5 hash of the dataframe's CSV content."""
     content = df.to_csv(index=False).encode()
-    return hashlib.md5(content).hexdigest()[:8]
-
-
-def _hash_json(data) -> str:
-    """Return an 8-character MD5 hash of a JSON-serialisable object."""
-    content = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
     return hashlib.md5(content).hexdigest()[:8]
 
 
@@ -74,57 +74,75 @@ def _next_commit_id(history_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# File writers
+# Commit file I/O
 # ---------------------------------------------------------------------------
 
-def _write_snapshot_files(manifest_dir: Path, tables: dict) -> dict:
-    """Write hashed CSV files for each transaction table. Returns {name: filename}."""
-    table_refs = {}
-    for table_name, df in tables.items():
-        file_hash = hash_dataframe(df)
-        hashed_filename = f"{table_name}_{file_hash}.csv"
-        dest = manifest_dir / hashed_filename
-        try:
-            if not dest.exists():
-                df.to_csv(dest, index=False, encoding="utf-8")
-        except OSError as e:
-            raise OSError(f"Failed to write snapshot file '{hashed_filename}': {e}") from e
-        table_refs[table_name] = hashed_filename
-    return table_refs
-
-
-def _write_dim_snapshot_files(manifest_dir: Path, dim_tables: dict) -> dict:
-    """Write hashed JSON files for each dim table. Returns {name: filename}."""
-    refs = {}
-    for name, records in dim_tables.items():
-        content_hash = _hash_json(records)
-        filename = f"dim_{name}_{content_hash}.json"
-        dest = manifest_dir / filename
-        try:
-            if not dest.exists():
-                with open(dest, "w", encoding="utf-8") as f:
-                    json.dump(records, f, ensure_ascii=False)
-        except OSError as e:
-            raise OSError(f"Failed to write dim snapshot file '{filename}': {e}") from e
-        refs[name] = filename
-    return refs
-
-
-def _write_manifest_json(manifest_dir: Path, manifest_data: dict) -> None:
+def _write_commit_json(commit_dir: Path, commit_data: dict) -> None:
     try:
-        with open(manifest_dir / "manifest.json", "w", encoding="utf-8") as f:
-            json.dump(manifest_data, f, indent=2)
+        with open(commit_dir / "commit.json", "w", encoding="utf-8") as f:
+            json.dump(commit_data, f, indent=2)
     except OSError as e:
-        raise OSError(f"Failed to write manifest.json: {e}") from e
+        raise OSError(f"Failed to write commit.json: {e}") from e
+
+
+def _read_commit_json(commit_dir: Path) -> dict:
+    """Read commit.json (or legacy manifest.json) from a commit folder."""
+    for filename in ("commit.json", "manifest.json"):
+        candidate = commit_dir / filename
+        if candidate.exists():
+            try:
+                with open(candidate, encoding="utf-8") as f:
+                    return json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                raise ValueError(f"Failed to read {filename}: {e}") from e
+    raise FileNotFoundError(f"No commit.json found in {commit_dir}")
 
 
 # ---------------------------------------------------------------------------
-# On-disk data loaders (used when building a snapshot)
+# Per-commit data writers
 # ---------------------------------------------------------------------------
 
-def _load_dim_tables(project_path: Path) -> dict:
-    """Load all dim tables from data/dim/*.json. Returns {name: records list}."""
-    dim_dir = project_path / "data" / "dim"
+def _write_transactions(transactions_dir: Path, tables: dict) -> list[str]:
+    """Write transaction CSVs. Returns list of table names written."""
+    written = []
+    for table_name, df in tables.items():
+        dest = transactions_dir / f"{table_name}.csv"
+        try:
+            df.to_csv(dest, index=False, encoding="utf-8")
+            written.append(table_name)
+        except OSError as e:
+            raise OSError(f"Failed to write transaction '{table_name}': {e}") from e
+    return written
+
+
+def _write_dimensions(dimensions_dir: Path, dim_data: dict) -> list[str]:
+    """Write dimension JSONs. Returns list of dim names written."""
+    written = []
+    for name, records in dim_data.items():
+        dest = dimensions_dir / f"{name}.json"
+        try:
+            with open(dest, "w", encoding="utf-8") as f:
+                json.dump(records, f, ensure_ascii=False)
+            written.append(name)
+        except OSError as e:
+            raise OSError(f"Failed to write dimension '{name}': {e}") from e
+    return written
+
+
+def _write_mappings_to_commit(mappings_dir: Path, mappings: list) -> None:
+    try:
+        with open(mappings_dir / "mapping_store.json", "w", encoding="utf-8") as f:
+            json.dump({"mappings": mappings}, f, indent=2)
+    except OSError as e:
+        raise OSError(f"Failed to write commit mappings: {e}") from e
+
+
+# ---------------------------------------------------------------------------
+# On-disk data loaders
+# ---------------------------------------------------------------------------
+
+def _load_dim_tables_from_dir(dim_dir: Path) -> dict:
+    """Load all dim tables from a directory of *.json files."""
     result: dict = {}
     if not dim_dir.exists():
         return result
@@ -137,9 +155,13 @@ def _load_dim_tables(project_path: Path) -> dict:
     return result
 
 
-def _load_mappings(project_path: Path) -> list:
-    """Load current mappings list from mapping_store.json."""
-    store_path = project_path / "mappings" / "mapping_store.json"
+def _load_dim_tables(project_path: Path) -> dict:
+    """Load dim tables from the currently active dim directory."""
+    return _load_dim_tables_from_dir(active_dim_dir(project_path))
+
+
+def _load_mappings_from_dir(mappings_dir: Path) -> list:
+    store_path = mappings_dir / "mapping_store.json"
     if not store_path.exists():
         return []
     try:
@@ -149,8 +171,11 @@ def _load_mappings(project_path: Path) -> list:
         return []
 
 
+def _load_mappings(project_path: Path) -> list:
+    return _load_mappings_from_dir(active_mappings_dir(project_path))
+
+
 def _load_project_json(project_path: Path) -> dict:
-    """Read project.json. Returns empty dict on failure."""
     path = project_path / "project.json"
     if not path.exists():
         return {}
@@ -174,45 +199,13 @@ def _write_project_json(project_path: Path, data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _prune_old_commits(history_path: Path, max_commits: int = MAX_COMMITS) -> None:
-    """Delete oldest commits beyond max_commits, then clean up orphaned data files."""
+    """Delete the oldest commits beyond max_commits."""
     commits = sorted(
         d for d in history_path.iterdir()
         if d.is_dir() and (d.name.startswith("commit_") or d.name.startswith("manifest_"))
     )
-    # Delete the oldest commits
     for commit_dir in commits[: max(0, len(commits) - max_commits)]:
         shutil.rmtree(commit_dir, ignore_errors=True)
-
-    # Collect all files still referenced by surviving commits
-    referenced: set[Path] = set()
-    for commit_dir in history_path.iterdir():
-        if not commit_dir.is_dir():
-            continue
-        manifest_file = commit_dir / "manifest.json"
-        if not manifest_file.exists():
-            continue
-        try:
-            with open(manifest_file, encoding="utf-8") as f:
-                m = json.load(f)
-            for fname in m.get("tables", {}).values():
-                referenced.add(commit_dir / fname)
-            for fname in m.get("dim_tables", {}).values():
-                referenced.add(commit_dir / fname)
-        except Exception:
-            continue
-
-    # Delete unreferenced data files
-    for commit_dir in history_path.iterdir():
-        if not commit_dir.is_dir():
-            continue
-        for fpath in commit_dir.iterdir():
-            if fpath.name == "manifest.json":
-                continue
-            if fpath not in referenced:
-                try:
-                    fpath.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -224,29 +217,30 @@ def create_snapshot(
     tables: dict,
     label: str = "",
 ) -> str | None:
-    """Save transaction tables and create a history commit capturing the full project state.
+    """Persist transaction data to the live working area and snapshot the full project state.
 
-    The commit captures:
-    - All transaction table data (passed as ``tables``)
-    - All dimension table data (read from disk at commit time)
-    - The full mapping registry (read from disk at commit time)
+    1. Writes transaction CSVs to metadata/data/transactions/ (the live working area).
+    2. Creates a self-contained commit in history/<commit_id>/ with subfolders:
+         transactions/  — transaction table CSVs
+         dimensions/    — dimension table JSONs (copied from metadata/data/dim/)
+         mappings/      — mapping_store.json (copied from metadata/mappings/)
+         ignored/       — ignored rows (reserved for future use)
 
     Returns the new commit_id, or None if history is disabled.
     """
     project_path = Path(project_path)
     settings = _read_settings(project_path)
-    history_enabled = settings.get("history_enabled", True)
 
-    # Always persist transaction data to disk
-    transactions_dir = project_path / "data" / "transactions"
+    # Always write transaction data to the live working area
+    live_tx_dir = project_path / "metadata" / "data" / "transactions"
     try:
-        transactions_dir.mkdir(parents=True, exist_ok=True)
+        live_tx_dir.mkdir(parents=True, exist_ok=True)
         for table_name, df in tables.items():
-            df.to_csv(transactions_dir / f"{table_name}.csv", index=False, encoding="utf-8")
+            df.to_csv(live_tx_dir / f"{table_name}.csv", index=False, encoding="utf-8")
     except OSError as e:
-        raise OSError(f"Failed to update transaction data: {e}") from e
+        raise OSError(f"Failed to update live transaction data: {e}") from e
 
-    if not history_enabled:
+    if not settings.get("history_enabled", True):
         return None
 
     history_path = project_path / "history"
@@ -254,21 +248,26 @@ def create_snapshot(
         history_path.mkdir(parents=True, exist_ok=True)
         commit_id = _next_commit_id(history_path)
         commit_dir = history_path / commit_id
-        commit_dir.mkdir(parents=True, exist_ok=True)
+        for sub in ("transactions", "dimensions", "mappings", "ignored"):
+            (commit_dir / sub).mkdir(parents=True, exist_ok=True)
     except OSError as e:
         raise OSError(f"Failed to create commit folder: {e}") from e
 
-    table_refs = _write_snapshot_files(commit_dir, tables)
+    tx_names = _write_transactions(commit_dir / "transactions", tables)
     dim_data = _load_dim_tables(project_path)
-    dim_refs = _write_dim_snapshot_files(commit_dir, dim_data)
+    dim_names = _write_dimensions(commit_dir / "dimensions", dim_data)
     mappings = _load_mappings(project_path)
+    _write_mappings_to_commit(commit_dir / "mappings", mappings)
 
-    _write_manifest_json(commit_dir, {
+    parent = settings.get("current_manifest")
+
+    _write_commit_json(commit_dir, {
         "manifest_id": commit_id,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "label": label,
-        "tables": table_refs,
-        "dim_tables": dim_refs,
+        "parent": parent,
+        "tables": tx_names,
+        "dim_tables": dim_names,
         "mappings": mappings,
     })
 
@@ -284,8 +283,9 @@ def create_snapshot(
 
 
 def create_initial_commit(project_path: Path) -> str | None:
-    """Create the first commit from existing transaction CSVs if no commits exist yet.
+    """Create the first commit from existing metadata transaction CSVs.
 
+    Reads from metadata/data/transactions/ (the initial setup seed location).
     Safe to call multiple times — does nothing if a commit already exists.
     Returns the new commit_id or None if skipped / history disabled.
     """
@@ -297,7 +297,7 @@ def create_initial_commit(project_path: Path) -> str | None:
     if list_manifests(project_path):
         return None
 
-    transactions_dir = project_path / "data" / "transactions"
+    transactions_dir = metadata_transactions_dir(project_path)
     if not transactions_dir.exists():
         return None
 
@@ -323,16 +323,12 @@ def get_current_commit_id(project_path: Path) -> str | None:
 
 
 def get_manifest(project_path: Path, manifest_id: str) -> dict:
-    """Read and return the manifest.json for the given commit id."""
+    """Read and return the commit data for the given commit id."""
     project_path = Path(project_path)
-    manifest_file = project_path / "history" / manifest_id / "manifest.json"
-    if not manifest_file.exists():
-        raise FileNotFoundError(f"manifest.json not found for '{manifest_id}'")
-    try:
-        with open(manifest_file, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        raise ValueError(f"Failed to read commit '{manifest_id}': {e}") from e
+    commit_dir = project_path / "history" / manifest_id
+    if not commit_dir.exists():
+        raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
+    return _read_commit_json(commit_dir)
 
 
 def list_manifests(project_path: Path) -> list:
@@ -353,106 +349,99 @@ def list_manifests(project_path: Path) -> list:
             continue
         if not (folder.name.startswith("commit_") or folder.name.startswith("manifest_")):
             continue
-        manifest_file = folder / "manifest.json"
-        if not manifest_file.exists():
-            continue
         try:
-            with open(manifest_file, encoding="utf-8") as f:
-                manifests.append(json.load(f))
-        except (OSError, json.JSONDecodeError):
+            manifests.append(_read_commit_json(folder))
+        except Exception:
             continue
     return manifests
 
 
 def get_missing_dim_sources(project_path: Path, manifest_id: str) -> list[str]:
-    """Return dim table names in the manifest that were explicitly deleted from this project.
-
-    Used to warn the user before a revert that some dim sources cannot be restored.
-    """
+    """Return dim table names in the commit that were explicitly deleted from this project."""
     project_path = Path(project_path)
     try:
         manifest = get_manifest(project_path, manifest_id)
     except Exception:
         return []
-    snapshot_dims = set(manifest.get("dim_tables", {}).keys())
+    # dim_tables is now a list of names
+    snapshot_dims = set(manifest.get("dim_tables", []))
     deleted_dims = set(_load_project_json(project_path).get("deleted_dim_tables", []))
     return sorted(snapshot_dims & deleted_dims)
 
 
 def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
-    """Restore the full project state from a commit.
+    """Restore the full project state from a commit into the live working area.
 
-    Restores:
-    - Transaction tables → data/transactions/
-    - Dimension tables   → data/dim/   (skips any explicitly-deleted dim sources)
-    - Mapping registry   → mappings/mapping_store.json
-    - Updates project.json dim_tables and transaction_tables lists
-    - Updates settings.json current_manifest
+    Copies from history/<commit_id>/ back into metadata/:
+      - Transactions → metadata/data/transactions/
+      - Dimensions   → metadata/data/dim/  (skips explicitly-deleted dim sources)
+      - Mappings     → metadata/mappings/mapping_store.json
+    Updates project.json table lists and settings.json current_manifest.
     """
     project_path = Path(project_path)
-    manifest_dir = project_path / "history" / manifest_id
-    if not manifest_dir.exists():
+    commit_dir = project_path / "history" / manifest_id
+    if not commit_dir.exists():
         raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
+
+    tx_commit_dir  = commit_dir / "transactions"
+    dim_commit_dir = commit_dir / "dimensions"
+    map_commit_dir = commit_dir / "mappings"
+
+    if not tx_commit_dir.exists() or not dim_commit_dir.exists():
+        raise FileNotFoundError(
+            f"Commit '{manifest_id}' is missing required subfolders. Cannot revert."
+        )
 
     manifest = get_manifest(project_path, manifest_id)
     project_data = _load_project_json(project_path)
     deleted_dims: set[str] = set(project_data.get("deleted_dim_tables", []))
 
-    transactions_dir = project_path / "data" / "transactions"
-    dim_dir = project_path / "data" / "dim"
-    mappings_dir = project_path / "mappings"
+    tx_tables      = manifest.get("tables", [])
+    all_dim_tables = manifest.get("dim_tables", [])
+    restored_dims  = [d for d in all_dim_tables if d not in deleted_dims]
 
-    # --- Validate all snapshot files exist before touching anything ---
-    for filename in manifest.get("tables", {}).values():
-        src = manifest_dir / filename
+    # Validate all files exist before touching anything
+    for name in tx_tables:
+        src = tx_commit_dir / f"{name}.csv"
         if not src.exists():
-            raise FileNotFoundError(
-                f"Snapshot file missing: '{src}'. Cannot revert '{manifest_id}'."
-            )
-    for table_name, filename in manifest.get("dim_tables", {}).items():
-        if table_name in deleted_dims:
-            continue   # will be skipped — no need to validate
-        src = manifest_dir / filename
+            raise FileNotFoundError(f"Snapshot file missing: '{src}'")
+    for name in restored_dims:
+        src = dim_commit_dir / f"{name}.json"
         if not src.exists():
-            raise FileNotFoundError(
-                f"Dim snapshot file missing: '{src}'. Cannot revert '{manifest_id}'."
-            )
+            raise FileNotFoundError(f"Dim snapshot file missing: '{src}'")
 
-    # --- Restore transaction tables ---
+    # Restore transactions → metadata/data/transactions/
+    live_tx = project_path / "metadata" / "data" / "transactions"
     try:
-        transactions_dir.mkdir(parents=True, exist_ok=True)
-        for table_name, filename in manifest.get("tables", {}).items():
-            shutil.copy2(manifest_dir / filename, transactions_dir / f"{table_name}.csv")
+        live_tx.mkdir(parents=True, exist_ok=True)
+        for name in tx_tables:
+            shutil.copy2(tx_commit_dir / f"{name}.csv", live_tx / f"{name}.csv")
     except OSError as e:
         raise OSError(f"Failed to restore transaction data: {e}") from e
 
-    # --- Restore dim tables (skip explicitly-deleted sources) ---
-    restored_dims: list[str] = []
+    # Restore dimensions → metadata/data/dim/
+    live_dim = project_path / "metadata" / "data" / "dim"
     try:
-        dim_dir.mkdir(parents=True, exist_ok=True)
-        for table_name, filename in manifest.get("dim_tables", {}).items():
-            if table_name in deleted_dims:
-                continue
-            src = manifest_dir / filename
-            shutil.copy2(src, dim_dir / f"{table_name}.json")
-            restored_dims.append(table_name)
+        live_dim.mkdir(parents=True, exist_ok=True)
+        for name in restored_dims:
+            shutil.copy2(dim_commit_dir / f"{name}.json", live_dim / f"{name}.json")
     except OSError as e:
         raise OSError(f"Failed to restore dimension data: {e}") from e
 
-    # --- Restore mapping registry ---
+    # Restore mappings → metadata/mappings/
+    live_map = project_path / "metadata" / "mappings"
     mappings_list = manifest.get("mappings", [])
     try:
-        mappings_dir.mkdir(parents=True, exist_ok=True)
-        with open(mappings_dir / "mapping_store.json", "w", encoding="utf-8") as f:
+        live_map.mkdir(parents=True, exist_ok=True)
+        with open(live_map / "mapping_store.json", "w", encoding="utf-8") as f:
             json.dump({"mappings": mappings_list}, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to restore mappings: {e}") from e
 
-    # --- Update project.json lists to reflect reverted state ---
+    # Update project.json and pointer
     if project_data:
-        project_data["transaction_tables"] = list(manifest.get("tables", {}).keys())
+        project_data["transaction_tables"] = tx_tables
         project_data["dim_tables"] = restored_dims
-        # Preserve deleted_dim_tables — we never un-delete explicitly removed sources
         _write_project_json(project_path, project_data)
 
     settings = _read_settings(project_path)
@@ -463,9 +452,9 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
 def update_manifest_label(project_path: Path, manifest_id: str, label: str) -> None:
     """Update the human-readable label for a commit."""
     project_path = Path(project_path)
-    manifest_dir = project_path / "history" / manifest_id
-    if not manifest_dir.exists():
+    commit_dir = project_path / "history" / manifest_id
+    if not commit_dir.exists():
         raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
     manifest = get_manifest(project_path, manifest_id)
     manifest["label"] = str(label)
-    _write_manifest_json(manifest_dir, manifest)
+    _write_commit_json(commit_dir, manifest)

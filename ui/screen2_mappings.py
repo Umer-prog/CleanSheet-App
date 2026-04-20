@@ -14,6 +14,7 @@ import ui.theme as theme
 from core.data_loader import load_dim_json
 from core.mapping_manager import add_mapping, delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
+from core.project_paths import active_dim_dir, active_transactions_dir
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 260
@@ -748,9 +749,9 @@ class Screen2Mappings(ScreenBase):
     def _do_remove_table(self, table_name: str, kind: str) -> None:
         """Disk-side removal: delete data file, update project.json, purge saved mappings."""
         if kind == "dim":
-            file_path = self.project_path / "data" / "dim" / f"{table_name}.json"
+            file_path = active_dim_dir(self.project_path) / f"{table_name}.json"
         else:
-            file_path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
+            file_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
 
         try:
             if file_path.exists():
@@ -826,11 +827,11 @@ class Screen2Mappings(ScreenBase):
         self._run_background(worker, on_success, on_error)
 
     def _load_dim_columns(self, table_name: str) -> list[str]:
-        path = self.project_path / "data" / "dim" / f"{table_name}.json"
+        path = active_dim_dir(self.project_path) / f"{table_name}.json"
         return list(load_dim_json(path).columns)
 
     def _load_transaction_columns(self, table_name: str) -> list[str]:
-        path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
+        path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
         return [str(c) for c in pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns]
 
     def _compare_column_compatibility(
@@ -844,13 +845,13 @@ class Screen2Mappings(ScreenBase):
           2+ matches, < 60%  → "warning" (soft ask — proceed or change?)
           ≥ 60% match rate   → None      (auto-proceed, no popup)
         """
-        dim_path = self.project_path / "data" / "dim" / f"{dim_table}.json"
+        dim_path = active_dim_dir(self.project_path) / f"{dim_table}.json"
         dim_df = load_dim_json(dim_path)
         if dim_col not in dim_df.columns:
             return None
         dim_vals = [str(v).strip() for v in dim_df[dim_col].dropna() if str(v).strip()]
 
-        tx_path = self.project_path / "data" / "transactions" / f"{tx_table}.csv"
+        tx_path = active_transactions_dir(self.project_path) / f"{tx_table}.csv"
         tx_df = pd.read_csv(tx_path, usecols=[tx_col], dtype=str, encoding="utf-8")
         if tx_col not in tx_df.columns:
             return None

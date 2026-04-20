@@ -9,9 +9,10 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
+from core.project_paths import active_transactions_dir
 from core.snapshot_manager import create_snapshot
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
@@ -314,7 +315,7 @@ class ViewTSources(ScreenBase):
                 return
 
             def delete_worker():
-                csv_path = self.project_path / "data" / "transactions" / f"{table_name}.csv"
+                csv_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
                 if csv_path.exists():
                     csv_path.unlink()
                 delete_mappings_for_table(self.project_path, table_name)
@@ -361,7 +362,6 @@ class ViewTSources(ScreenBase):
 
             def add_worker():
                 df = get_sheet_as_dataframe(excel_path, selected)
-                save_as_csv(df, self.project_path / "data" / "transactions" / f"{table_name}.csv")
                 create_snapshot(self.project_path, {table_name: df}, label=f"Added {table_name}")
                 save_project_json(self.project_path, {
                     "project_name": self.project.get("project_name", ""),
