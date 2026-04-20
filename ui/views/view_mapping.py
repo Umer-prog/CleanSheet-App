@@ -45,6 +45,17 @@ def replace_transaction_value(project_path, mapping, row_index, new_value):
     save_as_csv(df, csv_path)
 
 
+def delete_transaction_row(project_path, mapping, row_index: int) -> None:
+    """Delete a single row from the transaction CSV by its 0-based index."""
+    t_table = mapping["transaction_table"]
+    csv_path = Path(project_path) / "data" / "transactions" / f"{t_table}.csv"
+    df = load_csv(csv_path)
+    if row_index < 0 or row_index >= len(df):
+        raise IndexError(f"Row index {row_index} out of bounds.")
+    df = df.drop(index=row_index).reset_index(drop=True)
+    save_as_csv(df, csv_path)
+
+
 def replace_transaction_values_bulk(project_path, mapping, old_value, new_value) -> int:
     t_table = mapping["transaction_table"]
     t_col = mapping["transaction_column"]
@@ -197,6 +208,7 @@ class ViewMapping(ScreenBase):
         self._generate_mode = False
         self._generate_check_token = 0
         self._col_widths: list[int] = []  # cached after first resize
+        self._ignored_rows: dict[str, set[int]] = {}  # "table.col" -> set of row indices
 
         self._build_ui()
         self._setup_overlay("Loading...")
@@ -380,9 +392,9 @@ class ViewMapping(ScreenBase):
         return frame
 
     def _build_errors_section(self) -> QFrame:
-        # Fixed height: header 44px + list padding 20px + 5 cards×40px + 4 gaps×6px = 288px
+        # Fixed height: header 44px + list padding 20px + 5 cards×48px + 4 gaps×6px = 308px
         frame = QFrame()
-        frame.setFixedHeight(288)
+        frame.setFixedHeight(308)
         frame.setStyleSheet("QFrame { background: transparent; }")
         self._errors_section_frame = frame
         lay = QVBoxLayout(frame)
@@ -580,6 +592,7 @@ class ViewMapping(ScreenBase):
         self._errors = []
         self._current_page = 0
         self._col_widths = []  # force re-measure on next load
+        self._ignored_rows = self._load_ignored()
         self._update_table_view()
         self._show_loading_errors()
 
@@ -692,14 +705,19 @@ class ViewMapping(ScreenBase):
 
     def _render_errors(self) -> None:
         clear_layout(self._err_list_layout)
-        total = self._total_errors
-        truncated = total > len(self._errors)
 
-        # Notify sidebar badge with true total
+        # Filter out ignored rows before rendering
+        ignored_key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
+        ignored = self._ignored_rows.get(ignored_key, set())
+        visible_errors = [e for e in self._errors if int(e["row_index"]) not in ignored]
+        visible_total = self._total_errors - (len(self._errors) - len(visible_errors))
+        truncated = self._total_errors > len(self._errors)
+
+        # Notify sidebar badge with visible count
         if self._on_badge_update and self._nav_key:
-            self._on_badge_update(self._nav_key, total)
+            self._on_badge_update(self._nav_key, max(0, visible_total))
 
-        if total == 0:
+        if not visible_errors and visible_total <= 0:
             # 6A state
             self._no_errors_widget.setVisible(True)
             self._errors_widget.setVisible(False)
@@ -711,12 +729,12 @@ class ViewMapping(ScreenBase):
             self._no_errors_widget.setVisible(False)
             self._errors_widget.setVisible(True)
             self._table_hint_lbl.setVisible(True)
-            self._err_count_badge.setText(f"{total:,} errors")
+            self._err_count_badge.setText(f"{visible_total:,} errors")
             self._err_count_badge.setVisible(True)
-            self._errors_count_lbl.setText(f"{total:,} unresolved")
+            self._errors_count_lbl.setText(f"{visible_total:,} unresolved")
             self._set_generate_mode(False)
 
-            for error in self._errors:
+            for error in visible_errors:
                 row_num = int(error["row_index"]) + 1
                 bad_val = str(error.get("bad_value", ""))
                 col_name = error.get("transaction_column", "")
@@ -726,7 +744,7 @@ class ViewMapping(ScreenBase):
 
             if truncated:
                 notice = QLabel(
-                    f"Showing first {len(self._errors):,} of {total:,} errors. "
+                    f"Showing first {len(self._errors):,} of {self._total_errors:,} errors. "
                     f"Fix these, then refresh to see more."
                 )
                 notice.setWordWrap(True)
@@ -748,10 +766,10 @@ class ViewMapping(ScreenBase):
             "}"
         )
         card.setCursor(Qt.PointingHandCursor)
-        card.setFixedHeight(40)
+        card.setFixedHeight(48)
 
         lay = QHBoxLayout(card)
-        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setContentsMargins(14, 0, 10, 0)
         lay.setSpacing(10)
 
         row_pill = QLabel(f"Row {row_num}")
@@ -792,6 +810,40 @@ class ViewMapping(ScreenBase):
             "border: none;"
         )
         lay.addWidget(tag)
+
+        # --- Ignore button ---
+        ignore_btn = QPushButton("Ignore")
+        ignore_btn.setFixedSize(56, 26)
+        ignore_btn.setCursor(Qt.PointingHandCursor)
+        ignore_btn.setStyleSheet(
+            "QPushButton { "
+            "background: rgba(245,158,11,0.10); "
+            "border: 1px solid rgba(245,158,11,0.25); "
+            "border-radius: 5px; "
+            "color: #fbbf24; font-size: 11px; font-weight: 500; "
+            "padding: 0 6px; "
+            "} "
+            "QPushButton:hover { background: rgba(245,158,11,0.20); }"
+        )
+        ignore_btn.clicked.connect(lambda _=None, err=error: self._on_ignore_error(err))
+        lay.addWidget(ignore_btn)
+
+        # --- Delete button ---
+        delete_btn = QPushButton("Delete")
+        delete_btn.setFixedSize(54, 26)
+        delete_btn.setCursor(Qt.PointingHandCursor)
+        delete_btn.setStyleSheet(
+            "QPushButton { "
+            "background: rgba(239,68,68,0.12); "
+            "border: 1px solid rgba(239,68,68,0.30); "
+            "border-radius: 5px; "
+            "color: #f87171; font-size: 11px; font-weight: 500; "
+            "padding: 0 6px; "
+            "} "
+            "QPushButton:hover { background: rgba(239,68,68,0.22); }"
+        )
+        delete_btn.clicked.connect(lambda _=None, err=error: self._on_delete_error(err))
+        lay.addWidget(delete_btn)
 
         def _click(event=None, err=error, frame=card):
             self._select_error(err, frame)
@@ -1042,6 +1094,93 @@ class ViewMapping(ScreenBase):
             lambda exc: self._set_error(f"Could not load dim columns: {exc}"),
         )
 
+    # ------------------------------------------------------------------
+    # Ignored rows persistence
+    # ------------------------------------------------------------------
+
+    def _ignored_file(self) -> Path:
+        return self.project_path / "data" / "ignored_errors.json"
+
+    def _load_ignored(self) -> dict[str, set[int]]:
+        import json as _json
+        path = self._ignored_file()
+        if not path.exists():
+            return {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw: dict = _json.load(f)
+            return {k: set(v) for k, v in raw.items()}
+        except Exception:
+            return {}
+
+    def _save_ignored(self) -> None:
+        import json as _json
+        path = self._ignored_file()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            serialisable = {k: sorted(v) for k, v in self._ignored_rows.items()}
+            with open(path, "w", encoding="utf-8") as f:
+                _json.dump(serialisable, f, indent=2)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Ignore / Delete error actions
+    # ------------------------------------------------------------------
+
+    def _on_ignore_error(self, error: dict) -> None:
+        row_index = int(error["row_index"])
+        bad_val = str(error.get("bad_value", "")) or "(empty)"
+
+        dlg = _ConfirmPopup(
+            self,
+            title="Ignore This Error?",
+            message=(
+                f"Row {row_index + 1} — value <b>{bad_val}</b> will be hidden from the "
+                f"error list but the data will not change."
+            ),
+            confirm_label="Ignore",
+            accent="#f59e0b",
+            accent_hover="#d97706",
+        )
+        dlg.exec()
+        if not dlg.confirmed:
+            return
+
+        key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
+        self._ignored_rows.setdefault(key, set()).add(row_index)
+        self._save_ignored()
+        self._render_errors()
+
+    def _on_delete_error(self, error: dict) -> None:
+        row_index = int(error["row_index"])
+        bad_val = str(error.get("bad_value", "")) or "(empty)"
+
+        dlg = _ConfirmPopup(
+            self,
+            title="Delete This Row?",
+            message=(
+                f"Row {row_index + 1} — value <b>{bad_val}</b> will be "
+                f"<b>permanently removed</b> from the transaction table. "
+                f"This cannot be undone without reverting to a previous commit."
+            ),
+            confirm_label="Delete",
+            accent="#ef4444",
+            accent_hover="#dc2626",
+        )
+        dlg.exec()
+        if not dlg.confirmed:
+            return
+
+        def worker():
+            delete_transaction_row(self.project_path, self.mapping, row_index)
+
+        self._run_background(
+            worker,
+            lambda _: self._reload_data(),
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete row:\n{exc}"),
+        )
+
     def _on_generate_final_file(self) -> None:
         if not self._generate_mode:
             return
@@ -1148,6 +1287,111 @@ def _table_style() -> str:
         "background: rgba(255,255,255,0.1); border-radius: 3px; "
         "}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Confirm popup (Ignore / Delete warning)
+# ---------------------------------------------------------------------------
+
+class _ConfirmPopup:
+    """Generic dark-themed confirmation dialog used for Ignore and Delete actions."""
+
+    def __init__(
+        self,
+        parent,
+        title: str,
+        message: str,
+        confirm_label: str,
+        accent: str,
+        accent_hover: str,
+    ):
+        from PySide6.QtWidgets import QDialog
+        self._dlg = QDialog(parent)
+        self._dlg.setWindowTitle(title)
+        self._dlg.setFixedSize(480, 220)
+        self._dlg.setModal(True)
+        self.confirmed = False
+
+        outer = QVBoxLayout(self._dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Header
+        header = QFrame()
+        header.setFixedHeight(56)
+        header.setStyleSheet(f"QFrame {{ background-color: {accent}; }}")
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(22, 0, 22, 0)
+        h_lbl = QLabel(title)
+        h_lbl.setStyleSheet(
+            "color: #fff; font-size: 15px; font-weight: 700; "
+            "background: transparent; border: none;"
+        )
+        h_lay.addWidget(h_lbl)
+        outer.addWidget(header)
+
+        # Body
+        body = QFrame()
+        body.setStyleSheet("QFrame { background-color: #13161e; }")
+        b_lay = QVBoxLayout(body)
+        b_lay.setContentsMargins(22, 18, 22, 18)
+        msg_lbl = QLabel(message)
+        msg_lbl.setTextFormat(Qt.RichText)
+        msg_lbl.setWordWrap(True)
+        msg_lbl.setStyleSheet(
+            "color: #cbd5e1; font-size: 13px; "
+            "background: transparent; border: none;"
+        )
+        b_lay.addWidget(msg_lbl)
+        outer.addWidget(body, 1)
+
+        # Footer
+        footer = QFrame()
+        footer.setFixedHeight(60)
+        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(22, 0, 22, 0)
+        f_lay.setSpacing(8)
+        f_lay.addStretch()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.setStyleSheet(
+            "QPushButton { "
+            "background: transparent; "
+            "border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 7px; "
+            "color: #64748b; font-size: 13px; "
+            "padding: 0 18px; "
+            "} "
+            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
+        )
+        cancel_btn.clicked.connect(self._dlg.reject)
+        f_lay.addWidget(cancel_btn)
+
+        confirm_btn = QPushButton(confirm_label)
+        confirm_btn.setFixedHeight(36)
+        confirm_btn.setStyleSheet(
+            f"QPushButton {{ "
+            f"background: {accent}; border: none; border-radius: 7px; "
+            f"color: #fff; font-size: 13px; font-weight: 600; "
+            f"padding: 0 18px; "
+            f"}} "
+            f"QPushButton:hover {{ background: {accent_hover}; }}"
+        )
+        confirm_btn.clicked.connect(self._confirm)
+        f_lay.addWidget(confirm_btn)
+
+        outer.addWidget(footer)
+
+        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
+
+    def _confirm(self) -> None:
+        self.confirmed = True
+        self._dlg.accept()
+
+    def exec(self) -> None:
+        self._dlg.exec()
 
 
 # ---------------------------------------------------------------------------
