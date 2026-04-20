@@ -1,7 +1,7 @@
 {
   "company_name": "CleanSheet",
   "logo_path": "assets/White Color - Icon.svg",
-  "hero_bg": null,
+  "hero_bg": "assets/image.png",
   "color_scheme": {
     "primary":      "#1E6FD8",
     "secondary":    "#EDF3FB",

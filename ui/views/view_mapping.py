@@ -13,10 +13,12 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import load_csv, save_as_csv
+from core.data_loader import load_csv, save_as_csv,get_sheet_as_dataframe
 from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
 from core.final_export_manager import export_final_workbook
+from core.project_manager import save_project_json
+from core.snapshot_manager import create_snapshot
 from core.mapping_manager import get_mappings
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -1044,7 +1046,17 @@ class ViewMapping(ScreenBase):
         if not self._generate_mode:
             return
 
+        # Capture snapshot of the current (error-free) transaction table
+        table_name = self.mapping["transaction_table"]
+        tx_df = self._transaction_df.copy() if self._transaction_df is not None else None
+
         def worker():
+            if tx_df is not None:
+                create_snapshot(
+                    self.project_path,
+                    {table_name: tx_df},
+                    label=f"Generated output — {table_name}",
+                )
             return export_final_workbook(self.project_path)
 
         self._run_background(
