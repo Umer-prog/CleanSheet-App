@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from pathlib import Path
@@ -81,6 +81,7 @@ class Screen1Sources(ScreenBase):
         self.project = project
         self.project_path = Path(project["project_path"])
         self._sources: list[dict] = []
+        self._pending_chain: dict | None = None  # context passed to Screen 1.5
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -427,7 +428,6 @@ class Screen1Sources(ScreenBase):
             f"{existing_count + new_count} file{'s' if (existing_count + new_count) != 1 else ''}"
         )
 
-        # Enable confirm if combined existing + new sources satisfy requirements
         can_confirm = validate_confirm_requirements(
             self._sources,
             existing_tx=tx_tables,
@@ -448,11 +448,9 @@ class Screen1Sources(ScreenBase):
         layout.setSpacing(0)
         layout.setAlignment(Qt.AlignTop)
 
-        # Show already-saved tables first (read-only rows)
         if tx_tables or dim_tables:
             layout.addWidget(self._make_saved_tables_row(tx_tables, dim_tables))
 
-        # Show newly added files (removable)
         for file_index, source in enumerate(self._sources):
             layout.addWidget(self._make_file_row(file_index, source))
 
@@ -508,7 +506,6 @@ class Screen1Sources(ScreenBase):
         rl.setContentsMargins(18, 13, 18, 13)
         rl.setSpacing(12)
 
-        # Saved icon
         file_icon = QFrame()
         file_icon.setFixedSize(32, 32)
         file_icon.setStyleSheet(
@@ -522,7 +519,6 @@ class Screen1Sources(ScreenBase):
         fi_lay.addWidget(fi_lbl)
         rl.addWidget(file_icon)
 
-        # Label + badges
         info_col = QVBoxLayout()
         info_col.setSpacing(4)
 
@@ -572,11 +568,15 @@ class Screen1Sources(ScreenBase):
             "QFrame { background: transparent; border: none; "
             "border-bottom: 1px solid rgba(255,255,255,0.04); }"
         )
-        rl = QHBoxLayout(row)
-        rl.setContentsMargins(18, 16, 18, 16)
-        rl.setSpacing(12)
+        outer = QVBoxLayout(row)
+        outer.setContentsMargins(18, 12, 18, 10)
+        outer.setSpacing(6)
 
-        # File icon
+        # ── File header: icon + filename + Remove ──────────────────
+        hdr_row = QHBoxLayout()
+        hdr_row.setSpacing(12)
+        hdr_row.setContentsMargins(0, 0, 0, 0)
+
         file_icon = QFrame()
         file_icon.setFixedSize(32, 32)
         file_icon.setStyleSheet(
@@ -588,54 +588,124 @@ class Screen1Sources(ScreenBase):
         fi_lbl.setAlignment(Qt.AlignCenter)
         fi_lbl.setStyleSheet("background: transparent; border: none; font-size: 14px;")
         fi_lay.addWidget(fi_lbl)
-        rl.addWidget(file_icon)
-
-        # Filename + sheet badges
-        info_col = QVBoxLayout()
-        info_col.setSpacing(4)
+        hdr_row.addWidget(file_icon)
 
         fname = QLabel(Path(source["file_path"]).name)
         fname.setStyleSheet(
             "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 13px; font-weight: 500;"
         )
-        info_col.addWidget(fname)
+        hdr_row.addWidget(fname, 1)
 
-        badges_col = QVBoxLayout()
-        badges_col.setSpacing(5)
-        badges_col.setAlignment(Qt.AlignTop)
-        for sheet in source.get("sheets", []):
-            cat = sheet.get("category", "")
-            badge = QLabel(f"{sheet['sheet_name']} · {'T' if cat == 'Transaction' else 'D'}")
-            badge.setSizePolicy(badge.sizePolicy().horizontalPolicy(), badge.sizePolicy().verticalPolicy())
-            badge.setFixedHeight(20)
-            if cat == "Transaction":
-                badge.setStyleSheet(
-                    "color: #60a5fa; background: rgba(59,130,246,0.1); "
-                    "border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; "
-                    "font-size: 10px; font-weight: 500; padding: 1px 6px;"
-                )
-            else:
-                badge.setStyleSheet(
-                    "color: #34d399; background: rgba(34,211,153,0.08); "
-                    "border: 1px solid rgba(34,211,153,0.2); border-radius: 4px; "
-                    "font-size: 10px; font-weight: 500; padding: 1px 6px;"
-                )
-            badges_col.addWidget(badge, 0, Qt.AlignLeft)
-        info_col.addLayout(badges_col)
-        rl.addLayout(info_col, 1)
-
-        # Remove button
         rm_btn = QPushButton("Remove")
         rm_btn.setObjectName("btn_danger")
         rm_btn.setFixedHeight(30)
         rm_btn.setFixedWidth(74)
         rm_btn.clicked.connect(lambda _=False, i=file_index: self._on_remove_file(i))
-        rl.addWidget(rm_btn)
+        hdr_row.addWidget(rm_btn)
+
+        outer.addLayout(hdr_row)
+
+        # ── Per-sheet sub-rows ─────────────────────────────────────
+        for si, sheet in enumerate(source.get("sheets", [])):
+            outer.addWidget(self._make_sheet_sub_row(file_index, si, sheet))
 
         return row
 
-    # ── Actions (logic unchanged) ──────────────────────────────────────
+    def _make_sheet_sub_row(self, fi: int, si: int, sheet: dict) -> QFrame:
+        """One horizontal row per sheet: [chain pills] [+]  (stretch)  [×sheet-delete]."""
+        sub = QFrame()
+        sub.setStyleSheet("QFrame { background: transparent; border: none; }")
+        hl = QHBoxLayout(sub)
+        hl.setContentsMargins(44, 2, 0, 2)  # indent to align under filename
+        hl.setSpacing(4)
+
+        is_chained = sheet.get("is_chained", False)
+        chain = sheet.get("chain", [])
+        cat = sheet.get("category", "")
+        type_char = "T" if cat == "Transaction" else "D"
+
+        if is_chained and chain:
+            for ci, entry in enumerate(chain):
+                pill = self._make_pill(f"{entry['sheet_name']} · {type_char}", cat)
+                hl.addWidget(pill)
+
+                link_rm = QPushButton("×")
+                link_rm.setFixedSize(14, 14)
+                link_rm.setCursor(Qt.PointingHandCursor)
+                link_rm.setStyleSheet(
+                    "QPushButton { background: transparent; border: none; "
+                    "color: #4b5563; font-size: 10px; font-weight: 700; padding: 0; }"
+                    "QPushButton:hover { color: #ef4444; }"
+                )
+                link_rm.clicked.connect(
+                    lambda _=False, fi=fi, si=si, ci=ci: self._on_chain_link_remove(fi, si, ci)
+                )
+                hl.addWidget(link_rm)
+
+                if ci < len(chain) - 1:
+                    sep = QLabel("—")
+                    sep.setStyleSheet(
+                        "color: #374151; background: transparent; border: none; "
+                        "font-size: 11px; padding: 0 2px;"
+                    )
+                    hl.addWidget(sep)
+        else:
+            pill = self._make_pill(f"{sheet['sheet_name']} · {type_char}", cat)
+            hl.addWidget(pill)
+
+        # [+] chain add button
+        add_btn = QPushButton("+")
+        add_btn.setFixedSize(20, 20)
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid #3b82f6; "
+            "border-radius: 4px; color: #3b82f6; font-size: 13px; "
+            "font-weight: 600; padding: 0; }"
+            "QPushButton:hover { background: #1e3a5f; }"
+        )
+        add_btn.clicked.connect(lambda _=False, fi=fi, si=si: self._on_chain_add(fi, si))
+        hl.addWidget(add_btn)
+
+        hl.addStretch()
+
+        # Sheet-level delete [×] — larger and more prominent than chain link removes
+        sheet_del = QPushButton("×")
+        sheet_del.setFixedSize(22, 22)
+        sheet_del.setCursor(Qt.PointingHandCursor)
+        sheet_del.setStyleSheet(
+            "QPushButton { background: rgba(239,68,68,0.08); "
+            "border: 1px solid rgba(239,68,68,0.2); "
+            "border-radius: 4px; color: #f87171; font-size: 11px; "
+            "font-weight: 600; padding: 0; }"
+            "QPushButton:hover { background: rgba(239,68,68,0.2); }"
+        )
+        sheet_del.clicked.connect(
+            lambda _=False, fi=fi, si=si: self._on_sheet_delete(fi, si)
+        )
+        hl.addWidget(sheet_del)
+
+        return sub
+
+    def _make_pill(self, text: str, category: str) -> QLabel:
+        """Styled sheet-name badge consistent with existing badge style."""
+        pill = QLabel(text)
+        pill.setFixedHeight(20)
+        if category == "Transaction":
+            pill.setStyleSheet(
+                "color: #60a5fa; background: rgba(59,130,246,0.1); "
+                "border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; "
+                "font-size: 10px; font-weight: 500; padding: 1px 6px;"
+            )
+        else:
+            pill.setStyleSheet(
+                "color: #34d399; background: rgba(34,211,153,0.08); "
+                "border: 1px solid rgba(34,211,153,0.2); border-radius: 4px; "
+                "font-size: 10px; font-weight: 500; padding: 1px 6px;"
+            )
+        return pill
+
+    # ── Actions ───────────────────────────────────────────────────────
 
     def _go_back(self) -> None:
         from ui.screen0_launcher import Screen0Launcher
@@ -663,7 +733,6 @@ class Screen1Sources(ScreenBase):
             return load_excel_sheets(excel_path)
 
         def on_success(sheet_names):
-            # Filter out sheets already saved in the project or added this session
             already_loaded = self._all_known_table_names()
             available = [s for s in sheet_names
                          if normalize_table_name(s) not in already_loaded]
@@ -678,7 +747,6 @@ class Screen1Sources(ScreenBase):
             picked_rows = select_sheets(self, excel_path=excel_path, sheet_names=available)
             if not picked_rows:
                 return
-            # Belt-and-suspenders duplicate check after selection
             existing = self._all_known_table_names()
             duplicates = find_duplicate_table_names(picked_rows, existing_table_names=existing)
             if duplicates:
@@ -691,6 +759,151 @@ class Screen1Sources(ScreenBase):
             QMessageBox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
+
+    def _on_chain_add(self, fi: int, si: int) -> None:
+        """Open file/sheet picker then navigate to Screen 1.5 (Chain Column Mapper)."""
+        self._set_error("")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Excel file to chain", "", "Excel Files (*.xlsx *.xlsm *.xls)"
+        )
+        if not file_path:
+            return
+        excel_path = Path(file_path)
+
+        def worker():
+            return load_excel_sheets(excel_path)
+
+        def on_success(sheet_names):
+            from ui.popups.popup_single_sheet import select_single_sheet
+            picked = select_single_sheet(
+                self, excel_path=excel_path, sheet_names=sheet_names,
+                title="Select Sheet to Chain",
+            )
+            if not picked:
+                return
+
+            sheet = self._sources[fi]["sheets"][si]
+
+            # Guard: same file+sheet as primary
+            if (str(excel_path) == str(self._sources[fi]["file_path"])
+                    and picked == sheet["sheet_name"]):
+                self._set_error("Cannot chain a sheet with itself.")
+                return
+
+            # Guard: duplicate within existing chain
+            for entry in sheet.get("chain", []):
+                if entry["file_path"] == str(excel_path) and entry["sheet_name"] == picked:
+                    self._set_error("This sheet is already in the chain.")
+                    return
+
+            self._pending_chain = {
+                "fi": fi,
+                "si": si,
+                "secondary_file_path": str(excel_path),
+                "secondary_sheet_name": picked,
+                "secondary_label": excel_path.name,
+            }
+            self._launch_chain_mapper()
+
+        def on_error(exc):
+            QMessageBox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
+
+        self._run_background(worker, on_success, on_error)
+
+    def _launch_chain_mapper(self) -> None:
+        """Navigate to Screen 1.5. Replaced by real navigation in Section 4."""
+        ctx = self._pending_chain
+        if ctx is None:
+            return
+        # Section 4 will replace this body with:
+        #   self.app.show_chain_mapper(context=ctx, return_screen=self)
+        # Stub: add the chain entry immediately with null column mapping.
+        self._confirm_chain_entry(ctx, column_mapping=None)
+
+    def _confirm_chain_entry(self, ctx: dict, column_mapping: dict | None) -> None:
+        """Commit a confirmed chain link. Called from Screen 1.5 on Confirm, or the stub."""
+        fi, si = ctx["fi"], ctx["si"]
+        sheet = self._sources[fi]["sheets"][si]
+        chain = list(sheet.get("chain", []))
+
+        if not sheet.get("is_chained", False):
+            # First chain link — create the primary entry (order 0)
+            chain = [{
+                "order": 0,
+                "file_path": str(self._sources[fi]["file_path"]),
+                "sheet_name": sheet["sheet_name"],
+                "label": Path(self._sources[fi]["file_path"]).name,
+                "column_mapping": None,
+            }]
+
+        chain.append({
+            "order": len(chain),
+            "file_path": ctx["secondary_file_path"],
+            "sheet_name": ctx["secondary_sheet_name"],
+            "label": ctx["secondary_label"],
+            "column_mapping": column_mapping,
+        })
+
+        sheet["is_chained"] = True
+        sheet["chain"] = chain
+        self._pending_chain = None
+        self._render_sources()
+
+    def _on_chain_link_remove(self, fi: int, si: int, ci: int) -> None:
+        """Remove one link from the chain after confirmation."""
+        sheet = self._sources[fi]["sheets"][si]
+        chain = list(sheet.get("chain", []))
+        if ci >= len(chain):
+            return
+
+        entry = chain[ci]
+        reply = QMessageBox.question(
+            self,
+            "Remove Chain Link",
+            f"Remove '{entry['sheet_name']}' from the chain?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        chain.pop(ci)
+
+        # If the primary (ci=0) was removed and links remain, promote new primary
+        if ci == 0 and chain:
+            chain[0]["column_mapping"] = None
+
+        # Recompact order indices
+        for idx, e in enumerate(chain):
+            e["order"] = idx
+
+        if len(chain) <= 1:
+            sheet["is_chained"] = False
+            sheet["chain"] = []
+        else:
+            sheet["chain"] = chain
+
+        self._render_sources()
+
+    def _on_sheet_delete(self, fi: int, si: int) -> None:
+        """Remove a sheet entry (and its chain) from _sources after confirmation."""
+        sheet = self._sources[fi]["sheets"][si]
+        reply = QMessageBox.question(
+            self,
+            "Delete Sheet",
+            f"Remove '{sheet['sheet_name']}' from the project?\n\n"
+            "If this sheet has a chain, the entire chain will be discarded.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self._sources[fi]["sheets"].pop(si)
+        if not self._sources[fi]["sheets"]:
+            self._sources.pop(fi)
+
+        self._render_sources()
 
     def _all_known_table_names(self) -> set[str]:
         names = set(self.project.get("transaction_tables", []))
@@ -758,9 +971,11 @@ class Screen1Sources(ScreenBase):
             "company": self.project.get("company", ""),
             "transaction_tables": list(self.project.get("transaction_tables", [])),
             "dim_tables": list(self.project.get("dim_tables", [])),
+            "sheets_meta": dict(self.project.get("sheets_meta", {})),
         }
         tx_names = list(project_data["transaction_tables"])
         dim_names = list(project_data["dim_tables"])
+        sheets_meta = dict(project_data["sheets_meta"])
 
         for source in self._sources:
             file_path = Path(source["file_path"])
@@ -776,6 +991,14 @@ class Screen1Sources(ScreenBase):
                     if table_name not in dim_names:
                         dim_names.append(table_name)
 
+                # Persist chain metadata so Screen 3 can read is_chained flag
+                if sheet.get("is_chained"):
+                    sheets_meta[table_name] = {
+                        "is_chained": True,
+                        "chain": sheet.get("chain", []),
+                    }
+
         project_data["transaction_tables"] = tx_names
         project_data["dim_tables"] = dim_names
+        project_data["sheets_meta"] = sheets_meta
         save_project_json(self.project_path, project_data)
