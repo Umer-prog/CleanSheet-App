@@ -70,15 +70,24 @@ def _build_dim_values(project_path: Path, dim_table: str, dim_column: str) -> se
 MAX_ERRORS = 500  # max error dicts held in memory; total count is always tracked
 
 
-def detect_errors(project_path: Path, mapping: dict) -> tuple[list[dict], int]:
+def detect_errors(
+    project_path: Path,
+    mapping: dict,
+    ignored_values: frozenset[str] | None = None,
+) -> tuple[list[dict], int]:
     """Run error detection for a single mapping against current data on disk.
 
     mapping must contain: transaction_table, transaction_column,
     dim_table, dim_column (as stored in mapping_store.json).
 
+    ignored_values: stripped bad-value strings to skip entirely (value-based
+    ignore).  Rows matching these values are excluded from both errors and
+    total_found so the caller sees an accurate remaining count.
+
     Returns (errors, total_found) where:
       - errors        : up to MAX_ERRORS dicts (row_index, bad_value, …)
-      - total_found   : true count of all bad rows (may exceed len(errors))
+      - total_found   : true count of all bad rows not in ignored_values
+                        (may exceed len(errors))
 
     Uses vectorised pandas isin() so even 100k-row files are fast.
     """
@@ -103,6 +112,7 @@ def detect_errors(project_path: Path, mapping: dict) -> tuple[list[dict], int]:
         raise ValueError(f"Column '{t_col}' not found in transaction table '{t_table}'")
 
     dim_values = _build_dim_values(project_path, d_table, d_col)
+    _ignored = ignored_values or frozenset()
 
     errors: list[dict] = []
     total_found = 0
@@ -123,6 +133,8 @@ def detect_errors(project_path: Path, mapping: dict) -> tuple[list[dict], int]:
             # Vectorised: normalise the whole column in one C-level pass
             col_series = chunk[matched_col].fillna("").astype(str).str.strip()
             bad_mask = ~col_series.isin(dim_values)
+            if _ignored:
+                bad_mask &= ~col_series.isin(_ignored)
 
             # Only iterate over the bad rows (numpy indices, not every row)
             bad_local_positions = bad_mask.values.nonzero()[0]

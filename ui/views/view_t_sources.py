@@ -491,6 +491,17 @@ class ViewTSources(ScreenBase):
 
     def _on_append_chain(self, table_name: str, chain: list[dict]) -> None:
         self._set_error("")
+        reply = msgbox.question(
+            self,
+            "Append to Chain",
+            "Once added, this file cannot be removed individually.\n\n"
+            "To remove it you would have to delete the entire chain, which also removes "
+            "all associated mappings.\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Excel file to append", "", "Excel Files (*.xlsx *.xlsm *.xls)"
         )

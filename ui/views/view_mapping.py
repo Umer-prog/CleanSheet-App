@@ -58,6 +58,26 @@ def delete_transaction_row(project_path, mapping, row_index: int) -> None:
     save_as_csv(df, csv_path)
 
 
+def delete_transaction_rows_bulk(project_path, mapping, bad_value) -> int:
+    """Delete all rows in the transaction CSV where the mapped column matches bad_value."""
+    t_table = mapping["transaction_table"]
+    t_col = mapping["transaction_column"]
+    csv_path = active_transactions_dir(project_path) / f"{t_table}.csv"
+    df = load_csv(csv_path)
+    if t_col not in df.columns:
+        raise ValueError(f"Column '{t_col}' not found.")
+    old_stripped = str(bad_value).strip()
+    if old_stripped == "":
+        mask = df[t_col].isna() | (df[t_col].astype(str).str.strip() == "")
+    else:
+        mask = df[t_col].astype(str).str.strip() == old_stripped
+    count = int(mask.sum())
+    if count:
+        df = df[~mask].reset_index(drop=True)
+        save_as_csv(df, csv_path)
+    return count
+
+
 def replace_transaction_values_bulk(project_path, mapping, old_value, new_value) -> int:
     t_table = mapping["transaction_table"]
     t_col = mapping["transaction_column"]
@@ -211,7 +231,8 @@ class ViewMapping(ScreenBase):
         self._generate_mode = False
         self._generate_check_token = 0
         self._col_widths: list[int] = []  # cached after first resize
-        self._ignored_rows: dict[str, set[int]] = {}  # "table.col" -> set of row indices
+        self._ignored_rows: dict[str, set[int]] = {}
+        self._ignored_values: dict[str, set[str]] = {}  # "table.col" -> set of row indices
 
         self._build_ui()
         self._setup_overlay("Loading...")
@@ -595,9 +616,15 @@ class ViewMapping(ScreenBase):
         self._errors = []
         self._current_page = 0
         self._col_widths = []  # force re-measure on next load
-        self._ignored_rows = self._load_ignored()
+        self._ignored_rows, self._ignored_values = self._load_ignored()
         self._update_table_view()
         self._show_loading_errors()
+
+        # Capture ignored values for this mapping before entering the background thread
+        _ign_key = (
+            f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
+        )
+        _ign_vals = frozenset(self._ignored_values.get(_ign_key, set()))
 
         def worker():
             csv_path = (
@@ -605,7 +632,9 @@ class ViewMapping(ScreenBase):
                 / f"{self.mapping['transaction_table']}.csv"
             )
             tx_df = load_csv(csv_path)
-            errors, total_found = detect_errors(self.project_path, self.mapping)
+            errors, total_found = detect_errors(
+                self.project_path, self.mapping, ignored_values=_ign_vals
+            )
             return tx_df, errors, total_found
 
         def on_success(result):
@@ -631,10 +660,15 @@ class ViewMapping(ScreenBase):
     # ------------------------------------------------------------------
 
     def _visible_errors(self) -> list[dict]:
-        """Return self._errors filtered to exclude ignored rows."""
+        """Return self._errors filtered to exclude ignored rows and ignored values."""
         ignored_key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
-        ignored = self._ignored_rows.get(ignored_key, set())
-        return [e for e in self._errors if int(e["row_index"]) not in ignored]
+        ignored_row_set = self._ignored_rows.get(ignored_key, set())
+        ignored_val_set = self._ignored_values.get(ignored_key, set())
+        return [
+            e for e in self._errors
+            if int(e["row_index"]) not in ignored_row_set
+            and str(e.get("bad_value", "")) not in ignored_val_set
+        ]
 
     def _update_table_view(self) -> None:
         if self._transaction_df is None or self._transaction_df.empty:
@@ -959,18 +993,29 @@ class ViewMapping(ScreenBase):
             import json as _json
             mappings = get_mappings(self.project_path)
             ignored_file = self.project_path / "metadata" / "data" / "ignored_errors.json"
+            ignored_rows_map: dict[str, set[int]] = {}
+            ignored_vals_map: dict[str, set[str]] = {}
             try:
                 with open(ignored_file, encoding="utf-8") as fh:
-                    ignored_map = {k: set(v) for k, v in _json.load(fh).items()}
+                    raw = _json.load(fh)
+                if "rows" in raw or "values" in raw:
+                    ignored_rows_map = {k: set(v) for k, v in raw.get("rows", {}).items()}
+                    ignored_vals_map = {k: set(v) for k, v in raw.get("values", {}).items()}
+                else:
+                    ignored_rows_map = {k: set(v) for k, v in raw.items()}
             except Exception:
-                ignored_map = {}
+                pass
             for m in mappings:
-                errors, total = detect_errors(self.project_path, m)
+                key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
+                ign_vals = frozenset(ignored_vals_map.get(key, set()))
+                errors, total = detect_errors(self.project_path, m, ignored_values=ign_vals)
                 if total <= 0:
                     continue
-                key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
-                ignored = ignored_map.get(key, set())
-                visible = [e for e in errors if int(e["row_index"]) not in ignored]
+                ignored_r = ignored_rows_map.get(key, set())
+                visible = [
+                    e for e in errors
+                    if int(e["row_index"]) not in ignored_r
+                ]
                 if visible:
                     return False
             return True
@@ -1050,7 +1095,9 @@ class ViewMapping(ScreenBase):
                 dlg.exec()
 
             if same_count > 1:
-                dlg = _BulkScopePopup(self, bad_value, same_count, row_index + 1)
+                count_exact = self._total_errors <= len(self._errors)
+                dlg = _BulkScopePopup(self, bad_value, same_count, row_index + 1,
+                                      count_exact=count_exact)
                 dlg.exec()
                 if dlg.choice:
                     open_replace_popup(dlg.choice)
@@ -1125,24 +1172,35 @@ class ViewMapping(ScreenBase):
     def _ignored_file(self) -> Path:
         return self.project_path / "metadata" / "data" / "ignored_errors.json"
 
-    def _load_ignored(self) -> dict[str, set[int]]:
+    def _load_ignored(self) -> tuple[dict[str, set[int]], dict[str, set[str]]]:
         import json as _json
         path = self._ignored_file()
         if not path.exists():
-            return {}
+            return {}, {}
         try:
             with open(path, encoding="utf-8") as f:
                 raw: dict = _json.load(f)
-            return {k: set(v) for k, v in raw.items()}
+            # New format: {"rows": {...}, "values": {...}}
+            # Old format (backward compat): {"table.col": [row_indices...]}
+            if "rows" in raw or "values" in raw:
+                rows = {k: set(v) for k, v in raw.get("rows", {}).items()}
+                values = {k: set(v) for k, v in raw.get("values", {}).items()}
+            else:
+                rows = {k: set(v) for k, v in raw.items()}
+                values = {}
+            return rows, values
         except Exception:
-            return {}
+            return {}, {}
 
     def _save_ignored(self) -> None:
         import json as _json
         path = self._ignored_file()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            serialisable = {k: sorted(v) for k, v in self._ignored_rows.items()}
+            serialisable = {
+                "rows": {k: sorted(v) for k, v in self._ignored_rows.items()},
+                "values": {k: sorted(v) for k, v in self._ignored_values.items()},
+            }
             with open(path, "w", encoding="utf-8") as f:
                 _json.dump(serialisable, f, indent=2)
         except Exception:
@@ -1154,50 +1212,95 @@ class ViewMapping(ScreenBase):
 
     def _on_ignore_error(self, error: dict) -> None:
         row_index = int(error["row_index"])
-        bad_val = str(error.get("bad_value", "")) or "(empty)"
+        bad_val_raw = str(error.get("bad_value", ""))
+        bad_val_display = bad_val_raw or "(empty)"
 
-        dlg = _ConfirmPopup(
-            self,
-            title="Ignore This Error?",
-            message=(
-                f"Row {row_index + 1} — value <b>{bad_val}</b> will be hidden from the "
-                f"error list but the data will not change."
-            ),
-            confirm_label="Ignore",
-            accent="#8190a3",
-            accent_hover="#94a3b8",
-        )
-        dlg.exec()
-        if not dlg.confirmed:
-            return
+        same_errors = [
+            e for e in self._errors
+            if str(e.get("bad_value", "")) == bad_val_raw
+        ]
+
+        if len(same_errors) > 1:
+            count_exact = self._total_errors <= len(self._errors)
+            dlg = _BulkScopePopup(
+                self, bad_val_display, len(same_errors), row_index + 1,
+                verb="Ignore", count_exact=count_exact,
+            )
+            dlg.exec()
+            if not dlg.choice:
+                return
+            scope = dlg.choice
+        else:
+            dlg = _ConfirmPopup(
+                self,
+                title="Ignore This Error?",
+                message=(
+                    f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be hidden "
+                    f"from the error list but the data will not change."
+                ),
+                confirm_label="Ignore",
+                accent="#8190a3",
+                accent_hover="#94a3b8",
+            )
+            dlg.exec()
+            if not dlg.confirmed:
+                return
+            scope = "single"
 
         key = f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
-        self._ignored_rows.setdefault(key, set()).add(row_index)
+        if scope == "all":
+            # Store by value so all occurrences are hidden, even beyond the 500-error cap
+            self._ignored_values.setdefault(key, set()).add(bad_val_raw)
+        else:
+            self._ignored_rows.setdefault(key, set()).add(row_index)
         self._save_ignored()
-        self._render_errors()
+        self._reload_data()
 
     def _on_delete_error(self, error: dict) -> None:
         row_index = int(error["row_index"])
-        bad_val = str(error.get("bad_value", "")) or "(empty)"
+        bad_val_raw = str(error.get("bad_value", ""))
+        bad_val_display = bad_val_raw or "(empty)"
 
-        dlg = _ConfirmPopup(
-            self,
-            title="Delete This Row?",
-            message=(
-                f"Row {row_index + 1} — value <b>{bad_val}</b> will be "
-                f"<b>permanently removed</b> from the transaction table. "
-                f"This cannot be undone without reverting to a previous commit."
-            ),
-            confirm_label="Delete",
-            accent="#ef4444",
-            accent_hover="#dc2626",
-        )
-        dlg.exec()
-        if not dlg.confirmed:
-            return
+        same_errors = [
+            e for e in self._errors
+            if str(e.get("bad_value", "")) == bad_val_raw
+        ]
+
+        if len(same_errors) > 1:
+            count_exact = self._total_errors <= len(self._errors)
+            dlg = _BulkScopePopup(
+                self, bad_val_display, len(same_errors), row_index + 1,
+                verb="Delete", count_exact=count_exact,
+            )
+            dlg.exec()
+            if not dlg.choice:
+                return
+            scope = dlg.choice
+        else:
+            dlg = _ConfirmPopup(
+                self,
+                title="Delete This Row?",
+                message=(
+                    f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be "
+                    f"<b>permanently removed</b> from the transaction table. "
+                    f"This cannot be undone without reverting to a previous commit."
+                ),
+                confirm_label="Delete",
+                accent="#ef4444",
+                accent_hover="#dc2626",
+            )
+            dlg.exec()
+            if not dlg.confirmed:
+                return
+            scope = "single"
 
         def worker():
-            delete_transaction_row(self.project_path, self.mapping, row_index)
+            if scope == "all":
+                delete_transaction_rows_bulk(
+                    self.project_path, self.mapping, bad_value=bad_val_raw
+                )
+            else:
+                delete_transaction_row(self.project_path, self.mapping, row_index)
 
         self._run_background(
             worker,
@@ -1426,7 +1529,8 @@ class _ConfirmPopup:
 class _BulkScopePopup:
     """Ask whether to replace all matching rows or only the selected one."""
 
-    def __init__(self, parent, bad_value: str, total_count: int, selected_row: int):
+    def __init__(self, parent, bad_value: str, total_count: int, selected_row: int,
+                 verb: str = "Replace", count_exact: bool = True):
         from PySide6.QtWidgets import QDialog
         self._dlg = QDialog(parent)
         self._dlg.setWindowTitle("Multiple Occurrences Found")
@@ -1434,6 +1538,8 @@ class _BulkScopePopup:
         self._dlg.setModal(True)
         self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.choice: str | None = None
+
+        count_label = str(total_count) if count_exact else f"at least {total_count}"
 
         outer = QVBoxLayout(self._dlg)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -1455,8 +1561,8 @@ class _BulkScopePopup:
         b_layout.setContentsMargins(24, 20, 24, 20)
         display = bad_value if bad_value else "(empty / null)"
         msg = QLabel(
-            f'The value "{display}" appears on {total_count} rows in this mapping.\n\n'
-            f"Replace all {total_count} rows, or only Row {selected_row}?"
+            f'The value "{display}" appears on {count_label} rows in this mapping.\n\n'
+            f"{verb} all matching rows, or only Row {selected_row}?"
         )
         msg.setStyleSheet(
             "color: #f1f5f9; font-size: 13px; background: transparent; border: none;"
@@ -1473,13 +1579,28 @@ class _BulkScopePopup:
         f_layout.setSpacing(8)
         f_layout.addStretch()
 
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(38)
+        cancel_btn.setStyleSheet(
+            "QPushButton { "
+            "background: transparent; "
+            "border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 7px; "
+            "color: #64748b; font-size: 13px; "
+            "padding: 0 18px; "
+            "} "
+            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
+        )
+        cancel_btn.clicked.connect(self._dlg.reject)
+        f_layout.addWidget(cancel_btn)
+
         single_btn = QPushButton(f"Just Row {selected_row}")
         single_btn.setObjectName("btn_outline")
         single_btn.setFixedHeight(38)
         single_btn.clicked.connect(lambda: self._pick("single"))
         f_layout.addWidget(single_btn)
 
-        all_btn = QPushButton(f"Apply to All  ({total_count} rows)")
+        all_btn = QPushButton(f"{verb} All  ({count_label} rows)")
         all_btn.setObjectName("btn_primary")
         all_btn.setFixedHeight(38)
         all_btn.clicked.connect(lambda: self._pick("all"))
