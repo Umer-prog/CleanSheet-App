@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -38,6 +39,18 @@ def _btn_primary(text: str, height: int = 34) -> QPushButton:
     return b
 
 
+def _btn_ghost(text: str, height: int = 34) -> QPushButton:
+    b = QPushButton(text)
+    b.setFixedHeight(height)
+    b.setStyleSheet(
+        "QPushButton { background: rgba(255,255,255,0.04); "
+        "border: 1px solid rgba(255,255,255,0.09); border-radius: 7px; "
+        "color: #94a3b8; font-size: 12px; padding: 0 14px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.08); color: #cbd5e1; }"
+    )
+    return b
+
+
 class _OrphanDeleteConfirm:
     """Dark-themed confirmation dialog for orphaned dimension table deletion."""
 
@@ -53,7 +66,6 @@ class _OrphanDeleteConfirm:
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Header
         header = QFrame()
         header.setFixedHeight(56)
         header.setStyleSheet("QFrame { background-color: #ef4444; }")
@@ -67,7 +79,6 @@ class _OrphanDeleteConfirm:
         h_lay.addWidget(h_lbl)
         outer.addWidget(header)
 
-        # Body
         body = QFrame()
         body.setStyleSheet("QFrame { background-color: #13161e; }")
         b_lay = QVBoxLayout(body)
@@ -88,7 +99,6 @@ class _OrphanDeleteConfirm:
         b_lay.addWidget(msg)
         outer.addWidget(body, 1)
 
-        # Footer
         footer = QFrame()
         footer.setFixedHeight(60)
         footer.setStyleSheet("QFrame { background-color: #0f1117; }")
@@ -130,12 +140,22 @@ class _OrphanDeleteConfirm:
 class ViewDSources(ScreenBase):
     """Dimension source management view."""
 
-    def __init__(self, parent, project: dict, on_project_changed, on_go_mapping_setup):
+    def __init__(
+        self,
+        parent,
+        project: dict,
+        on_project_changed: Callable,
+        on_go_mapping_setup: Callable,
+        on_go_screen1: Callable,
+        on_chain_append: Callable,
+    ):
         super().__init__(parent)
         self.project = project
         self.project_path = Path(project["project_path"])
         self.on_project_changed = on_project_changed
         self.on_go_mapping_setup = on_go_mapping_setup
+        self._on_go_screen1 = on_go_screen1
+        self._on_chain_append = on_chain_append
         self._orphaned_dims: set[str] = set()
         self._search_text = ""
 
@@ -172,8 +192,8 @@ class ViewDSources(ScreenBase):
         tb_text.addWidget(meta_lbl)
         tb_lay.addLayout(tb_text, 1)
 
-        add_btn = _btn_primary("+ Add Dimension Table")
-        add_btn.clicked.connect(self._on_add_dim_table)
+        add_btn = _btn_primary("+ Add File")
+        add_btn.clicked.connect(self._on_go_screen1)
         tb_lay.addWidget(add_btn)
         outer.addWidget(topbar)
 
@@ -184,7 +204,6 @@ class ViewDSources(ScreenBase):
         c_lay.setContentsMargins(28, 20, 28, 20)
         c_lay.setSpacing(16)
 
-        # Section card
         card = QFrame()
         card.setStyleSheet(
             "QFrame { background: rgba(255,255,255,5); "
@@ -194,7 +213,6 @@ class ViewDSources(ScreenBase):
         card_lay.setContentsMargins(0, 0, 0, 0)
         card_lay.setSpacing(0)
 
-        # Card header
         sc_hdr = QFrame()
         sc_hdr.setFixedHeight(44)
         sc_hdr.setStyleSheet(
@@ -243,7 +261,6 @@ class ViewDSources(ScreenBase):
         sf_lay.addWidget(self._search_bar)
         card_lay.addWidget(search_frame)
 
-        # Rows scroll area
         self._rows_scroll, _, self._rows_layout = make_scroll_area()
         self._rows_layout.setContentsMargins(0, 0, 0, 0)
         self._rows_layout.setSpacing(0)
@@ -269,7 +286,6 @@ class ViewDSources(ScreenBase):
         self._render_rows()
 
     def _load_orphan_state(self) -> None:
-        """Detect which dim tables are orphaned (no mappings), then render."""
         def worker():
             return get_active_dim_tables(self.project_path)
 
@@ -288,21 +304,16 @@ class ViewDSources(ScreenBase):
         clear_layout(self._rows_layout)
         all_dims = list(self.project.get("dim_tables", []))
 
-        # Update count badge (always shows total, not filtered count)
         self._count_lbl.setText(str(len(all_dims)))
         self._count_lbl.setVisible(len(all_dims) > 0)
 
-        # Apply search filter
         if self._search_text:
             dims = [d for d in all_dims if self._search_text in d.lower()]
         else:
             dims = all_dims
 
         if not dims:
-            if self._search_text:
-                msg = f'No tables match "{self._search_text}".'
-            else:
-                msg = "No dimension tables added yet."
+            msg = f'No tables match "{self._search_text}".' if self._search_text else "No dimension tables added yet."
             empty = QLabel(msg)
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
@@ -313,10 +324,17 @@ class ViewDSources(ScreenBase):
             return
 
         for dim in dims:
-            is_orphan = dim in self._orphaned_dims
-            self._rows_layout.addWidget(self._make_source_row(dim, is_orphan))
+            self._rows_layout.addWidget(self._make_source_row(dim))
 
-    def _make_source_row(self, dim_name: str, is_orphan: bool) -> QFrame:
+    def _make_source_row(self, dim_name: str) -> QFrame:
+        sheets_meta = self.project.get("sheets_meta", {})
+        table_meta = sheets_meta.get(dim_name, {})
+        if table_meta.get("is_chained") and table_meta.get("chain"):
+            return self._make_chained_group(dim_name, table_meta["chain"])
+        is_orphan = dim_name in self._orphaned_dims
+        return self._make_unchained_row(dim_name, is_orphan)
+
+    def _make_unchained_row(self, dim_name: str, is_orphan: bool) -> QFrame:
         row = QFrame()
         row.setStyleSheet(
             "QFrame { background: transparent; border: none; "
@@ -326,7 +344,6 @@ class ViewDSources(ScreenBase):
         lay.setContentsMargins(18, 13, 18, 13)
         lay.setSpacing(12)
 
-        # Icon box — amber tint if orphaned, green if active
         icon_color = "rgba(245,158,11,0.10)" if is_orphan else "rgba(34,211,153,0.08)"
         icon_fg = "#fbbf24" if is_orphan else "#34d399"
         icon_box = QFrame()
@@ -344,7 +361,6 @@ class ViewDSources(ScreenBase):
         ib_lay.addWidget(icon_lbl)
         lay.addWidget(icon_box)
 
-        # Name + meta
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
         name_lbl = QLabel(dim_name)
@@ -362,7 +378,6 @@ class ViewDSources(ScreenBase):
         info_col.addWidget(meta_lbl)
         lay.addLayout(info_col, 1)
 
-        # View button (always present)
         view_btn = QPushButton("View")
         view_btn.setFixedHeight(34)
         view_btn.setStyleSheet(
@@ -375,7 +390,6 @@ class ViewDSources(ScreenBase):
         lay.addWidget(view_btn)
 
         if is_orphan:
-            # Delete button — only for orphaned sources
             del_btn = QPushButton("Delete")
             del_btn.setFixedHeight(34)
             del_btn.setStyleSheet(
@@ -387,7 +401,6 @@ class ViewDSources(ScreenBase):
             del_btn.clicked.connect(lambda _=False, n=dim_name: self._on_delete_orphan(n))
             lay.addWidget(del_btn)
         else:
-            # Locked badge — non-orphaned sources cannot be deleted
             locked_lbl = QLabel("Locked")
             locked_lbl.setStyleSheet(
                 "color: #475569; font-size: 11px; "
@@ -399,8 +412,202 @@ class ViewDSources(ScreenBase):
 
         return row
 
+    def _make_chained_group(self, dim_name: str, chain: list[dict]) -> QFrame:
+        group = QFrame()
+        group.setStyleSheet(
+            "QFrame { background: rgba(34,211,153,0.02); border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        g_lay = QVBoxLayout(group)
+        g_lay.setContentsMargins(0, 0, 0, 0)
+        g_lay.setSpacing(0)
+
+        primary_row = QFrame()
+        primary_row.setStyleSheet("QFrame { background: transparent; border: none; }")
+        p_lay = QHBoxLayout(primary_row)
+        p_lay.setContentsMargins(18, 13, 18, 8)
+        p_lay.setSpacing(12)
+
+        icon_box = QFrame()
+        icon_box.setFixedSize(32, 32)
+        icon_box.setStyleSheet(
+            "QFrame { background: rgba(34,211,153,0.12); border-radius: 7px; border: none; }"
+        )
+        ib_lay = QVBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("⛓")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            "color: #34d399; font-size: 13px; background: transparent; border: none;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        p_lay.addWidget(icon_box)
+
+        info_col = QVBoxLayout()
+        info_col.setSpacing(2)
+        name_lbl = QLabel(dim_name)
+        name_lbl.setStyleSheet(
+            "color: #cbd5e1; font-size: 13px; font-weight: 500; "
+            "background: transparent; border: none;"
+        )
+        meta_lbl = QLabel(f"Chained dimension · {len(chain)} source{'s' if len(chain) != 1 else ''}")
+        meta_lbl.setStyleSheet(
+            "color: #34d399; font-size: 11px; background: transparent; border: none;"
+        )
+        info_col.addWidget(name_lbl)
+        info_col.addWidget(meta_lbl)
+        p_lay.addLayout(info_col, 1)
+
+        refresh_btn = _btn_ghost("Refresh")
+        refresh_btn.setFixedWidth(78)
+        p_lay.addWidget(refresh_btn)
+
+        append_btn = _btn_ghost("Append")
+        append_btn.setFixedWidth(78)
+        append_btn.clicked.connect(lambda _=False, n=dim_name, c=chain: self._on_append_chain(n, c))
+        p_lay.addWidget(append_btn)
+
+        del_btn = QPushButton("Delete")
+        del_btn.setFixedHeight(34)
+        del_btn.setFixedWidth(78)
+        del_btn.setStyleSheet(
+            "QPushButton { background: rgba(239,68,68,0.07); "
+            "border: 1px solid rgba(239,68,68,0.2); border-radius: 7px; "
+            "color: #f87171; font-size: 12px; padding: 0 14px; }"
+            "QPushButton:hover { background: rgba(239,68,68,0.14); }"
+        )
+        del_btn.clicked.connect(lambda _=False, n=dim_name, c=chain: self._on_delete_chained(n, c))
+        p_lay.addWidget(del_btn)
+
+        g_lay.addWidget(primary_row)
+
+        for entry in chain:
+            g_lay.addWidget(self._make_chained_sub_row(entry))
+
+        pad = QWidget()
+        pad.setFixedHeight(6)
+        pad.setStyleSheet("background: transparent;")
+        g_lay.addWidget(pad)
+
+        return group
+
+    def _make_chained_sub_row(self, entry: dict) -> QFrame:
+        sub = QFrame()
+        sub.setStyleSheet("QFrame { background: transparent; border: none; }")
+        lay = QHBoxLayout(sub)
+        lay.setContentsMargins(62, 2, 18, 2)
+        lay.setSpacing(6)
+
+        tree_lbl = QLabel("└")
+        tree_lbl.setStyleSheet(
+            "color: #134e2a; font-size: 11px; background: transparent; border: none;"
+        )
+        tree_lbl.setFixedWidth(14)
+        lay.addWidget(tree_lbl)
+
+        label = f"{entry.get('label', '')} · {entry.get('sheet_name', '')}"
+        entry_lbl = QLabel(label)
+        entry_lbl.setStyleSheet(
+            "color: #334155; font-size: 11px; background: transparent; border: none;"
+        )
+        lay.addWidget(entry_lbl, 1)
+
+        return sub
+
     # ------------------------------------------------------------------
-    # Business logic
+    # Append chain (from Screen 3)
+    # ------------------------------------------------------------------
+
+    def _on_append_chain(self, dim_name: str, chain: list[dict]) -> None:
+        self._set_error("")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Excel file to append", "", "Excel Files (*.xlsx *.xlsm *.xls)"
+        )
+        if not file_path:
+            return
+        excel_path = Path(file_path)
+
+        def worker():
+            return load_excel_sheets(excel_path)
+
+        def on_sheets_loaded(sheets):
+            from ui.popups.popup_single_sheet import select_single_sheet
+            picked = select_single_sheet(
+                self, excel_path=excel_path, sheet_names=sheets,
+                title="Select Sheet to Append",
+            )
+            if not picked:
+                return
+
+            primary_entry = chain[0]
+            chain_context = {
+                "return_to": "screen3",
+                "table_name": dim_name,
+                "category": "Dimension",
+                "existing_chain_length": len(chain),
+                "primary_file_path": primary_entry["file_path"],
+                "primary_sheet_name": primary_entry["sheet_name"],
+                "primary_label": primary_entry.get("label", ""),
+                "secondary_file_path": str(excel_path),
+                "secondary_sheet_name": picked,
+                "secondary_label": excel_path.name,
+            }
+            self._on_chain_append(chain_context)
+
+        self._run_background(
+            worker,
+            on_sheets_loaded,
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not read file:\n{exc}"),
+        )
+
+    # ------------------------------------------------------------------
+    # Delete chained source
+    # ------------------------------------------------------------------
+
+    def _on_delete_chained(self, dim_name: str, chain: list[dict]) -> None:
+        self._set_error("")
+        chain_summary = "\n".join(
+            f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
+            for e in chain
+        )
+        reply = QMessageBox.question(
+            self,
+            "Delete Chained Source",
+            f"This will permanently remove the chained dimension '{dim_name}' "
+            f"and ALL its linked sources:\n\n{chain_summary}\n\n"
+            f"All associated mappings will also be removed. This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        def worker():
+            import json as _json
+            from core.mapping_manager import delete_mappings_for_table
+            # Chained dims are stored as CSV (not JSON)
+            csv_path = active_dim_dir(self.project_path) / f"{dim_name}.csv"
+            if csv_path.exists():
+                csv_path.unlink()
+            delete_mappings_for_table(self.project_path, dim_name)
+            proj_file = self.project_path / "project.json"
+            with open(proj_file, encoding="utf-8") as f:
+                proj = _json.load(f)
+            proj["dim_tables"] = [d for d in proj.get("dim_tables", []) if d != dim_name]
+            sheets_meta = proj.get("sheets_meta", {})
+            sheets_meta.pop(dim_name, None)
+            proj["sheets_meta"] = sheets_meta
+            with open(proj_file, "w", encoding="utf-8") as f:
+                _json.dump(proj, f, indent=2)
+
+        self._run_background(
+            worker,
+            lambda _: self.on_project_changed(target_key="d_sources"),
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+        )
+
+    # ------------------------------------------------------------------
+    # Unchained actions (unchanged)
     # ------------------------------------------------------------------
 
     def _on_view_table(self, dim_name: str) -> None:
@@ -421,18 +628,14 @@ class ViewDSources(ScreenBase):
         )
 
     def _on_delete_orphan(self, dim_name: str) -> None:
-        """Show confirmation and permanently delete an orphaned dimension table."""
         dlg = _OrphanDeleteConfirm(self, dim_name)
         dlg.exec()
         if not dlg.confirmed:
             return
 
         def worker():
-            # Delete the JSON data file
-            delete_dim_table(self.project_path, dim_name)
-
-            # Remove from project.json dim_tables and track as deleted
             import json as _json
+            delete_dim_table(self.project_path, dim_name)
             proj_file = self.project_path / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
@@ -454,56 +657,3 @@ class ViewDSources(ScreenBase):
                 self, "Error", f"Could not delete dimension table:\n{exc}"
             ),
         )
-
-    def _on_add_dim_table(self) -> None:
-        self._set_error("")
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Excel file", "", "Excel Files (*.xlsx *.xlsm *.xls)"
-        )
-        if not file_path:
-            return
-        excel_path = Path(file_path)
-
-        def load_sheets_worker():
-            return load_excel_sheets(excel_path)
-
-        def on_sheets_loaded(sheets):
-            from ui.popups.popup_single_sheet import select_single_sheet
-            selected = select_single_sheet(self, excel_path, sheets, title="Select Dimension Sheet")
-            if not selected:
-                return
-            dim_name = normalize_table_name(selected)
-            if has_dim_name_conflict(self.project, dim_name):
-                self._set_error(f"Dimension table already exists: {dim_name}")
-                return
-
-            def add_worker():
-                df = get_sheet_as_dataframe(excel_path, selected)
-                save_as_json(df, active_dim_dir(self.project_path) / f"{dim_name}.json")
-                save_project_json(self.project_path, {
-                    "project_name": self.project.get("project_name", ""),
-                    "created_at": self.project.get("created_at", ""),
-                    "company": self.project.get("company", ""),
-                    "transaction_tables": list(self.project.get("transaction_tables", [])),
-                    "dim_tables": [*self.project.get("dim_tables", []), dim_name],
-                    "deleted_dim_tables": list(self.project.get("deleted_dim_tables", [])),
-                })
-
-            def on_done(_):
-                go_setup = QMessageBox.question(
-                    self, "Mapping Setup", "Go to mapping setup for the new table now?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-                ) == QMessageBox.Yes
-                self.on_project_changed(target_key="d_sources")
-                if go_setup:
-                    self.on_go_mapping_setup()
-
-            self._run_background(add_worker, on_done,
-                                 lambda exc: QMessageBox.critical(
-                                     self, "Error", f"Could not add dimension table:\n{exc}"
-                                 ))
-
-        self._run_background(load_sheets_worker, on_sheets_loaded,
-                             lambda exc: QMessageBox.critical(
-                                 self, "Error", f"Could not read file:\n{exc}"
-                             ))

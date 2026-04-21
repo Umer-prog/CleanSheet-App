@@ -676,6 +676,8 @@ class Screen3Main(QWidget):
                 project=self.project,
                 on_project_changed=self._reload_from_disk,
                 on_go_mapping_setup=self._go_to_mapping_setup,
+                on_go_screen1=self._go_to_screen1,
+                on_chain_append=self._on_chain_append,
             )
         elif item["key"] == "d_sources":
             from ui.views.view_d_sources import ViewDSources
@@ -684,6 +686,8 @@ class Screen3Main(QWidget):
                 project=self.project,
                 on_project_changed=self._reload_from_disk,
                 on_go_mapping_setup=self._go_to_mapping_setup,
+                on_go_screen1=self._go_to_screen1,
+                on_chain_append=self._on_chain_append,
             )
         elif item["key"] == "history":
             from ui.views.view_history import ViewHistory
@@ -723,6 +727,25 @@ class Screen3Main(QWidget):
             return
         self.app.set_current_project(updated)
         self.app.show_screen(Screen2Mappings, project=updated)
+
+    def _go_to_screen1(self) -> None:
+        try:
+            updated = open_project(self.project_path)
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            return
+        self.app.set_current_project(updated)
+        from ui.screen1_sources import Screen1Sources
+        self.app.show_screen(Screen1Sources, project=updated, sources=[])
+
+    def _on_chain_append(self, chain_context: dict) -> None:
+        from ui.screen15_chain_mapper import Screen15ChainMapper
+        self.app.show_screen(
+            Screen15ChainMapper,
+            project=self.project,
+            chain_context=chain_context,
+            sources=[],
+        )
 
     def _go_to_launcher(self) -> None:
         from ui.screen0_launcher import Screen0Launcher

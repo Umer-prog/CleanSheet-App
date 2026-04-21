@@ -687,26 +687,44 @@ class Screen15ChainMapper(ScreenBase):
             self._error_label.setText(msg)
 
     def _on_cancel(self) -> None:
-        from ui.screen1_sources import Screen1Sources
-        self.app.show_screen(Screen1Sources, project=self.project, sources=self._sources)
+        if self._ctx.get("return_to") == "screen3":
+            self._return_to_screen3()
+        else:
+            from ui.screen1_sources import Screen1Sources
+            self.app.show_screen(Screen1Sources, project=self.project, sources=self._sources)
+
+    def _return_to_screen3(self) -> None:
+        from core.project_manager import open_project
+        from ui.screen3_main import Screen3Main
+        try:
+            updated = open_project(Path(self.project["project_path"]))
+        except Exception:
+            updated = self.project
+        self.app.set_current_project(updated)
+        nav_key = "d_sources" if self._ctx.get("category") == "Dimension" else "t_sources"
+        self.app.show_screen(Screen3Main, project=updated, initial_nav_key=nav_key)
 
     def _on_confirm(self) -> None:
         if self._find_duplicates():
             return
 
-        # Build {primary_col: secondary_col} mapping (omit Not Mapped entries)
         column_mapping: dict[str, str] = {
             p: combo.currentText()
             for p, combo in self._mapping_combos
             if combo.currentText() != _NOT_MAPPED
         }
 
+        if self._ctx.get("return_to") == "screen3":
+            self._confirm_screen3(column_mapping)
+        else:
+            self._confirm_screen1(column_mapping)
+
+    def _confirm_screen1(self, column_mapping: dict) -> None:
         fi = self._ctx["fi"]
         si = self._ctx["si"]
         sheet = self._sources[fi]["sheets"][si]
         chain = list(sheet.get("chain", []))
 
-        # Build the primary chain entry (order 0) on first link
         if not sheet.get("is_chained", False):
             chain = [{
                 "order": 0,
@@ -729,3 +747,55 @@ class Screen15ChainMapper(ScreenBase):
 
         from ui.screen1_sources import Screen1Sources
         self.app.show_screen(Screen1Sources, project=self.project, sources=self._sources)
+
+    def _confirm_screen3(self, column_mapping: dict) -> None:
+        import json as _json
+        table_name = self._ctx["table_name"]
+        category = self._ctx["category"]
+        project_path = Path(self.project["project_path"])
+
+        new_entry = {
+            "order": self._ctx["existing_chain_length"],
+            "file_path": self._ctx["secondary_file_path"],
+            "sheet_name": self._ctx["secondary_sheet_name"],
+            "label": self._ctx["secondary_label"],
+            "column_mapping": column_mapping or None,
+        }
+
+        if self._confirm_btn:
+            self._confirm_btn.setEnabled(False)
+
+        def worker():
+            from core.project_manager import open_project
+            from core.chain_writer import write_unified_csv
+            proj_file = project_path / "project.json"
+            with open(proj_file, encoding="utf-8") as f:
+                proj = _json.load(f)
+            sheets_meta = proj.get("sheets_meta", {})
+            table_meta = dict(sheets_meta.get(table_name, {}))
+            chain = list(table_meta.get("chain", []))
+            chain.append(new_entry)
+            for i, e in enumerate(chain):
+                e["order"] = i
+            table_meta["chain"] = chain
+            table_meta["is_chained"] = True
+            sheets_meta[table_name] = table_meta
+            proj["sheets_meta"] = sheets_meta
+            with open(proj_file, "w", encoding="utf-8") as f:
+                _json.dump(proj, f, indent=2)
+            write_unified_csv(project_path, table_name, category, table_meta)
+            return open_project(project_path)
+
+        def on_done(updated_project):
+            self.app.set_current_project(updated_project)
+            from ui.screen3_main import Screen3Main
+            nav_key = "d_sources" if category == "Dimension" else "t_sources"
+            self.app.show_screen(Screen3Main, project=updated_project, initial_nav_key=nav_key)
+
+        def on_error(exc):
+            if self._error_label:
+                self._error_label.setText(f"Save failed: {exc}")
+            if self._confirm_btn:
+                self._confirm_btn.setEnabled(True)
+
+        self._run_background(worker, on_done, on_error)

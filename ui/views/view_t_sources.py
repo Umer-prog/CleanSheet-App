@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -9,11 +10,12 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
+from core.data_loader import load_excel_sheets
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_transactions_dir
 from core.snapshot_manager import create_snapshot
+from core.data_loader import get_sheet_as_dataframe
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -74,12 +76,22 @@ def _btn_danger(text: str, height: int = 34) -> QPushButton:
 class ViewTSources(ScreenBase):
     """Transaction source management view."""
 
-    def __init__(self, parent, project: dict, on_project_changed, on_go_mapping_setup):
+    def __init__(
+        self,
+        parent,
+        project: dict,
+        on_project_changed: Callable,
+        on_go_mapping_setup: Callable,
+        on_go_screen1: Callable,
+        on_chain_append: Callable,
+    ):
         super().__init__(parent)
         self.project = project
         self.project_path = Path(project["project_path"])
         self.on_project_changed = on_project_changed
         self.on_go_mapping_setup = on_go_mapping_setup
+        self._on_go_screen1 = on_go_screen1
+        self._on_chain_append = on_chain_append
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -114,8 +126,8 @@ class ViewTSources(ScreenBase):
         tb_text.addWidget(meta_lbl)
         tb_lay.addLayout(tb_text, 1)
 
-        add_btn = _btn_primary("+ Add Transaction Table")
-        add_btn.clicked.connect(self._on_add_transaction_table)
+        add_btn = _btn_primary("+ Add File")
+        add_btn.clicked.connect(self._on_go_screen1)
         tb_lay.addWidget(add_btn)
         outer.addWidget(topbar)
 
@@ -204,6 +216,13 @@ class ViewTSources(ScreenBase):
             self._rows_layout.addWidget(self._make_source_row(table))
 
     def _make_source_row(self, table_name: str) -> QFrame:
+        sheets_meta = self.project.get("sheets_meta", {})
+        table_meta = sheets_meta.get(table_name, {})
+        if table_meta.get("is_chained") and table_meta.get("chain"):
+            return self._make_chained_group(table_name, table_meta["chain"])
+        return self._make_unchained_row(table_name)
+
+    def _make_unchained_row(self, table_name: str) -> QFrame:
         row = QFrame()
         row.setStyleSheet(
             "QFrame { background: transparent; border: none; "
@@ -213,7 +232,6 @@ class ViewTSources(ScreenBase):
         lay.setContentsMargins(18, 13, 18, 13)
         lay.setSpacing(12)
 
-        # Icon box
         icon_box = QFrame()
         icon_box.setFixedSize(32, 32)
         icon_box.setStyleSheet(
@@ -229,7 +247,6 @@ class ViewTSources(ScreenBase):
         ib_lay.addWidget(icon_lbl)
         lay.addWidget(icon_box)
 
-        # Name + meta
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
         name_lbl = QLabel(table_name)
@@ -245,7 +262,6 @@ class ViewTSources(ScreenBase):
         info_col.addWidget(meta_lbl)
         lay.addLayout(info_col, 1)
 
-        # Actions
         upload_btn = _btn_ghost("Upload New Version")
         upload_btn.clicked.connect(lambda _=False, t=table_name: self._on_upload_new_version(t))
         lay.addWidget(upload_btn)
@@ -257,8 +273,200 @@ class ViewTSources(ScreenBase):
 
         return row
 
+    def _make_chained_group(self, table_name: str, chain: list[dict]) -> QFrame:
+        """Grouped display: primary row with buttons + indented read-only sub-rows."""
+        group = QFrame()
+        group.setStyleSheet(
+            "QFrame { background: rgba(59,130,246,0.02); border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
+        )
+        g_lay = QVBoxLayout(group)
+        g_lay.setContentsMargins(0, 0, 0, 0)
+        g_lay.setSpacing(0)
+
+        # ── Primary row ──────────────────────────────────────────────
+        primary_row = QFrame()
+        primary_row.setStyleSheet("QFrame { background: transparent; border: none; }")
+        p_lay = QHBoxLayout(primary_row)
+        p_lay.setContentsMargins(18, 13, 18, 8)
+        p_lay.setSpacing(12)
+
+        icon_box = QFrame()
+        icon_box.setFixedSize(32, 32)
+        icon_box.setStyleSheet(
+            "QFrame { background: rgba(59,130,246,0.15); border-radius: 7px; border: none; }"
+        )
+        ib_lay = QVBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("⛓")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            "color: #60a5fa; font-size: 13px; background: transparent; border: none;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        p_lay.addWidget(icon_box)
+
+        info_col = QVBoxLayout()
+        info_col.setSpacing(2)
+        name_lbl = QLabel(table_name)
+        name_lbl.setStyleSheet(
+            "color: #cbd5e1; font-size: 13px; font-weight: 500; "
+            "background: transparent; border: none;"
+        )
+        meta_lbl = QLabel(f"Chained transaction · {len(chain)} source{'s' if len(chain) != 1 else ''}")
+        meta_lbl.setStyleSheet(
+            "color: #3b82f6; font-size: 11px; background: transparent; border: none;"
+        )
+        info_col.addWidget(name_lbl)
+        info_col.addWidget(meta_lbl)
+        p_lay.addLayout(info_col, 1)
+
+        refresh_btn = _btn_ghost("Refresh")
+        refresh_btn.setFixedWidth(78)
+        p_lay.addWidget(refresh_btn)
+
+        append_btn = _btn_ghost("Append")
+        append_btn.setFixedWidth(78)
+        append_btn.clicked.connect(lambda _=False, t=table_name, c=chain: self._on_append_chain(t, c))
+        p_lay.addWidget(append_btn)
+
+        del_btn = _btn_danger("Delete")
+        del_btn.setFixedWidth(78)
+        del_btn.clicked.connect(lambda _=False, t=table_name, c=chain: self._on_delete_chained(t, c))
+        p_lay.addWidget(del_btn)
+
+        g_lay.addWidget(primary_row)
+
+        # ── Sub-rows (read-only) ─────────────────────────────────────
+        for entry in chain:
+            sub = self._make_chained_sub_row(entry)
+            g_lay.addWidget(sub)
+
+        # Bottom padding
+        pad = QWidget()
+        pad.setFixedHeight(6)
+        pad.setStyleSheet("background: transparent;")
+        g_lay.addWidget(pad)
+
+        return group
+
+    def _make_chained_sub_row(self, entry: dict) -> QFrame:
+        sub = QFrame()
+        sub.setStyleSheet("QFrame { background: transparent; border: none; }")
+        lay = QHBoxLayout(sub)
+        lay.setContentsMargins(62, 2, 18, 2)
+        lay.setSpacing(6)
+
+        tree_lbl = QLabel("└")
+        tree_lbl.setStyleSheet(
+            "color: #1e3a5f; font-size: 11px; background: transparent; border: none;"
+        )
+        tree_lbl.setFixedWidth(14)
+        lay.addWidget(tree_lbl)
+
+        label = f"{entry.get('label', '')} · {entry.get('sheet_name', '')}"
+        entry_lbl = QLabel(label)
+        entry_lbl.setStyleSheet(
+            "color: #334155; font-size: 11px; background: transparent; border: none;"
+        )
+        lay.addWidget(entry_lbl, 1)
+
+        return sub
+
     # ------------------------------------------------------------------
-    # Business logic (unchanged)
+    # Append chain (from Screen 3)
+    # ------------------------------------------------------------------
+
+    def _on_append_chain(self, table_name: str, chain: list[dict]) -> None:
+        self._set_error("")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Excel file to append", "", "Excel Files (*.xlsx *.xlsm *.xls)"
+        )
+        if not file_path:
+            return
+        excel_path = Path(file_path)
+
+        def worker():
+            return load_excel_sheets(excel_path)
+
+        def on_sheets_loaded(sheets):
+            from ui.popups.popup_single_sheet import select_single_sheet
+            picked = select_single_sheet(
+                self, excel_path=excel_path, sheet_names=sheets,
+                title="Select Sheet to Append",
+            )
+            if not picked:
+                return
+
+            primary_entry = chain[0]
+            chain_context = {
+                "return_to": "screen3",
+                "table_name": table_name,
+                "category": "Transaction",
+                "existing_chain_length": len(chain),
+                "primary_file_path": primary_entry["file_path"],
+                "primary_sheet_name": primary_entry["sheet_name"],
+                "primary_label": primary_entry.get("label", ""),
+                "secondary_file_path": str(excel_path),
+                "secondary_sheet_name": picked,
+                "secondary_label": excel_path.name,
+            }
+            self._on_chain_append(chain_context)
+
+        self._run_background(
+            worker,
+            on_sheets_loaded,
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not read file:\n{exc}"),
+        )
+
+    # ------------------------------------------------------------------
+    # Delete chained source
+    # ------------------------------------------------------------------
+
+    def _on_delete_chained(self, table_name: str, chain: list[dict]) -> None:
+        self._set_error("")
+        chain_summary = "\n".join(
+            f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
+            for e in chain
+        )
+        reply = QMessageBox.question(
+            self,
+            "Delete Chained Source",
+            f"This will permanently remove the chained table '{table_name}' "
+            f"and ALL its linked sources:\n\n{chain_summary}\n\n"
+            f"All associated mappings will also be removed. This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        def worker():
+            import json as _json
+            csv_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
+            if csv_path.exists():
+                csv_path.unlink()
+            delete_mappings_for_table(self.project_path, table_name)
+            proj_file = self.project_path / "project.json"
+            with open(proj_file, encoding="utf-8") as f:
+                proj = _json.load(f)
+            proj["transaction_tables"] = [
+                t for t in proj.get("transaction_tables", []) if t != table_name
+            ]
+            sheets_meta = proj.get("sheets_meta", {})
+            sheets_meta.pop(table_name, None)
+            proj["sheets_meta"] = sheets_meta
+            with open(proj_file, "w", encoding="utf-8") as f:
+                _json.dump(proj, f, indent=2)
+
+        self._run_background(
+            worker,
+            lambda _: self.on_project_changed(target_key="t_sources"),
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+        )
+
+    # ------------------------------------------------------------------
+    # Unchained actions (unchanged)
     # ------------------------------------------------------------------
 
     def _on_upload_new_version(self, table_name: str) -> None:
@@ -337,55 +545,3 @@ class ViewTSources(ScreenBase):
 
         self._run_background(load_mappings_worker, on_mappings_loaded,
                              lambda exc: self._set_error(f"Could not read mappings: {exc}"))
-
-    def _on_add_transaction_table(self) -> None:
-        self._set_error("")
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Excel file", "", "Excel Files (*.xlsx *.xlsm *.xls)"
-        )
-        if not file_path:
-            return
-        excel_path = Path(file_path)
-
-        def load_sheets_worker():
-            return load_excel_sheets(excel_path)
-
-        def on_sheets_loaded(sheets):
-            from ui.popups.popup_single_sheet import select_single_sheet
-            selected = select_single_sheet(self, excel_path, sheets, title="Select Transaction Sheet")
-            if not selected:
-                return
-            table_name = normalize_table_name(selected)
-            if has_table_name_conflict(self.project, table_name):
-                self._set_error(f"Table name already exists: {table_name}")
-                return
-
-            def add_worker():
-                df = get_sheet_as_dataframe(excel_path, selected)
-                create_snapshot(self.project_path, {table_name: df}, label=f"Added {table_name}")
-                save_project_json(self.project_path, {
-                    "project_name": self.project.get("project_name", ""),
-                    "created_at": self.project.get("created_at", ""),
-                    "company": self.project.get("company", ""),
-                    "transaction_tables": [*self.project.get("transaction_tables", []), table_name],
-                    "dim_tables": list(self.project.get("dim_tables", [])),
-                })
-
-            def on_done(_):
-                go_setup = QMessageBox.question(
-                    self, "Mapping Setup", "Go to mapping setup for the new table now?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-                ) == QMessageBox.Yes
-                self.on_project_changed(target_key="t_sources")
-                if go_setup:
-                    self.on_go_mapping_setup()
-
-            self._run_background(add_worker, on_done,
-                                 lambda exc: QMessageBox.critical(
-                                     self, "Error", f"Could not add table:\n{exc}"
-                                 ))
-
-        self._run_background(load_sheets_worker, on_sheets_loaded,
-                             lambda exc: QMessageBox.critical(
-                                 self, "Error", f"Could not read file:\n{exc}"
-                             ))
