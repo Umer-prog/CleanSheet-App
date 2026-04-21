@@ -10,12 +10,11 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import load_excel_sheets
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_transactions_dir
 from core.snapshot_manager import create_snapshot
-from core.data_loader import get_sheet_as_dataframe
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -125,6 +124,10 @@ class ViewTSources(ScreenBase):
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
         tb_lay.addLayout(tb_text, 1)
+
+        refresh_all_btn = _btn_ghost("↻ Refresh All")
+        refresh_all_btn.clicked.connect(self._on_refresh_all)
+        tb_lay.addWidget(refresh_all_btn)
 
         add_btn = _btn_primary("+ Add File")
         add_btn.clicked.connect(self._on_go_screen1)
@@ -266,6 +269,11 @@ class ViewTSources(ScreenBase):
         upload_btn.clicked.connect(lambda _=False, t=table_name: self._on_upload_new_version(t))
         lay.addWidget(upload_btn)
 
+        refresh_btn = _btn_ghost("Refresh")
+        refresh_btn.setFixedWidth(84)
+        refresh_btn.clicked.connect(lambda _=False, t=table_name: self._refresh_table(t))
+        lay.addWidget(refresh_btn)
+
         del_btn = _btn_danger("Delete")
         del_btn.setFixedWidth(80)
         del_btn.clicked.connect(lambda _=False, t=table_name: self._on_delete_table(t))
@@ -323,6 +331,7 @@ class ViewTSources(ScreenBase):
 
         refresh_btn = _btn_ghost("Refresh")
         refresh_btn.setFixedWidth(78)
+        refresh_btn.clicked.connect(lambda _=False, t=table_name: self._refresh_table(t))
         p_lay.addWidget(refresh_btn)
 
         append_btn = _btn_ghost("Append")
@@ -372,6 +381,107 @@ class ViewTSources(ScreenBase):
         lay.addWidget(entry_lbl, 1)
 
         return sub
+
+    # ------------------------------------------------------------------
+    # Refresh (individual and global)
+    # ------------------------------------------------------------------
+
+    def _refresh_table(self, table_name: str) -> None:
+        self._set_error("")
+        sheets_meta = self.project.get("sheets_meta", {})
+        meta = sheets_meta.get(table_name, {})
+        if not meta:
+            self._set_error(
+                f"No source path stored for '{table_name}'. Use 'Upload New Version' instead."
+            )
+            return
+        if meta.get("is_chained") and meta.get("chain"):
+            self._refresh_chained(table_name, meta)
+        else:
+            file_path = meta.get("file_path", "")
+            sheet_name = meta.get("sheet_name", "")
+            if not file_path or not sheet_name:
+                self._set_error(
+                    f"No source path stored for '{table_name}'. Use 'Upload New Version' instead."
+                )
+                return
+            self._refresh_unchained(table_name, file_path, sheet_name)
+
+    def _refresh_unchained(self, table_name: str, file_path: str, sheet_name: str) -> None:
+        excel_path = Path(file_path)
+        if not excel_path.exists():
+            self._set_error(f"Source file not found: {file_path}")
+            return
+
+        def worker():
+            df = get_sheet_as_dataframe(excel_path, sheet_name)
+            create_snapshot(self.project_path, {table_name: df}, label=f"Refreshed {table_name}")
+
+        def on_done(_):
+            self._set_error("")
+            self.on_project_changed(target_key="t_sources")
+
+        self._run_background(
+            worker,
+            on_done,
+            lambda exc: self._set_error(f"Refresh failed for '{table_name}': {exc}"),
+        )
+
+    def _refresh_chained(self, table_name: str, meta: dict) -> None:
+        chain = meta.get("chain", [])
+        missing = [e["file_path"] for e in chain if not Path(e["file_path"]).exists()]
+        if missing:
+            self._set_error(f"Source file(s) not found: {', '.join(missing)}")
+            return
+
+        def worker():
+            from core.chain_writer import write_unified_csv
+            write_unified_csv(self.project_path, table_name, "Transaction", meta)
+
+        def on_done(_):
+            self._set_error("")
+            self.on_project_changed(target_key="t_sources")
+
+        self._run_background(
+            worker,
+            on_done,
+            lambda exc: self._set_error(f"Refresh failed for '{table_name}': {exc}"),
+        )
+
+    def _on_refresh_all(self) -> None:
+        self._set_error("")
+        tables = list(self.project.get("transaction_tables", []))
+        sheets_meta = self.project.get("sheets_meta", {})
+        project_path = self.project_path
+
+        def worker():
+            from core.chain_writer import write_unified_csv
+            errors: list[str] = []
+            for table_name in tables:
+                meta = sheets_meta.get(table_name, {})
+                try:
+                    if meta.get("is_chained") and meta.get("chain"):
+                        write_unified_csv(project_path, table_name, "Transaction", meta)
+                    elif meta.get("file_path") and meta.get("sheet_name"):
+                        excel_path = Path(meta["file_path"])
+                        df = get_sheet_as_dataframe(excel_path, meta["sheet_name"])
+                        create_snapshot(project_path, {table_name: df}, label=f"Refreshed {table_name}")
+                    else:
+                        errors.append(f"{table_name} (no source path stored)")
+                except Exception as exc:
+                    errors.append(f"{table_name}: {exc}")
+            return errors
+
+        def on_done(errors: list[str]) -> None:
+            if errors:
+                self._set_error("Refresh issues: " + " | ".join(errors))
+            self.on_project_changed(target_key="t_sources")
+
+        self._run_background(
+            worker,
+            on_done,
+            lambda exc: self._set_error(f"Refresh all failed: {exc}"),
+        )
 
     # ------------------------------------------------------------------
     # Append chain (from Screen 3)

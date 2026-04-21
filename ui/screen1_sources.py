@@ -1001,6 +1001,13 @@ class Screen1Sources(ScreenBase):
                             df,
                             self.project_path / "metadata" / "data" / "dim" / f"{table_name}.json",
                         )
+                    # Store source path so Refresh can re-read from the same file later
+                    sheets_meta[table_name] = {
+                        "is_chained": False,
+                        "file_path": str(file_path),
+                        "sheet_name": sheet["sheet_name"],
+                        "category": category,
+                    }
 
                 if category == "Transaction" and table_name not in tx_names:
                     tx_names.append(table_name)

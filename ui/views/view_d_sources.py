@@ -458,10 +458,6 @@ class ViewDSources(ScreenBase):
         info_col.addWidget(meta_lbl)
         p_lay.addLayout(info_col, 1)
 
-        refresh_btn = _btn_ghost("Refresh")
-        refresh_btn.setFixedWidth(78)
-        p_lay.addWidget(refresh_btn)
-
         append_btn = _btn_ghost("Append")
         append_btn.setFixedWidth(78)
         append_btn.clicked.connect(lambda _=False, n=dim_name, c=chain: self._on_append_chain(n, c))
