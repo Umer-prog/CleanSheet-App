@@ -61,7 +61,7 @@ def write_unified_csv(
                 extra_cols.append(col)
                 seen_extra.add(col)
 
-    all_output_cols: list[str] = primary_cols + extra_cols + ["source"]
+    all_output_cols: list[str] = primary_cols + extra_cols + ["source", "sheet_name"]
 
     frames: list[pd.DataFrame] = []
 
@@ -70,6 +70,7 @@ def write_unified_csv(
     for ec in extra_cols:
         p_frame[ec] = ""
     p_frame["source"] = primary_entry["label"]
+    p_frame["sheet_name"] = primary_entry["sheet_name"]
     frames.append(p_frame[all_output_cols])
 
     # Secondary rows
@@ -92,6 +93,7 @@ def write_unified_csv(
                 out[col] = sec_df[col].values
 
         out["source"] = entry["label"]
+        out["sheet_name"] = entry["sheet_name"]
         frames.append(out)
 
     merged = pd.concat(frames, ignore_index=True)[all_output_cols]

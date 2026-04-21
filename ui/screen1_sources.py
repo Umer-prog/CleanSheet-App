@@ -628,21 +628,22 @@ class Screen1Sources(ScreenBase):
 
         if is_chained and chain:
             for ci, entry in enumerate(chain):
-                pill = self._make_pill(f"{entry['sheet_name']} · {type_char}", cat)
+                pill = self._make_pill(f"{entry['sheet_name']} · {type_char}", cat, is_primary=(ci == 0))
                 hl.addWidget(pill)
 
-                link_rm = QPushButton("×")
-                link_rm.setFixedSize(14, 14)
-                link_rm.setCursor(Qt.PointingHandCursor)
-                link_rm.setStyleSheet(
-                    "QPushButton { background: transparent; border: none; "
-                    "color: #4b5563; font-size: 10px; font-weight: 700; padding: 0; }"
-                    "QPushButton:hover { color: #ef4444; }"
-                )
-                link_rm.clicked.connect(
-                    lambda _=False, fi=fi, si=si, ci=ci: self._on_chain_link_remove(fi, si, ci)
-                )
-                hl.addWidget(link_rm)
+                if ci > 0:
+                    link_rm = QPushButton("×")
+                    link_rm.setFixedSize(14, 14)
+                    link_rm.setCursor(Qt.PointingHandCursor)
+                    link_rm.setStyleSheet(
+                        "QPushButton { background: transparent; border: none; "
+                        "color: #4b5563; font-size: 10px; font-weight: 700; padding: 0; }"
+                        "QPushButton:hover { color: #ef4444; }"
+                    )
+                    link_rm.clicked.connect(
+                        lambda _=False, fi=fi, si=si, ci=ci: self._on_chain_link_remove(fi, si, ci)
+                    )
+                    hl.addWidget(link_rm)
 
                 if ci < len(chain) - 1:
                     sep = QLabel("—")
@@ -688,22 +689,36 @@ class Screen1Sources(ScreenBase):
 
         return sub
 
-    def _make_pill(self, text: str, category: str) -> QLabel:
-        """Styled sheet-name badge consistent with existing badge style."""
+    def _make_pill(self, text: str, category: str, is_primary: bool = False) -> QLabel:
+        """Styled sheet-name badge. Primary pills are visually bolder than secondaries."""
         pill = QLabel(text)
         pill.setFixedHeight(20)
         if category == "Transaction":
-            pill.setStyleSheet(
-                "color: #60a5fa; background: rgba(59,130,246,0.1); "
-                "border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; "
-                "font-size: 10px; font-weight: 500; padding: 1px 6px;"
-            )
+            if is_primary:
+                pill.setStyleSheet(
+                    "color: #dbeafe; background: rgba(59,130,246,0.28); "
+                    "border: 1px solid rgba(59,130,246,0.55); border-radius: 4px; "
+                    "font-size: 10px; font-weight: 700; padding: 1px 6px;"
+                )
+            else:
+                pill.setStyleSheet(
+                    "color: #60a5fa; background: rgba(59,130,246,0.1); "
+                    "border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; "
+                    "font-size: 10px; font-weight: 500; padding: 1px 6px;"
+                )
         else:
-            pill.setStyleSheet(
-                "color: #34d399; background: rgba(34,211,153,0.08); "
-                "border: 1px solid rgba(34,211,153,0.2); border-radius: 4px; "
-                "font-size: 10px; font-weight: 500; padding: 1px 6px;"
-            )
+            if is_primary:
+                pill.setStyleSheet(
+                    "color: #d1fae5; background: rgba(34,211,153,0.22); "
+                    "border: 1px solid rgba(34,211,153,0.48); border-radius: 4px; "
+                    "font-size: 10px; font-weight: 700; padding: 1px 6px;"
+                )
+            else:
+                pill.setStyleSheet(
+                    "color: #34d399; background: rgba(34,211,153,0.08); "
+                    "border: 1px solid rgba(34,211,153,0.2); border-radius: 4px; "
+                    "font-size: 10px; font-weight: 500; padding: 1px 6px;"
+                )
         return pill
 
     # ── Actions ───────────────────────────────────────────────────────
