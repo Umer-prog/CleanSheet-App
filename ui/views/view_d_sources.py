@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_json
+import ui.popups.msgbox as msgbox
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
 from core.dim_manager import delete_dim_table
 from core.mapping_manager import get_active_dim_tables
 from core.project_manager import save_project_json
@@ -59,6 +60,7 @@ class _OrphanDeleteConfirm:
         self._dlg.setWindowTitle("Delete Orphaned Dimension Table")
         self._dlg.setFixedSize(500, 240)
         self._dlg.setModal(True)
+        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
         self.confirmed = False
 
@@ -553,7 +555,7 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             on_sheets_loaded,
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not read file:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not read file:\n{exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -566,7 +568,7 @@ class ViewDSources(ScreenBase):
             f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
             for e in chain
         )
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Delete Chained Source",
             f"This will permanently remove the chained dimension '{dim_name}' "
@@ -599,7 +601,7 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             lambda _: self.on_project_changed(target_key="d_sources"),
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not delete source:\n{exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -609,8 +611,8 @@ class ViewDSources(ScreenBase):
     def _on_view_table(self, dim_name: str) -> None:
         def worker():
             import pandas as pd
-            path = active_dim_dir(self.project_path) / f"{dim_name}.json"
-            return pd.read_json(path, orient="records")
+            path = active_dim_dir(self.project_path) / f"{dim_name}.csv"
+            return pd.read_csv(path, dtype=str, keep_default_na=False)
 
         def on_success(df):
             from ui.popups.popup_replace import PopupDimView
@@ -620,7 +622,7 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             on_success,
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not load table:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not load table:\n{exc}"),
         )
 
     def _on_delete_orphan(self, dim_name: str) -> None:
@@ -649,7 +651,7 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             on_done,
-            lambda exc: QMessageBox.critical(
+            lambda exc: msgbox.critical(
                 self, "Error", f"Could not delete dimension table:\n{exc}"
             ),
         )

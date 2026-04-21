@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from core.data_loader import load_csv, load_dim_json
+from core.data_loader import load_csv
 from core.project_manager import open_project
 from core.project_paths import active_dim_dir, active_transactions_dir
 
@@ -46,10 +46,10 @@ def export_final_workbook(project_path: Path, file_name: str = "final_updated.xl
                 written += 1
 
             for table in dim_tables:
-                json_path = active_dim_dir(project_path) / f"{table}.json"
-                if not json_path.exists():
+                csv_path = active_dim_dir(project_path) / f"{table}.csv"
+                if not csv_path.exists():
                     continue
-                df = load_dim_json(json_path)
+                df = load_csv(csv_path)
                 df.to_excel(writer, sheet_name=_safe_sheet_name(table), index=False)
                 written += 1
     except OSError as e:

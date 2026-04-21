@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
+import ui.popups.msgbox as msgbox
 from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
@@ -527,7 +528,7 @@ class ViewTSources(ScreenBase):
         self._run_background(
             worker,
             on_sheets_loaded,
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not read file:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not read file:\n{exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -540,7 +541,7 @@ class ViewTSources(ScreenBase):
             f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
             for e in chain
         )
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Delete Chained Source",
             f"This will permanently remove the chained table '{table_name}' "
@@ -573,7 +574,7 @@ class ViewTSources(ScreenBase):
         self._run_background(
             worker,
             lambda _: self.on_project_changed(target_key="t_sources"),
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not delete source:\n{exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -605,16 +606,16 @@ class ViewTSources(ScreenBase):
                 df.to_csv(out, index=False, encoding="utf-8")
 
             def on_done(_):
-                QMessageBox.information(self, "Updated", f"Table '{table_name}' updated.")
+                msgbox.information(self, "Updated", f"Table '{table_name}' updated.")
                 self.on_project_changed(target_key="t_sources")
 
             self._run_background(update_worker, on_done,
-                                 lambda exc: QMessageBox.critical(
+                                 lambda exc: msgbox.critical(
                                      self, "Error", f"Could not update table:\n{exc}"
                                  ))
 
         self._run_background(load_sheets_worker, on_sheets_loaded,
-                             lambda exc: QMessageBox.critical(
+                             lambda exc: msgbox.critical(
                                  self, "Error", f"Could not read file:\n{exc}"
                              ))
 
@@ -626,7 +627,7 @@ class ViewTSources(ScreenBase):
 
         def on_mappings_loaded(mappings):
             count = count_mappings_for_table(mappings, table_name)
-            reply = QMessageBox.question(
+            reply = msgbox.question(
                 self, "Confirm Delete",
                 f"Deleting '{table_name}' will also remove {count} mapping(s). Confirm?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
@@ -651,7 +652,7 @@ class ViewTSources(ScreenBase):
 
             self._run_background(delete_worker,
                                  lambda _: self.on_project_changed(target_key="t_sources"),
-                                 lambda exc: QMessageBox.critical(
+                                 lambda exc: msgbox.critical(
                                      self, "Error", f"Could not delete table:\n{exc}"
                                  ))
 

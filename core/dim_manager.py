@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -7,8 +6,8 @@ from core.project_paths import active_dim_dir
 
 
 def _dim_path(project_path: Path, dim_table: str) -> Path:
-    """Return the path to a dim table's JSON file in the active dim directory."""
-    return active_dim_dir(Path(project_path)) / f"{dim_table}.json"
+    """Return the path to a dim table's CSV file in the active dim directory."""
+    return active_dim_dir(Path(project_path)) / f"{dim_table}.csv"
 
 
 def dim_exists(project_path: Path, dim_table: str) -> bool:
@@ -17,15 +16,13 @@ def dim_exists(project_path: Path, dim_table: str) -> bool:
 
 
 def get_dim_dataframe(project_path: Path, dim_table: str) -> pd.DataFrame:
-    """Load a dim table JSON file and return it as a DataFrame."""
+    """Load a dim table CSV file and return it as a DataFrame."""
     path = _dim_path(Path(project_path), dim_table)
     if not path.exists():
         raise FileNotFoundError(f"Dim table not found: '{dim_table}'")
     try:
-        with open(path, encoding="utf-8") as f:
-            records = json.load(f)
-        return pd.DataFrame(records).astype(str)
-    except (OSError, json.JSONDecodeError) as e:
+        return pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception as e:
         raise ValueError(f"Failed to load dim table '{dim_table}': {e}") from e
 
 
@@ -36,10 +33,7 @@ def get_dim_columns(project_path: Path, dim_table: str) -> list:
 
 
 def delete_dim_table(project_path: Path, dim_table: str) -> None:
-    """Delete a dim table's JSON file from disk.
-
-    Raises OSError if the file cannot be deleted.
-    """
+    """Delete a dim table's CSV file from disk."""
     path = _dim_path(Path(project_path), dim_table)
     try:
         if path.exists():
@@ -49,32 +43,31 @@ def delete_dim_table(project_path: Path, dim_table: str) -> None:
 
 
 def append_dim_row(project_path: Path, dim_table: str, row: dict) -> None:
-    """Append a new row to an existing dim table JSON file.
+    """Append a new row to an existing dim table CSV file.
 
     row must contain all columns present in the dim table.
-    Raises ValueError if the dim table does not exist.
+    Raises FileNotFoundError if the dim table does not exist.
     """
     project_path = Path(project_path)
     path = _dim_path(project_path, dim_table)
     if not path.exists():
         raise FileNotFoundError(f"Dim table not found: '{dim_table}'")
     try:
-        with open(path, encoding="utf-8") as f:
-            records = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception as e:
         raise ValueError(f"Failed to read dim table '{dim_table}': {e}") from e
 
-    records.append({str(k): str(v) for k, v in row.items()})
+    new_row = {str(k): str(v) for k, v in row.items()}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=2, ensure_ascii=False)
+        df.to_csv(path, index=False, encoding="utf-8")
     except OSError as e:
         raise OSError(f"Failed to write dim table '{dim_table}': {e}") from e
 
 
 def save_dim_dataframe(project_path: Path, dim_table: str, df: pd.DataFrame) -> None:
-    """Write a DataFrame to disk as a new dim table JSON file.
+    """Write a DataFrame to disk as a new dim table CSV file.
 
     Raises FileExistsError if the dim table already exists (dim tables are immutable).
     """
@@ -87,8 +80,6 @@ def save_dim_dataframe(project_path: Path, dim_table: str, df: pd.DataFrame) -> 
         )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        records = df.astype(str).to_dict(orient="records")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=2, ensure_ascii=False)
+        df.astype(str).to_csv(path, index=False, encoding="utf-8")
     except OSError as e:
         raise OSError(f"Failed to save dim table '{dim_table}': {e}") from e

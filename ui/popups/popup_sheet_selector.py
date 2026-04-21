@@ -23,6 +23,7 @@ class PopupSheetSelector(QDialog):
         self.setWindowTitle("Select Sheets")
         self.setFixedWidth(520)
         self.setModal(True)
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         # Height is auto — capped via max-height logic below
 
         root = QVBoxLayout(self)

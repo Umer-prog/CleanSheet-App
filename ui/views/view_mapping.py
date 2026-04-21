@@ -8,11 +8,12 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PySide6.QtGui import QBrush, QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStyledItemDelegate,
+    QPushButton, QScrollArea, QSizePolicy, QStyledItemDelegate,
     QTableView, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
+import ui.popups.msgbox as msgbox
 from core.data_loader import load_csv, save_as_csv,get_sheet_as_dataframe
 from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
@@ -1035,7 +1036,7 @@ class ViewMapping(ScreenBase):
                     self._run_background(
                         apply_worker,
                         lambda _: self._reload_data(),
-                        lambda exc: QMessageBox.critical(
+                        lambda exc: msgbox.critical(
                             self, "Error", f"Could not replace:\n{exc}"
                         ),
                     )
@@ -1096,7 +1097,7 @@ class ViewMapping(ScreenBase):
                 self._run_background(
                     apply_worker,
                     lambda _: self._reload_data(),
-                    lambda exc: QMessageBox.critical(
+                    lambda exc: msgbox.critical(
                         self, "Error", f"Could not add row:\n{exc}"
                     ),
                 )
@@ -1201,7 +1202,7 @@ class ViewMapping(ScreenBase):
         self._run_background(
             worker,
             lambda _: self._reload_data(),
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not delete row:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not delete row:\n{exc}"),
         )
 
     def _on_generate_final_file(self) -> None:
@@ -1223,10 +1224,10 @@ class ViewMapping(ScreenBase):
 
         self._run_background(
             worker,
-            lambda path: QMessageBox.information(
+            lambda path: msgbox.information(
                 self, "Final File Generated", f"Final file created:\n{path}"
             ),
-            lambda exc: QMessageBox.critical(
+            lambda exc: msgbox.critical(
                 self, "Error", f"Could not generate final file:\n{exc}"
             ),
         )
@@ -1333,6 +1334,7 @@ class _ConfirmPopup:
         self._dlg.setWindowTitle(title)
         self._dlg.setFixedSize(480, 220)
         self._dlg.setModal(True)
+        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.confirmed = False
 
         outer = QVBoxLayout(self._dlg)
@@ -1430,6 +1432,7 @@ class _BulkScopePopup:
         self._dlg.setWindowTitle("Multiple Occurrences Found")
         self._dlg.setFixedSize(520, 280)
         self._dlg.setModal(True)
+        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.choice: str | None = None
 
         outer = QVBoxLayout(self._dlg)

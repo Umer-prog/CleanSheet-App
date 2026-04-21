@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import load_dim_json
+import ui.popups.msgbox as msgbox
+from core.data_loader import load_csv
 from core.mapping_manager import add_mapping, delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_dim_dir, active_transactions_dir
@@ -704,7 +705,7 @@ class Screen2Mappings(ScreenBase):
     def _confirm_remove_table(self, table_name: str, kind: str) -> None:
         """Ask for confirmation then remove the table from disk, project.json, and mappings."""
         kind_label = "dimension" if kind == "dim" else "transaction"
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Remove Table",
             f"Remove '{table_name}' from this project?\n\n"
@@ -742,14 +743,14 @@ class Screen2Mappings(ScreenBase):
             self._clear_current_selection()
 
         def on_error(exc):
-            QMessageBox.critical(self, "Error", f"Could not remove '{table_name}':\n{exc}")
+            msgbox.critical(self, "Error", f"Could not remove '{table_name}':\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
     def _do_remove_table(self, table_name: str, kind: str) -> None:
         """Disk-side removal: delete data file, update project.json, purge saved mappings."""
         if kind == "dim":
-            file_path = active_dim_dir(self.project_path) / f"{table_name}.json"
+            file_path = active_dim_dir(self.project_path) / f"{table_name}.csv"
         else:
             file_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
 
@@ -797,7 +798,7 @@ class Screen2Mappings(ScreenBase):
                 return
             self._dim_column_menu.clear()
             self._dim_column_menu.addItem("Select Column")
-            QMessageBox.critical(self, "Error", f"Could not load dim table '{table_name}':\n{exc}")
+            msgbox.critical(self, "Error", f"Could not load dim table '{table_name}':\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -822,13 +823,13 @@ class Screen2Mappings(ScreenBase):
                 return
             self._tx_column_menu.clear()
             self._tx_column_menu.addItem("Select Column")
-            QMessageBox.critical(self, "Error", f"Could not load transaction table '{table_name}':\n{exc}")
+            msgbox.critical(self, "Error", f"Could not load transaction table '{table_name}':\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
     def _load_dim_columns(self, table_name: str) -> list[str]:
-        path = active_dim_dir(self.project_path) / f"{table_name}.json"
-        return list(load_dim_json(path).columns)
+        path = active_dim_dir(self.project_path) / f"{table_name}.csv"
+        return list(load_csv(path).columns)
 
     def _load_transaction_columns(self, table_name: str) -> list[str]:
         path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
@@ -845,8 +846,8 @@ class Screen2Mappings(ScreenBase):
           2+ matches, < 60%  → "warning" (soft ask — proceed or change?)
           ≥ 60% match rate   → None      (auto-proceed, no popup)
         """
-        dim_path = active_dim_dir(self.project_path) / f"{dim_table}.json"
-        dim_df = load_dim_json(dim_path)
+        dim_path = active_dim_dir(self.project_path) / f"{dim_table}.csv"
+        dim_df = load_csv(dim_path)
         if dim_col not in dim_df.columns:
             return None
         dim_vals = [str(v).strip() for v in dim_df[dim_col].dropna() if str(v).strip()]
@@ -951,6 +952,7 @@ class Screen2Mappings(ScreenBase):
                 return
             # soft warning — user may override
             box = QMessageBox(self)
+            box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
             box.setWindowTitle("Low Column Match")
             box.setText(message)
             box.setIcon(QMessageBox.Icon.Warning)
@@ -1084,14 +1086,14 @@ class Screen2Mappings(ScreenBase):
                     from ui.screen3_main import Screen3Main
                     self.app.show_screen(Screen3Main, project=self.project)
                 except ImportError:
-                    QMessageBox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
+                    msgbox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
 
             def on_save_error(exc):
-                QMessageBox.critical(self, "Error", f"Could not save mappings:\n{exc}")
+                msgbox.critical(self, "Error", f"Could not save mappings:\n{exc}")
 
             self._run_background(save_worker, on_save_success, on_save_error)
 
         def on_existing_error(exc):
-            QMessageBox.critical(self, "Error", f"Could not read existing mappings:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not read existing mappings:\n{exc}")
 
         self._run_background(load_existing, on_existing_loaded, on_existing_error)

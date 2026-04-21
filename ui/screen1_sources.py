@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv, save_as_json
+import ui.popups.msgbox as msgbox
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv
 from core.project_manager import open_project, save_project_json
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -772,7 +773,7 @@ class Screen1Sources(ScreenBase):
             self._render_sources()
 
         def on_error(exc):
-            QMessageBox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -825,7 +826,7 @@ class Screen1Sources(ScreenBase):
             self._launch_chain_mapper()
 
         def on_error(exc):
-            QMessageBox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -850,7 +851,7 @@ class Screen1Sources(ScreenBase):
             return
 
         entry = chain[ci]
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Remove Chain Link",
             f"Remove '{entry['sheet_name']}' from the chain?",
@@ -881,7 +882,7 @@ class Screen1Sources(ScreenBase):
     def _on_sheet_delete(self, fi: int, si: int) -> None:
         """Remove a sheet entry (and its chain) from _sources after confirmation."""
         sheet = self._sources[fi]["sheets"][si]
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Delete Sheet",
             f"Remove '{sheet['sheet_name']}' from the project?\n\n"
@@ -923,7 +924,7 @@ class Screen1Sources(ScreenBase):
             return
         self._set_error("")
 
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Continue to Mapper?",
             "Are you sure you want to proceed?\n\n"
@@ -948,12 +949,12 @@ class Screen1Sources(ScreenBase):
                 from ui.screen2_mappings import Screen2Mappings
                 self.app.show_screen(Screen2Mappings, project=updated_state)
             except ImportError:
-                QMessageBox.information(
+                msgbox.information(
                     self, "Screen 2", "Data sources saved. Screen 2 is not built yet."
                 )
 
         def on_error(exc):
-            QMessageBox.critical(self, "Error", f"Could not save selected sheets:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not save selected sheets:\n{exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -997,9 +998,9 @@ class Screen1Sources(ScreenBase):
                             self.project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv",
                         )
                     elif category == "Dimension":
-                        save_as_json(
+                        save_as_csv(
                             df,
-                            self.project_path / "metadata" / "data" / "dim" / f"{table_name}.json",
+                            self.project_path / "metadata" / "data" / "dim" / f"{table_name}.csv",
                         )
                     # Store source path so Refresh can re-read from the same file later
                     sheets_meta[table_name] = {

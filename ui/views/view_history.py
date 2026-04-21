@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -15,6 +15,7 @@ from core.snapshot_manager import (
     revert_to_manifest,
     update_manifest_label,
 )
+import ui.popups.msgbox as msgbox
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 
@@ -72,6 +73,7 @@ class _SnapshotLabelDialog:
         self._dlg.setWindowTitle("Take Snapshot")
         self._dlg.setFixedSize(480, 210)
         self._dlg.setModal(True)
+        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
 
         outer = QVBoxLayout(self._dlg)
@@ -420,7 +422,7 @@ class ViewHistory(ScreenBase):
         self._run_background(
             worker,
             lambda _: self._load_manifests(),
-            lambda exc: QMessageBox.critical(self, "Error", f"Could not create snapshot:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Error", f"Could not create snapshot:\n{exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -669,14 +671,14 @@ class ViewHistory(ScreenBase):
             self._run_background(
                 worker,
                 lambda _: (
-                    QMessageBox.information(
+                    msgbox.information(
                         self, "Reverted",
                         f"Reverted to {display_id}.\n"
                         f"Transactions, dimension tables, and mappings have been restored."
                     ),
                     self.on_project_changed(target_key="history"),
                 ),
-                lambda exc: QMessageBox.critical(
+                lambda exc: msgbox.critical(
                     self, "Error", f"Could not revert:\n{exc}"
                 ),
             )

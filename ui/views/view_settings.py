@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
+import ui.popups.msgbox as msgbox
 from core.project_manager import save_project_json, save_settings_json
 from ui.workers import ScreenBase
 
@@ -247,7 +248,7 @@ class ViewSettings(ScreenBase):
 
         prev_history = bool(self.project.get("settings", {}).get("history_enabled", True))
         if prev_history and not history_enabled:
-            reply = QMessageBox.question(
+            reply = msgbox.question(
                 self, "History Off Warning",
                 "Existing history will be kept but no new snapshots will be created. Continue?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
@@ -267,10 +268,10 @@ class ViewSettings(ScreenBase):
             )
 
         def on_success(_):
-            QMessageBox.information(self, "Saved", "Settings saved successfully.")
+            msgbox.information(self, "Saved", "Settings saved successfully.")
             self.on_project_changed(target_key="settings")
 
         self._run_background(worker, on_success,
-                             lambda exc: QMessageBox.critical(
+                             lambda exc: msgbox.critical(
                                  self, "Error", f"Could not save settings:\n{exc}"
                              ))

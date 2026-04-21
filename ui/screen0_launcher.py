@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
+import ui.popups.msgbox as msgbox
 from core.mapping_manager import get_mappings
 from core.project_manager import create_project, open_project
 from ui.workers import LoadingOverlay, ScreenBase, Worker, clear_layout, make_scroll_area
@@ -589,7 +590,7 @@ class Screen0Launcher(ScreenBase):
             state = open_project(Path(self._selected_path))
             self.app.set_current_project(state)
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not open project:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not open project:\n{exc}")
             return
 
         project_path = Path(state["project_path"])
@@ -619,7 +620,7 @@ class Screen0Launcher(ScreenBase):
                 from ui.screen3_main import Screen3Main
                 self.app.show_screen(Screen3Main, project=state)
         except ImportError as exc:
-            QMessageBox.critical(self, "Navigation Error", str(exc))
+            msgbox.critical(self, "Navigation Error", str(exc))
 
     def _on_new_click(self) -> None:
         self.app.show_screen(NewProjectScreen)
@@ -628,7 +629,7 @@ class Screen0Launcher(ScreenBase):
         if not self._selected_path:
             return
         project_path = Path(self._selected_path)
-        reply = QMessageBox.question(
+        reply = msgbox.question(
             self,
             "Confirm Delete",
             f"Delete project '{project_path.name}'?\n\n"
@@ -643,7 +644,7 @@ class Screen0Launcher(ScreenBase):
                 shutil.rmtree(project_path)
             self.app.unregister_project(str(project_path))
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not delete project:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not delete project:\n{exc}")
             return
         self._load_and_render_projects()
 

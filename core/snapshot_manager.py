@@ -104,13 +104,13 @@ def _read_commit_json(commit_dir: Path) -> dict:
 
 
 def _write_dimensions(dimensions_dir: Path, dim_data: dict) -> list[str]:
-    """Write dimension JSONs. Returns list of dim names written."""
+    """Write dimension CSVs. Returns list of dim names written."""
+    import pandas as pd
     written = []
-    for name, records in dim_data.items():
-        dest = dimensions_dir / f"{name}.json"
+    for name, df in dim_data.items():
+        dest = dimensions_dir / f"{name}.csv"
         try:
-            with open(dest, "w", encoding="utf-8") as f:
-                json.dump(records, f, ensure_ascii=False)
+            df.to_csv(dest, index=False, encoding="utf-8")
             written.append(name)
         except OSError as e:
             raise OSError(f"Failed to write dimension '{name}': {e}") from e
@@ -130,14 +130,14 @@ def _write_mappings_to_commit(mappings_dir: Path, mappings: list) -> None:
 # ---------------------------------------------------------------------------
 
 def _load_dim_tables_from_dir(dim_dir: Path) -> dict:
-    """Load all dim tables from a directory of *.json files."""
+    """Load all dim tables from a directory of *.csv files."""
+    import pandas as pd
     result: dict = {}
     if not dim_dir.exists():
         return result
-    for f in sorted(dim_dir.glob("*.json")):
+    for f in sorted(dim_dir.glob("*.csv")):
         try:
-            with open(f, encoding="utf-8") as fh:
-                result[f.stem] = json.load(fh)
+            result[f.stem] = pd.read_csv(f, dtype=str, keep_default_na=False)
         except Exception:
             continue
     return result
@@ -210,7 +210,7 @@ def create_snapshot(
     1. Writes transaction CSVs to metadata/data/transactions/ (the live working area).
     2. Creates a self-contained commit in history/<commit_id>/ with subfolders:
          transactions/  — transaction table CSVs
-         dimensions/    — dimension table JSONs (copied from metadata/data/dim/)
+         dimensions/    — dimension table CSVs (copied from metadata/data/dim/)
          mappings/      — mapping_store.json (copied from metadata/mappings/)
          ignored/       — ignored rows (reserved for future use)
 
@@ -408,7 +408,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
         if not src.exists():
             raise FileNotFoundError(f"Snapshot file missing: '{src}'")
     for name in restored_dims:
-        src = dim_commit_dir / f"{name}.json"
+        src = dim_commit_dir / f"{name}.csv"
         if not src.exists():
             raise FileNotFoundError(f"Dim snapshot file missing: '{src}'")
 
@@ -426,7 +426,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     try:
         live_dim.mkdir(parents=True, exist_ok=True)
         for name in restored_dims:
-            shutil.copy2(dim_commit_dir / f"{name}.json", live_dim / f"{name}.json")
+            shutil.copy2(dim_commit_dir / f"{name}.csv", live_dim / f"{name}.csv")
     except OSError as e:
         raise OSError(f"Failed to restore dimension data: {e}") from e
 

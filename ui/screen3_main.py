@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
+import ui.popups.msgbox as msgbox
 from core.error_detector import detect_errors
 from core.mapping_manager import delete_mapping, get_active_dim_tables, get_mappings
 from core.project_manager import open_project
@@ -61,6 +62,7 @@ class _MappingDeleteConfirm:
         self._dlg.setWindowTitle("Delete Mapping")
         self._dlg.setFixedSize(500, 250)
         self._dlg.setModal(True)
+        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
         self.confirmed = False
 
@@ -198,7 +200,7 @@ class Screen3Main(QWidget):
         try:
             return get_mappings(self.project_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not load mappings:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not load mappings:\n{exc}")
             return []
 
     def _init_mapping_badges(self) -> None:
@@ -601,7 +603,7 @@ class Screen3Main(QWidget):
 
         def on_done(newly_orphaned: set):
             if newly_orphaned:
-                answer = QMessageBox.information(
+                answer = msgbox.information(
                     self,
                     "Dimension Table Now Orphaned",
                     f"The dimension table <b>{dim_table}</b> is no longer referenced "
@@ -622,7 +624,7 @@ class Screen3Main(QWidget):
         w = Worker(worker)
         w.finished.connect(on_done)
         w.errored.connect(
-            lambda exc: QMessageBox.critical(
+            lambda exc: msgbox.critical(
                 self, "Error", f"Could not delete mapping:\n{exc}"
             )
         )
@@ -714,7 +716,7 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
             return
         self.app.set_current_project(updated)
         self.app.show_screen(Screen3Main, project=updated, initial_nav_key=target_key)
@@ -723,7 +725,7 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
             return
         self.app.set_current_project(updated)
         self.app.show_screen(Screen2Mappings, project=updated)
@@ -732,7 +734,7 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
             return
         self.app.set_current_project(updated)
         from ui.screen1_sources import Screen1Sources
