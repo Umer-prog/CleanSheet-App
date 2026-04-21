@@ -75,12 +75,13 @@ def validate_confirm_requirements(
 class Screen1Sources(ScreenBase):
     """Stage 1 — add Excel files and categorize their sheets."""
 
-    def __init__(self, app, project: dict, **kwargs):
+    def __init__(self, app, project: dict, sources: list | None = None, **kwargs):
         super().__init__()
         self.app = app
         self.project = project
         self.project_path = Path(project["project_path"])
-        self._sources: list[dict] = []
+        # Restore state when returning from Screen 1.5; empty on fresh entry
+        self._sources: list[dict] = list(sources) if sources is not None else []
         self._pending_chain: dict | None = None  # context passed to Screen 1.5
 
         root = QHBoxLayout(self)
@@ -799,6 +800,9 @@ class Screen1Sources(ScreenBase):
             self._pending_chain = {
                 "fi": fi,
                 "si": si,
+                "primary_file_path": str(self._sources[fi]["file_path"]),
+                "primary_sheet_name": sheet["sheet_name"],
+                "primary_label": Path(self._sources[fi]["file_path"]).name,
                 "secondary_file_path": str(excel_path),
                 "secondary_sheet_name": picked,
                 "secondary_label": excel_path.name,
@@ -811,43 +815,17 @@ class Screen1Sources(ScreenBase):
         self._run_background(worker, on_success, on_error)
 
     def _launch_chain_mapper(self) -> None:
-        """Navigate to Screen 1.5. Replaced by real navigation in Section 4."""
+        """Navigate to Screen 1.5 (Chain Column Mapper)."""
         ctx = self._pending_chain
         if ctx is None:
             return
-        # Section 4 will replace this body with:
-        #   self.app.show_chain_mapper(context=ctx, return_screen=self)
-        # Stub: add the chain entry immediately with null column mapping.
-        self._confirm_chain_entry(ctx, column_mapping=None)
-
-    def _confirm_chain_entry(self, ctx: dict, column_mapping: dict | None) -> None:
-        """Commit a confirmed chain link. Called from Screen 1.5 on Confirm, or the stub."""
-        fi, si = ctx["fi"], ctx["si"]
-        sheet = self._sources[fi]["sheets"][si]
-        chain = list(sheet.get("chain", []))
-
-        if not sheet.get("is_chained", False):
-            # First chain link — create the primary entry (order 0)
-            chain = [{
-                "order": 0,
-                "file_path": str(self._sources[fi]["file_path"]),
-                "sheet_name": sheet["sheet_name"],
-                "label": Path(self._sources[fi]["file_path"]).name,
-                "column_mapping": None,
-            }]
-
-        chain.append({
-            "order": len(chain),
-            "file_path": ctx["secondary_file_path"],
-            "sheet_name": ctx["secondary_sheet_name"],
-            "label": ctx["secondary_label"],
-            "column_mapping": column_mapping,
-        })
-
-        sheet["is_chained"] = True
-        sheet["chain"] = chain
-        self._pending_chain = None
-        self._render_sources()
+        from ui.screen15_chain_mapper import Screen15ChainMapper
+        self.app.show_screen(
+            Screen15ChainMapper,
+            project=self.project,
+            chain_context=ctx,
+            sources=list(self._sources),
+        )
 
     def _on_chain_link_remove(self, fi: int, si: int, ci: int) -> None:
         """Remove one link from the chain after confirmation."""
@@ -965,6 +943,8 @@ class Screen1Sources(ScreenBase):
         self._run_background(worker, on_success, on_error)
 
     def _persist_sources(self) -> None:
+        from core.chain_writer import write_unified_csv
+
         project_data = {
             "project_name": self.project.get("project_name", ""),
             "created_at": self.project.get("created_at", ""),
@@ -981,22 +961,36 @@ class Screen1Sources(ScreenBase):
             file_path = Path(source["file_path"])
             for sheet in source.get("sheets", []):
                 table_name = normalize_table_name(sheet["sheet_name"])
-                df = get_sheet_as_dataframe(file_path, sheet["sheet_name"])
-                if sheet["category"] == "Transaction":
-                    save_as_csv(df, self.project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv")
-                    if table_name not in tx_names:
-                        tx_names.append(table_name)
-                elif sheet["category"] == "Dimension":
-                    save_as_json(df, self.project_path / "metadata" / "data" / "dim" / f"{table_name}.json")
-                    if table_name not in dim_names:
-                        dim_names.append(table_name)
+                category = sheet["category"]
 
-                # Persist chain metadata so Screen 3 can read is_chained flag
-                if sheet.get("is_chained"):
-                    sheets_meta[table_name] = {
+                if sheet.get("is_chained") and sheet.get("chain"):
+                    # Chained sheet — write the unified merged CSV
+                    sheet_meta = {
                         "is_chained": True,
-                        "chain": sheet.get("chain", []),
+                        "chain": sheet["chain"],
                     }
+                    write_unified_csv(
+                        self.project_path, table_name, category, sheet_meta
+                    )
+                    sheets_meta[table_name] = sheet_meta
+                else:
+                    # Normal (unchained) sheet — write plain CSV or JSON as before
+                    df = get_sheet_as_dataframe(file_path, sheet["sheet_name"])
+                    if category == "Transaction":
+                        save_as_csv(
+                            df,
+                            self.project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv",
+                        )
+                    elif category == "Dimension":
+                        save_as_json(
+                            df,
+                            self.project_path / "metadata" / "data" / "dim" / f"{table_name}.json",
+                        )
+
+                if category == "Transaction" and table_name not in tx_names:
+                    tx_names.append(table_name)
+                elif category == "Dimension" and table_name not in dim_names:
+                    dim_names.append(table_name)
 
         project_data["transaction_tables"] = tx_names
         project_data["dim_tables"] = dim_names
