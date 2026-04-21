@@ -822,13 +822,13 @@ class ViewMapping(ScreenBase):
         ignore_btn.setCursor(Qt.PointingHandCursor)
         ignore_btn.setStyleSheet(
             "QPushButton { "
-            "background: rgba(245,158,11,0.10); "
-            "border: 1px solid rgba(245,158,11,0.25); "
+            "background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); "
             "border-radius: 5px; "
-            "color: #fbbf24; font-size: 11px; font-weight: 500; "
+            "color: #94a3b8; font-size: 11px; font-weight: 500; "
             "padding: 0 6px; "
             "} "
-            "QPushButton:hover { background: rgba(245,158,11,0.20); }"
+            "QPushButton:hover { background: rgba(255,255,255,0.08); color: #cbd5e1; }"
         )
         ignore_btn.clicked.connect(lambda _=None, err=error: self._on_ignore_error(err))
         lay.addWidget(ignore_btn)
@@ -1163,8 +1163,8 @@ class ViewMapping(ScreenBase):
                 f"error list but the data will not change."
             ),
             confirm_label="Ignore",
-            accent="#f59e0b",
-            accent_hover="#d97706",
+            accent="#8190a3",
+            accent_hover="#94a3b8",
         )
         dlg.exec()
         if not dlg.confirmed:

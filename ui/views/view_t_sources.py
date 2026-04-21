@@ -14,7 +14,6 @@ from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_transactions_dir
-from core.snapshot_manager import create_snapshot
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -415,7 +414,8 @@ class ViewTSources(ScreenBase):
 
         def worker():
             df = get_sheet_as_dataframe(excel_path, sheet_name)
-            create_snapshot(self.project_path, {table_name: df}, label=f"Refreshed {table_name}")
+            out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
+            df.to_csv(out, index=False, encoding="utf-8")
 
         def on_done(_):
             self._set_error("")
@@ -465,7 +465,8 @@ class ViewTSources(ScreenBase):
                     elif meta.get("file_path") and meta.get("sheet_name"):
                         excel_path = Path(meta["file_path"])
                         df = get_sheet_as_dataframe(excel_path, meta["sheet_name"])
-                        create_snapshot(project_path, {table_name: df}, label=f"Refreshed {table_name}")
+                        out = active_transactions_dir(project_path) / f"{table_name}.csv"
+                        df.to_csv(out, index=False, encoding="utf-8")
                     else:
                         errors.append(f"{table_name} (no source path stored)")
                 except Exception as exc:
@@ -600,7 +601,8 @@ class ViewTSources(ScreenBase):
 
             def update_worker():
                 df = get_sheet_as_dataframe(excel_path, selected)
-                create_snapshot(self.project_path, {table_name: df}, label=f"Updated {table_name}")
+                out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
+                df.to_csv(out, index=False, encoding="utf-8")
 
             def on_done(_):
                 QMessageBox.information(self, "Updated", f"Table '{table_name}' updated.")

@@ -4,11 +4,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from core.snapshot_manager import (
+    create_snapshot,
     get_current_commit_id,
     list_manifests,
     revert_to_manifest,
@@ -61,6 +62,108 @@ def _btn_revert(text: str, height: int = 34) -> QPushButton:
     return b
 
 
+class _SnapshotLabelDialog:
+    """Minimal dialog asking for a snapshot description before committing."""
+
+    def __init__(self, parent):
+        self.label: str | None = None
+
+        self._dlg = QDialog(parent)
+        self._dlg.setWindowTitle("Take Snapshot")
+        self._dlg.setFixedSize(480, 210)
+        self._dlg.setModal(True)
+        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
+
+        outer = QVBoxLayout(self._dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        header = QFrame()
+        header.setFixedHeight(52)
+        header.setStyleSheet("QFrame { background: #3b82f6; }")
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(22, 0, 22, 0)
+        h_lbl = QLabel("Take Snapshot")
+        h_lbl.setStyleSheet(
+            "color: #fff; font-size: 14px; font-weight: 700; "
+            "background: transparent; border: none;"
+        )
+        h_lay.addWidget(h_lbl)
+        outer.addWidget(header)
+
+        body = QFrame()
+        body.setStyleSheet("QFrame { background: #13161e; }")
+        b_lay = QVBoxLayout(body)
+        b_lay.setContentsMargins(22, 18, 22, 18)
+        b_lay.setSpacing(10)
+
+        desc = QLabel("Enter a description for this snapshot:")
+        desc.setStyleSheet(
+            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
+        )
+        b_lay.addWidget(desc)
+
+        self._entry = QLineEdit()
+        self._entry.setPlaceholderText("e.g. Before Q2 mapping review")
+        self._entry.setFixedHeight(36)
+        self._entry.setStyleSheet(
+            "QLineEdit { background: rgba(255,255,255,0.05); "
+            "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
+            "color: #f1f5f9; font-size: 13px; padding: 0 10px; }"
+            "QLineEdit:focus { border-color: rgba(59,130,246,0.5); }"
+        )
+        self._entry.returnPressed.connect(self._confirm)
+        b_lay.addWidget(self._entry)
+
+        self._err_lbl = QLabel("")
+        self._err_lbl.setStyleSheet(
+            "color: #f87171; font-size: 11px; background: transparent; border: none;"
+        )
+        b_lay.addWidget(self._err_lbl)
+        outer.addWidget(body, 1)
+
+        footer = QFrame()
+        footer.setFixedHeight(56)
+        footer.setStyleSheet("QFrame { background: #0f1117; }")
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(22, 0, 22, 0)
+        f_lay.setSpacing(8)
+        f_lay.addStretch()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(34)
+        cancel_btn.setStyleSheet(
+            "QPushButton { background: transparent; "
+            "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
+            "color: #64748b; font-size: 12px; padding: 0 18px; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
+        )
+        cancel_btn.clicked.connect(self._dlg.reject)
+        f_lay.addWidget(cancel_btn)
+
+        create_btn = QPushButton("Create Snapshot")
+        create_btn.setFixedHeight(34)
+        create_btn.setStyleSheet(
+            "QPushButton { background: #3b82f6; border: none; border-radius: 7px; "
+            "color: #fff; font-size: 12px; font-weight: 600; padding: 0 18px; }"
+            "QPushButton:hover { background: #2563eb; }"
+        )
+        create_btn.clicked.connect(self._confirm)
+        f_lay.addWidget(create_btn)
+        outer.addWidget(footer)
+
+    def _confirm(self) -> None:
+        text = self._entry.text().strip()
+        if not text:
+            self._err_lbl.setText("Description is required.")
+            return
+        self.label = text
+        self._dlg.accept()
+
+    def exec(self) -> None:
+        self._dlg.exec()
+
+
 class ViewHistory(ScreenBase):
     """Commit history list and revert view."""
 
@@ -106,6 +209,17 @@ class ViewHistory(ScreenBase):
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
         tb_lay.addLayout(tb_text, 1)
+
+        snapshot_btn = QPushButton("+ Take Snapshot")
+        snapshot_btn.setFixedHeight(34)
+        snapshot_btn.setStyleSheet(
+            "QPushButton { background: #3b82f6; border: none; border-radius: 7px; "
+            "color: white; font-size: 12px; font-weight: 500; padding: 0 16px; }"
+            "QPushButton:hover { background: #2563eb; }"
+            "QPushButton:pressed { background: #1d4ed8; }"
+        )
+        snapshot_btn.clicked.connect(self._on_take_snapshot)
+        tb_lay.addWidget(snapshot_btn)
 
         refresh_btn = _btn_ghost("Refresh", height=34)
         refresh_btn.setFixedWidth(90)
@@ -279,6 +393,35 @@ class ViewHistory(ScreenBase):
 
         self._setup_overlay("Loading history...")
         self._load_manifests()
+
+    # ------------------------------------------------------------------
+
+    def _on_take_snapshot(self) -> None:
+        """Ask user for a description then create a full-project snapshot."""
+        dlg = _SnapshotLabelDialog(self)
+        dlg.exec()
+        label = dlg.label
+        if label is None:
+            return
+
+        project_path = self.project_path
+        tx_tables = list(self.project.get("transaction_tables", []))
+
+        def worker():
+            import pandas as pd
+            live_tx = project_path / "metadata" / "data" / "transactions"
+            tables: dict = {}
+            for name in tx_tables:
+                csv = live_tx / f"{name}.csv"
+                if csv.exists():
+                    tables[name] = pd.read_csv(csv)
+            create_snapshot(project_path, tables, label=label)
+
+        self._run_background(
+            worker,
+            lambda _: self._load_manifests(),
+            lambda exc: QMessageBox.critical(self, "Error", f"Could not create snapshot:\n{exc}"),
+        )
 
     # ------------------------------------------------------------------
 
