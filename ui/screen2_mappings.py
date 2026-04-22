@@ -77,6 +77,7 @@ class Screen2Mappings(ScreenBase):
 
         self._transaction_tables = list(project.get("transaction_tables", []))
         self._dim_tables = list(project.get("dim_tables", []))
+        self._locked_mappings: list[dict] = self._load_existing_mappings()
         self._pending_mappings: list[dict] = []
 
         self._selected_dim_table: str | None = None
@@ -94,6 +95,12 @@ class Screen2Mappings(ScreenBase):
         self._setup_overlay("Loading...")
         self._refresh_tables()
         self._refresh_mappings()
+
+    def _load_existing_mappings(self) -> list[dict]:
+        try:
+            return get_mappings(self.project_path)
+        except Exception:
+            return []
 
     # ── Sidebar ───────────────────────────────────────────────────────
 
@@ -590,7 +597,12 @@ class Screen2Mappings(ScreenBase):
         self._error_lbl.setStyleSheet(
             "color: #f87171; background: transparent; border: none; font-size: 12px;"
         )
-        self._footer_hint = QLabel("All tables must be mapped at least once before finishing setup")
+        _hint_text = (
+            "Add new mappings above, then click Finish to save and return."
+            if self._locked_mappings
+            else "All tables must be mapped at least once before finishing setup"
+        )
+        self._footer_hint = QLabel(_hint_text)
         self._footer_hint.setStyleSheet(
             "color: #475569; background: transparent; border: none; font-size: 12px;"
         )
@@ -675,6 +687,8 @@ class Screen2Mappings(ScreenBase):
         )
         x_btn.setCursor(Qt.PointingHandCursor)
         x_btn.clicked.connect(lambda _=False, t=table_name, k=kind: self._confirm_remove_table(t, k))
+        if self._locked_mappings:
+            x_btn.setVisible(False)
         r_lay.addWidget(x_btn)
 
         return row, btn
@@ -926,7 +940,8 @@ class Screen2Mappings(ScreenBase):
             "dim_table": self._selected_dim_table,
             "dim_column": dim_column,
         }
-        if any(mapping_key(m) == mapping_key(candidate) for m in self._pending_mappings):
+        all_current = [*self._locked_mappings, *self._pending_mappings]
+        if any(mapping_key(m) == mapping_key(candidate) for m in all_current):
             self._set_error("This mapping already exists.")
             return
 
@@ -977,10 +992,10 @@ class Screen2Mappings(ScreenBase):
 
     def _refresh_mappings(self) -> None:
         clear_layout(self._mapping_list_layout)
-        count = len(self._pending_mappings)
-        self._mappings_count_lbl.setText(f"{count} mapping{'s' if count != 1 else ''}")
+        total = len(self._locked_mappings) + len(self._pending_mappings)
+        self._mappings_count_lbl.setText(f"{total} mapping{'s' if total != 1 else ''}")
 
-        if not self._pending_mappings:
+        if not self._locked_mappings and not self._pending_mappings:
             empty_wrap = QFrame()
             empty_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
             ew_lay = QVBoxLayout(empty_wrap)
@@ -993,41 +1008,78 @@ class Screen2Mappings(ScreenBase):
             self._mapping_list_layout.addWidget(empty_wrap)
             return
 
-        for idx, mapping in enumerate(self._pending_mappings):
-            row = QFrame()
-            row.setObjectName("s2_mrow")
-            is_last = idx == len(self._pending_mappings) - 1
-            if is_last:
-                row.setStyleSheet(
-                    "QFrame#s2_mrow { background: transparent; border: none; }"
+        if self._locked_mappings:
+            self._mapping_list_layout.addWidget(self._make_mappings_subheader("EXISTING"))
+            for mapping in self._locked_mappings:
+                self._mapping_list_layout.addWidget(self._make_mapping_row(mapping, locked=True))
+
+        if self._pending_mappings:
+            if self._locked_mappings:
+                self._mapping_list_layout.addWidget(self._make_mappings_subheader("NEW"))
+            for idx, mapping in enumerate(self._pending_mappings):
+                self._mapping_list_layout.addWidget(
+                    self._make_mapping_row(mapping, locked=False, pending_idx=idx)
                 )
-            else:
-                row.setStyleSheet(
-                    "QFrame#s2_mrow { background: transparent; border: none; "
-                    "border-bottom: 1px solid rgba(255,255,255,0.04); }"
-                )
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(16, 11, 16, 11)
-            row_layout.setSpacing(10)
 
-            tx_t = mapping["transaction_table"]
-            tx_c = mapping["transaction_column"]
-            dim_t = mapping["dim_table"]
-            dim_c = mapping["dim_column"]
+    def _make_mappings_subheader(self, text: str) -> QFrame:
+        subhdr = QFrame()
+        subhdr.setFixedHeight(26)
+        subhdr.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.02); border: none; "
+            "border-top: 1px solid rgba(255,255,255,0.04); "
+            "border-bottom: 1px solid rgba(255,255,255,0.04); }"
+        )
+        sh_lay = QHBoxLayout(subhdr)
+        sh_lay.setContentsMargins(16, 0, 16, 0)
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color: #334155; background: transparent; border: none; "
+            "font-size: 9px; font-weight: 600; letter-spacing: 1px;"
+        )
+        sh_lay.addWidget(lbl)
+        return subhdr
 
-            text_lbl = QLabel(
-                f"<span style='color:#60a5fa;'>{tx_t}</span>"
-                f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{tx_c}</span>"
-                f"<span style='color:#475569;'> ↔ </span>"
-                f"<span style='color:#60a5fa;'>{dim_t}</span>"
-                f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{dim_c}</span>"
+    def _make_mapping_row(self, mapping: dict, locked: bool, pending_idx: int = 0) -> QFrame:
+        row = QFrame()
+        row.setObjectName("s2_mrow")
+        row.setStyleSheet(
+            "QFrame#s2_mrow { background: transparent; border: none; "
+            "border-bottom: 1px solid rgba(255,255,255,0.04); }"
+        )
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(16, 11, 16, 11)
+        row_layout.setSpacing(10)
+
+        tx_t = mapping["transaction_table"]
+        tx_c = mapping["transaction_column"]
+        dim_t = mapping["dim_table"]
+        dim_c = mapping["dim_column"]
+
+        text_lbl = QLabel(
+            f"<span style='color:#60a5fa;'>{tx_t}</span>"
+            f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{tx_c}</span>"
+            f"<span style='color:#475569;'> ↔ </span>"
+            f"<span style='color:#60a5fa;'>{dim_t}</span>"
+            f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{dim_c}</span>"
+        )
+        text_lbl.setStyleSheet(
+            "background: transparent; border: none; font-size: 12px; "
+            "font-family: 'Courier New', monospace;"
+        )
+        row_layout.addWidget(text_lbl, 1)
+
+        if locked:
+            lock_lbl = QLabel("existing")
+            lock_lbl.setFixedHeight(20)
+            lock_lbl.setAlignment(Qt.AlignCenter)
+            lock_lbl.setStyleSheet(
+                "color: #334155; background: rgba(255,255,255,0.04); "
+                "border: 1px solid rgba(255,255,255,0.07); border-radius: 4px; "
+                "font-size: 9px; padding: 0 6px;"
             )
-            text_lbl.setStyleSheet(
-                "background: transparent; border: none; font-size: 12px; "
-                "font-family: 'Courier New', monospace;"
-            )
-            row_layout.addWidget(text_lbl, 1)
-
+            lock_lbl.setToolTip("Existing mapping — manage from the main workspace")
+            row_layout.addWidget(lock_lbl)
+        else:
             del_btn = QPushButton("✕")
             del_btn.setFixedSize(26, 26)
             del_btn.setStyleSheet(
@@ -1036,9 +1088,10 @@ class Screen2Mappings(ScreenBase):
                 "color: #f87171; font-size: 11px; padding: 0; }"
                 "QPushButton:hover { background: rgba(239,68,68,0.14); }"
             )
-            del_btn.clicked.connect(lambda _=False, i=idx: self._delete_pending_mapping(i))
+            del_btn.clicked.connect(lambda _=False, i=pending_idx: self._delete_pending_mapping(i))
             row_layout.addWidget(del_btn)
-            self._mapping_list_layout.addWidget(row)
+
+        return row
 
     def _delete_pending_mapping(self, index: int) -> None:
         if 0 <= index < len(self._pending_mappings):

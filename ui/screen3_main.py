@@ -365,15 +365,33 @@ class Screen3Main(QWidget):
         scroll.setWidget(nav_container)
         lay.addWidget(scroll, 1)
 
-        # "MAPPINGS" section label
-        if any(i["kind"] == "mapping" for i in self._nav_items):
-            m_lbl = QLabel("MAPPINGS")
-            m_lbl.setStyleSheet(
-                "color: #334155; background: transparent; border: none; "
-                "font-size: 10px; font-weight: 600; letter-spacing: 1px; "
-                "padding: 14px 18px 6px 18px;"
-            )
-            nav_lay.addWidget(m_lbl)
+        # "MAPPINGS" section label + add-mapping button (always shown)
+        mh_wrap = QWidget()
+        mh_wrap.setStyleSheet("background: transparent;")
+        mh_lay = QHBoxLayout(mh_wrap)
+        mh_lay.setContentsMargins(18, 14, 12, 6)
+        mh_lay.setSpacing(0)
+
+        m_lbl = QLabel("MAPPINGS")
+        m_lbl.setStyleSheet(
+            "color: #334155; background: transparent; border: none; "
+            "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
+        )
+        mh_lay.addWidget(m_lbl, 1)
+
+        add_map_btn = QPushButton("+")
+        add_map_btn.setFixedSize(18, 18)
+        add_map_btn.setCursor(Qt.PointingHandCursor)
+        add_map_btn.setToolTip("Add new mapping")
+        add_map_btn.setStyleSheet(
+            "QPushButton { background: rgba(59,130,246,0.15); border: none; "
+            "border-radius: 4px; color: #60a5fa; font-size: 14px; font-weight: 700; padding: 0; }"
+            "QPushButton:hover { background: rgba(59,130,246,0.3); color: #93c5fd; }"
+        )
+        add_map_btn.clicked.connect(self._go_to_mapping_setup)
+        mh_lay.addWidget(add_map_btn)
+
+        nav_lay.addWidget(mh_wrap)
 
         for item in self._nav_items:
             if item["kind"] == "separator":
