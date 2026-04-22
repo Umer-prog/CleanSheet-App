@@ -264,6 +264,7 @@ def create_snapshot(
             pass  # non-critical
 
     parent = settings.get("current_manifest")
+    sheets_meta = _load_project_json(project_path).get("sheets_meta", {})
 
     _write_commit_json(commit_dir, {
         "manifest_id": commit_id,
@@ -273,6 +274,7 @@ def create_snapshot(
         "tables": tx_names,
         "dim_tables": dim_names,
         "mappings": mappings,
+        "sheets_meta": sheets_meta,
     })
 
     settings["current_manifest"] = commit_id
@@ -458,6 +460,23 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
         # Remove restored dims from deleted_dim_tables — revert brings them back
         current_deleted = set(project_data.get("deleted_dim_tables", []))
         project_data["deleted_dim_tables"] = sorted(current_deleted - set(restored_dims))
+
+        # Restore chain hierarchy (sheets_meta) for every reverted table.
+        # Old snapshots that pre-date this field will have an empty dict, which
+        # correctly strips any chain info that didn't exist at that point in time.
+        committed_sheets_meta = manifest.get("sheets_meta", {})
+        current_sheets_meta = dict(project_data.get("sheets_meta", {}))
+        all_reverted = set(tx_tables) | set(restored_dims)
+        for table_name in all_reverted:
+            if table_name in committed_sheets_meta:
+                current_sheets_meta[table_name] = committed_sheets_meta[table_name]
+            else:
+                current_sheets_meta.pop(table_name, None)
+        # Drop meta for tables that no longer exist after the revert
+        for table_name in [k for k in current_sheets_meta if k not in all_reverted]:
+            del current_sheets_meta[table_name]
+        project_data["sheets_meta"] = current_sheets_meta
+
         _write_project_json(project_path, project_data)
 
     settings = _read_settings(project_path)
