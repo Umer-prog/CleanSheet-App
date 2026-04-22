@@ -95,6 +95,7 @@ class Screen2Mappings(ScreenBase):
         self._setup_overlay("Loading...")
         self._refresh_tables()
         self._refresh_mappings()
+        self._update_finish_btn()
 
     def _load_existing_mappings(self) -> list[dict]:
         try:
@@ -597,12 +598,7 @@ class Screen2Mappings(ScreenBase):
         self._error_lbl.setStyleSheet(
             "color: #f87171; background: transparent; border: none; font-size: 12px;"
         )
-        _hint_text = (
-            "Add new mappings above, then click Finish to save and return."
-            if self._locked_mappings
-            else "All tables must be mapped at least once before finishing setup"
-        )
-        self._footer_hint = QLabel(_hint_text)
+        self._footer_hint = QLabel("")
         self._footer_hint.setStyleSheet(
             "color: #475569; background: transparent; border: none; font-size: 12px;"
         )
@@ -610,17 +606,11 @@ class Screen2Mappings(ScreenBase):
         f_lay.addWidget(self._error_lbl)
         f_lay.addStretch()
 
-        finish_btn = QPushButton("Finish Setup →")
-        finish_btn.setFixedHeight(36)
-        finish_btn.setFixedWidth(140)
-        finish_btn.setStyleSheet(
-            "QPushButton { background: #3b82f6; border: none; border-radius: 8px; "
-            "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 16px; }"
-            "QPushButton:hover { background: #2563eb; }"
-            "QPushButton:pressed { background: #1d4ed8; }"
-        )
-        finish_btn.clicked.connect(self._on_finish_setup)
-        f_lay.addWidget(finish_btn, 0, Qt.AlignVCenter)
+        self._finish_btn = QPushButton("Finish Setup →")
+        self._finish_btn.setFixedHeight(36)
+        self._finish_btn.setFixedWidth(140)
+        self._finish_btn.clicked.connect(self._on_finish_setup)
+        f_lay.addWidget(self._finish_btn, 0, Qt.AlignVCenter)
         return footer
 
     # ------------------------------------------------------------------
@@ -634,6 +624,29 @@ class Screen2Mappings(ScreenBase):
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)
         self._footer_hint.setVisible(not bool(msg))
+
+    def _update_finish_btn(self) -> None:
+        has_mapping = bool(self._locked_mappings or self._pending_mappings)
+        self._finish_btn.setEnabled(has_mapping)
+        if has_mapping:
+            self._finish_btn.setStyleSheet(
+                "QPushButton { background: #3b82f6; border: none; border-radius: 8px; "
+                "color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 16px; }"
+                "QPushButton:hover { background: #2563eb; }"
+                "QPushButton:pressed { background: #1d4ed8; }"
+            )
+            self._footer_hint.setText(
+                "Add new mappings above, then click Finish to save and continue."
+                if self._locked_mappings
+                else "At least 1 mapping confirmed. Click Finish when ready."
+            )
+        else:
+            self._finish_btn.setStyleSheet(
+                "QPushButton { background: #1a2235; border: 1px solid rgba(255,255,255,0.08); "
+                "border-radius: 8px; color: #334155; font-size: 12px; "
+                "font-weight: 500; padding: 0 16px; }"
+            )
+            self._footer_hint.setText("Add at least 1 mapping before finishing setup.")
 
     # ------------------------------------------------------------------
     # Table selection
@@ -994,6 +1007,7 @@ class Screen2Mappings(ScreenBase):
         clear_layout(self._mapping_list_layout)
         total = len(self._locked_mappings) + len(self._pending_mappings)
         self._mappings_count_lbl.setText(f"{total} mapping{'s' if total != 1 else ''}")
+        self._update_finish_btn()
 
         if not self._locked_mappings and not self._pending_mappings:
             empty_wrap = QFrame()
@@ -1111,40 +1125,68 @@ class Screen2Mappings(ScreenBase):
             missing_tx, missing_dim = find_unmapped_tables(
                 self._transaction_tables, self._dim_tables, combined
             )
-            if missing_tx or missing_dim:
-                chunks = []
-                if missing_tx:
-                    chunks.append(f"Unmapped transaction: {', '.join(missing_tx)}")
-                if missing_dim:
-                    chunks.append(f"Unmapped dimension: {', '.join(missing_dim)}")
-                self._set_error(" | ".join(chunks))
+
+            def do_save():
+                def save_worker():
+                    existing_keys = {mapping_key(m) for m in existing_mappings}
+                    for m in self._pending_mappings:
+                        if mapping_key(m) not in existing_keys:
+                            add_mapping(self.project_path, m)
+                            existing_keys.add(mapping_key(m))
+                    from core.snapshot_manager import create_initial_commit
+                    create_initial_commit(self.project_path)
+
+                def on_save_success(_):
+                    self._pending_mappings.clear()
+                    self._refresh_mappings()
+                    self._set_error("")
+                    try:
+                        from ui.screen3_main import Screen3Main
+                        self.app.show_screen(Screen3Main, project=self.project)
+                    except ImportError:
+                        msgbox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
+
+                def on_save_error(exc):
+                    msgbox.critical(self, "Error", f"Could not save mappings:\n{exc}")
+
+                self._run_background(save_worker, on_save_success, on_save_error)
+
+            if not missing_tx and not missing_dim:
+                box = QMessageBox(self)
+                box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
+                box.setWindowTitle("Finish Setup")
+                box.setText("All tables are mapped.\n\nDo you want to finish setup and continue?")
+                box.setIcon(QMessageBox.Icon.Question)
+                confirm_btn = box.addButton("Finish Setup", QMessageBox.ButtonRole.AcceptRole)
+                box.addButton("Go Back", QMessageBox.ButtonRole.RejectRole)
+                box.setDefaultButton(confirm_btn)
+                box.exec()
+                if box.clickedButton() is confirm_btn:
+                    do_save()
                 return
 
-            def save_worker():
-                existing_keys = {mapping_key(m) for m in existing_mappings}
-                for m in self._pending_mappings:
-                    if mapping_key(m) not in existing_keys:
-                        add_mapping(self.project_path, m)
-                        existing_keys.add(mapping_key(m))
-                # Create the initial commit from the transaction CSVs that
-                # were loaded during setup — only runs if history is empty.
-                from core.snapshot_manager import create_initial_commit
-                create_initial_commit(self.project_path)
+            # Build warning listing the unmapped tables
+            parts = []
+            if missing_tx:
+                parts.append(f"Transaction: {', '.join(missing_tx)}")
+            if missing_dim:
+                parts.append(f"Dimension: {', '.join(missing_dim)}")
+            unmapped_str = "\n".join(parts)
 
-            def on_save_success(_):
-                self._pending_mappings.clear()
-                self._refresh_mappings()
-                self._set_error("")
-                try:
-                    from ui.screen3_main import Screen3Main
-                    self.app.show_screen(Screen3Main, project=self.project)
-                except ImportError:
-                    msgbox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
-
-            def on_save_error(exc):
-                msgbox.critical(self, "Error", f"Could not save mappings:\n{exc}")
-
-            self._run_background(save_worker, on_save_success, on_save_error)
+            box = QMessageBox(self)
+            box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
+            box.setWindowTitle("Unmapped Tables")
+            box.setText(
+                f"The following tables have no mappings and will be passed through unchanged:\n\n"
+                f"{unmapped_str}\n\nDo you want to continue?"
+            )
+            box.setIcon(QMessageBox.Icon.Warning)
+            continue_btn = box.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Go Back", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(continue_btn)
+            box.exec()
+            if box.clickedButton() is continue_btn:
+                do_save()
 
         def on_existing_error(exc):
             msgbox.critical(self, "Error", f"Could not read existing mappings:\n{exc}")
