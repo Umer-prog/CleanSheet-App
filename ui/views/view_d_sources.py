@@ -225,7 +225,7 @@ class ViewDSources(ScreenBase):
         sch_lay.setContentsMargins(18, 0, 18, 0)
         sc_title = QLabel("CURRENT DIMENSION TABLES")
         sc_title.setStyleSheet(
-            "color: #475569; font-size: 11px; font-weight: 600; "
+            "color: #64748b; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         sch_lay.addWidget(sc_title, 1)
@@ -241,13 +241,13 @@ class ViewDSources(ScreenBase):
 
         # Search bar
         search_frame = QFrame()
-        search_frame.setFixedHeight(46)
+        search_frame.setFixedHeight(54)
         search_frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
         )
         sf_lay = QHBoxLayout(search_frame)
-        sf_lay.setContentsMargins(14, 7, 14, 7)
+        sf_lay.setContentsMargins(12, 10, 12, 10)
         self._search_bar = QLineEdit()
         self._search_bar.setPlaceholderText("Search dimension tables...")
         self._search_bar.setFixedHeight(30)

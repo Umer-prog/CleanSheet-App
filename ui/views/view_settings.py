@@ -50,13 +50,13 @@ def _field_input(value: str = "", placeholder: str = "", readonly: bool = False)
         e.setStyleSheet(
             "QLineEdit { background: rgba(255,255,255,0.02); "
             "border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; "
-            "color: #334155; font-size: 13px; padding: 0 12px; }"
+            "color: #64748b; font-size: 13px; padding: 0 12px; }"
         )
     else:
         e.setStyleSheet(
             "QLineEdit { background: rgba(255,255,255,0.04); "
             "border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; "
-            "color: #f1f5f9; font-size: 13px; padding: 0 12px; }"
+            "color: #64748b; font-size: 13px; padding: 0 12px; }"
             "QLineEdit:focus { border-color: rgba(59,130,246,0.5); }"
         )
     return e

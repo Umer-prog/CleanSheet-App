@@ -162,7 +162,7 @@ class ViewTSources(ScreenBase):
         sch_lay.setContentsMargins(18, 0, 18, 0)
         sc_title = QLabel("CURRENT TRANSACTION TABLES")
         sc_title.setStyleSheet(
-            "color: #475569; font-size: 11px; font-weight: 600; "
+            "color: #64748b; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         sch_lay.addWidget(sc_title, 1)
@@ -607,7 +607,12 @@ class ViewTSources(ScreenBase):
 
         def on_sheets_loaded(sheets):
             from ui.popups.popup_single_sheet import select_single_sheet
-            selected = select_single_sheet(self, excel_path, sheets, title="Select Sheet For Update")
+            prev_sheet = self.project.get("sheets_meta", {}).get(table_name, {}).get("sheet_name")
+            selected = select_single_sheet(
+                self, excel_path, sheets,
+                title="Select Sheet For Update",
+                default_sheet=prev_sheet,
+            )
             if not selected:
                 return
 
@@ -615,6 +620,16 @@ class ViewTSources(ScreenBase):
                 df = get_sheet_as_dataframe(excel_path, selected)
                 out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
                 df.to_csv(out, index=False, encoding="utf-8")
+                sheets_meta = dict(self.project.get("sheets_meta", {}))
+                existing = dict(sheets_meta.get(table_name, {}))
+                existing["file_path"] = str(excel_path)
+                existing["sheet_name"] = selected
+                existing["is_chained"] = False
+                sheets_meta[table_name] = existing
+                save_project_json(self.project_path, {
+                    **self.project,
+                    "sheets_meta": sheets_meta,
+                })
 
             def on_done(_):
                 msgbox.information(self, "Updated", f"Table '{table_name}' updated.")

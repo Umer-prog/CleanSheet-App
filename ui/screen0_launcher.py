@@ -32,6 +32,18 @@ _AVATAR_COLORS = [
 ]
 
 
+def _row_label_html(name: str, company: str, selected: bool) -> str:
+    name_color = "#93c5fd" if selected else "#94a3b8"
+    company_part = (
+        f"<br><span style='color:#475569; font-size:13px; letter-spacing:0.5px;'>{company}</span>"
+        if company else ""
+    )
+    return (
+        f"<span style='color:{name_color}; font-size:15px; font-weight:500;'>{name}</span>"
+        f"{company_part}"
+    )
+
+
 def _avatar_colors(name: str) -> tuple[str, str]:
     idx = sum(ord(c) for c in name) % len(_AVATAR_COLORS)
     return _AVATAR_COLORS[idx]
@@ -173,7 +185,7 @@ class Screen0Launcher(ScreenBase):
         self._count_pill.setFont(theme.font(13))
         self._count_pill.setFixedHeight(30)
         self._count_pill.setStyleSheet(
-            "color: #334155; background: rgba(255,255,255,0.05); "
+            "color: #64748b; background: rgba(255,255,255,0.05); "
             "padding: 0px 8px; border-radius: 10px; border: none;"
         )
         h_lay.addWidget(self._count_pill)
@@ -308,9 +320,9 @@ class Screen0Launcher(ScreenBase):
         )
         text_block.addWidget(app_name_lbl)
 
-        app_sub_lbl = QLabel("Data Mapping & Standardisation Tool")
+        app_sub_lbl = QLabel("Data Cleansing and Standardization Tool.")
         app_sub_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 13px;"
+            "color: #64748b; background: transparent; border: none; font-size: 17px;"
         )
         text_block.addWidget(app_sub_lbl)
         hero_lay.addLayout(text_block)
@@ -505,20 +517,13 @@ class Screen0Launcher(ScreenBase):
         )
         rl.addWidget(avatar)
 
-        text_col_lay = QVBoxLayout()
-        text_col_lay.setSpacing(2)
-
-        name_lbl = QLabel(name)
-        name_lbl.setFont(theme.font(13))
-        name_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
-        text_col_lay.addWidget(name_lbl)
-
-        company_lbl = QLabel(company)
-        company_lbl.setFont(theme.font(11))
-        company_lbl.setStyleSheet("color: #334155; background: transparent; border: none;")
-        text_col_lay.addWidget(company_lbl)
-
-        rl.addLayout(text_col_lay, 1)
+        name_lbl = QLabel()
+        name_lbl.setTextFormat(Qt.RichText)
+        name_lbl.setText(_row_label_html(name, company, selected=False))
+        name_lbl.setStyleSheet("background: transparent; border: none;")
+        name_lbl._proj_name = name
+        name_lbl._proj_company = company
+        rl.addWidget(name_lbl, 1)
 
         def _click(event=None, p=path, r=row, nl=name_lbl, s=state):
             self._select_row(p, r, nl, s)
@@ -526,7 +531,6 @@ class Screen0Launcher(ScreenBase):
         row.mousePressEvent = _click
         avatar.mousePressEvent = _click
         name_lbl.mousePressEvent = _click
-        company_lbl.mousePressEvent = _click
 
         return row
 
@@ -539,9 +543,8 @@ class Screen0Launcher(ScreenBase):
                 "border-bottom: 1px solid rgba(255,255,255,0.03); }"
             )
         if self._selected_name_lbl:
-            self._selected_name_lbl.setStyleSheet(
-                "color: #94a3b8; background: transparent; border: none;"
-            )
+            lbl = self._selected_name_lbl
+            lbl.setText(_row_label_html(lbl._proj_name, lbl._proj_company, selected=False))
 
         # Select new row
         row.setStyleSheet(
@@ -549,7 +552,7 @@ class Screen0Launcher(ScreenBase):
             "border-left: 2px solid #3b82f6; "
             "border-bottom: 1px solid rgba(255,255,255,0.03); }"
         )
-        name_lbl.setStyleSheet("color: #93c5fd; background: transparent; border: none;")
+        name_lbl.setText(_row_label_html(name_lbl._proj_name, name_lbl._proj_company, selected=True))
 
         self._selected_path = path
         self._selected_row = row
@@ -728,7 +731,7 @@ class NewProjectScreen(ScreenBase):
             "QPushButton { background: rgba(255,255,255,0.04); "
             "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
             "color: #64748b; font-size: 12px; padding: 0; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
+            "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self._go_back)
         h_lay.addWidget(close_btn)

@@ -69,11 +69,12 @@ def find_unmapped_tables(
 class Screen2Mappings(ScreenBase):
     """Stage 2 — define dimension/transaction column mappings."""
 
-    def __init__(self, app, project: dict, **kwargs):
+    def __init__(self, app, project: dict, from_screen3: bool = False, **kwargs):
         super().__init__()
         self.app = app
         self.project = project
         self.project_path = Path(project["project_path"])
+        self._from_screen3 = from_screen3
 
         self._transaction_tables = list(project.get("transaction_tables", []))
         self._dim_tables = list(project.get("dim_tables", []))
@@ -152,7 +153,7 @@ class Screen2Mappings(ScreenBase):
         brand_lbl = QLabel(
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
+            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -162,7 +163,7 @@ class Screen2Mappings(ScreenBase):
         # "SETUP PROGRESS" label
         prog_lbl = QLabel("SETUP PROGRESS")
         prog_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -182,9 +183,9 @@ class Screen2Mappings(ScreenBase):
         # "PROJECT" label
         proj_lbl = QLabel("PROJECT")
         proj_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
-            "padding: 8px 18px 4px 18px;"
+            "padding: 8px 18px 12px 18px; margin-top: 4px;"
         )
         lay.addWidget(proj_lbl)
 
@@ -206,7 +207,7 @@ class Screen2Mappings(ScreenBase):
         )
         pc_lbl = QLabel(proj_client)
         pc_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 10px;"
+            "color: #64748b; background: transparent; border: none; font-size: 10px;"
         )
         ic_lay.addWidget(pn_lbl)
         ic_lay.addWidget(pc_lbl)
@@ -220,15 +221,26 @@ class Screen2Mappings(ScreenBase):
 
         lay.addStretch(1)
 
-        # Back button
+        # Back / Cancel button
         back_wrap = QFrame()
         back_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
         bw_lay = QHBoxLayout(back_wrap)
         bw_lay.setContentsMargins(12, 12, 12, 12)
-        back_btn = QPushButton("← Back to Data Loader")
-        back_btn.setObjectName("btn_ghost")
-        back_btn.setFixedHeight(32)
-        back_btn.clicked.connect(self._go_back)
+        if self._from_screen3:
+            back_btn = QPushButton("✕  Cancel")
+            back_btn.setObjectName("btn_ghost")
+            back_btn.setFixedHeight(32)
+            back_btn.setStyleSheet(
+                "QPushButton { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); "
+                "border-radius: 7px; color: #f87171; font-size: 12px; padding: 0 12px; }"
+                "QPushButton:hover { background: rgba(239,68,68,0.18); color: #fca5a5; }"
+            )
+            back_btn.clicked.connect(self._cancel_to_screen3)
+        else:
+            back_btn = QPushButton("← Back to Data Loader")
+            back_btn.setObjectName("btn_ghost")
+            back_btn.setFixedHeight(32)
+            back_btn.clicked.connect(self._go_back)
         bw_lay.addWidget(back_btn)
         lay.addWidget(back_wrap)
 
@@ -331,10 +343,10 @@ class Screen2Mappings(ScreenBase):
         t_lay.setContentsMargins(28, 0, 28, 0)
 
         topbar_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Mapper</span>"
-            "<br>"
-            "<span style='color:#334155; font-size:11px;'>Select one table on each side, pick columns, then confirm. "
-            "Repeat until all tables are mapped.</span>"
+            "<span style='color:#f1f5f9; font-size:20px; font-weight:600;'>Table Mapping</span>"
+            # "<br>"
+            # "<span style='color:#334155; font-size:11px;'>Select one table on each side, pick columns, then confirm. "
+            # "Repeat until all tables are mapped.</span>"
         )
         topbar_lbl.setTextFormat(Qt.RichText)
         topbar_lbl.setStyleSheet("background: transparent; border: none;")
@@ -474,7 +486,7 @@ class Screen2Mappings(ScreenBase):
         mph_lay.setContentsMargins(16, 0, 16, 0)
         mp_title_lbl = QLabel("CONFIRMED MAPPINGS")
         mp_title_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         self._mappings_count_lbl = QLabel("0 mappings")
@@ -522,7 +534,7 @@ class Screen2Mappings(ScreenBase):
 
         title_lbl = QLabel(label.upper())
         title_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         h_lay.addWidget(title_lbl)
@@ -569,7 +581,7 @@ class Screen2Mappings(ScreenBase):
         h_lay.setContentsMargins(14, 0, 14, 0)
         lbl = QLabel(label.upper())
         lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         h_lay.addWidget(lbl)
@@ -620,6 +632,10 @@ class Screen2Mappings(ScreenBase):
     def _go_back(self) -> None:
         from ui.screen1_sources import Screen1Sources
         self.app.show_screen(Screen1Sources, project=self.project)
+
+    def _cancel_to_screen3(self) -> None:
+        from ui.screen3_main import Screen3Main
+        self.app.show_screen(Screen3Main, project=self.project)
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)
@@ -897,13 +913,13 @@ class Screen2Mappings(ScreenBase):
         unique_matches   = len({v.lower() for v in matching_rows})
         overlap_pct      = len(matching_rows) / len(tx_sample)
 
-        # ── Tier 1: no signal at all → hard block ─────────────────────
+        # ── Tier 1: no signal at all → soft override ask ──────────────
         if unique_matches == 0:
             return (
-                "error",
-                f"None of the sampled values in '{tx_col}' appear in the "
-                f"'{dim_col}' dimension column.\n\n"
-                f"Please choose a different transaction column.",
+                "warning",
+                f"No matching values found between '{tx_col}' and '{dim_col}'.\n\n"
+                f"These columns may not correspond to the same data. "
+                f"You can map anyway or choose a different column.",
             )
 
         # ── Tier 2: only 1 unique match → soft override ask ───────────
@@ -1122,9 +1138,6 @@ class Screen2Mappings(ScreenBase):
 
         def on_existing_loaded(existing_mappings):
             combined = [*existing_mappings, *self._pending_mappings]
-            missing_tx, missing_dim = find_unmapped_tables(
-                self._transaction_tables, self._dim_tables, combined
-            )
 
             def do_save():
                 def save_worker():
@@ -1150,6 +1163,10 @@ class Screen2Mappings(ScreenBase):
                     msgbox.critical(self, "Error", f"Could not save mappings:\n{exc}")
 
                 self._run_background(save_worker, on_save_success, on_save_error)
+
+            missing_tx, missing_dim = find_unmapped_tables(
+                self._transaction_tables, self._dim_tables, combined
+            )
 
             if not missing_tx and not missing_dim:
                 box = QMessageBox(self)

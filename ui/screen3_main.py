@@ -294,7 +294,7 @@ class Screen3Main(QWidget):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
+            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -313,7 +313,7 @@ class Screen3Main(QWidget):
 
         ws_section = QLabel("WORKSPACE")
         ws_section.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         wi_lay.addWidget(ws_section)
@@ -374,7 +374,7 @@ class Screen3Main(QWidget):
 
         m_lbl = QLabel("MAPPINGS")
         m_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         mh_lay.addWidget(m_lbl, 1)
@@ -406,7 +406,7 @@ class Screen3Main(QWidget):
             if item["kind"] == "section_label":
                 sec = QLabel(item["label"])
                 sec.setStyleSheet(
-                    "color: #334155; background: transparent; border: none; "
+                    "color: #64748b; background: transparent; border: none; "
                     "font-size: 10px; font-weight: 600; letter-spacing: 1px; "
                     "padding: 14px 18px 6px 18px;"
                 )
@@ -746,7 +746,7 @@ class Screen3Main(QWidget):
             msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
             return
         self.app.set_current_project(updated)
-        self.app.show_screen(Screen2Mappings, project=updated)
+        self.app.show_screen(Screen2Mappings, project=updated, from_screen3=True)
 
     def _go_to_screen1(self) -> None:
         try:
@@ -756,7 +756,7 @@ class Screen3Main(QWidget):
             return
         self.app.set_current_project(updated)
         from ui.screen1_sources import Screen1Sources
-        self.app.show_screen(Screen1Sources, project=updated, sources=[])
+        self.app.show_screen(Screen1Sources, project=updated, sources=[], from_screen3=True)
 
     def _on_chain_append(self, chain_context: dict) -> None:
         from ui.screen15_chain_mapper import Screen15ChainMapper

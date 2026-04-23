@@ -318,8 +318,8 @@ class PopupAdd(QDialog):
         close_btn.setFixedSize(26, 26)
         close_btn.setStyleSheet(
             "QPushButton { background: rgba(255,255,255,0.06); "
-            "border: 1px solid rgba(255,255,255,0.14); "
-            "border-radius: 6px; color: #94a3b8; font-size: 11px; }"
+            "border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self.reject)

@@ -256,7 +256,7 @@ class ViewHistory(ScreenBase):
         lh_lay.setContentsMargins(18, 0, 18, 0)
         lh_title = QLabel("COMMITS")
         lh_title.setStyleSheet(
-            "color: #475569; font-size: 11px; font-weight: 600; "
+            "color: #64748b; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         lh_lay.addWidget(lh_title, 1)
@@ -296,7 +296,7 @@ class ViewHistory(ScreenBase):
         rh_lay.setSpacing(12)
         rh_title = QLabel("COMMIT DETAILS")
         rh_title.setStyleSheet(
-            "color: #475569; font-size: 11px; font-weight: 600; "
+            "color: #64748b; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         rh_lay.addWidget(rh_title, 1)

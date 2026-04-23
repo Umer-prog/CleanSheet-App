@@ -64,21 +64,15 @@ class PopupSheetSelector(QDialog):
         lay.addWidget(icon_box)
 
         # Title + filename
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        title = QLabel("Select Sheets")
-        title.setStyleSheet(
-            "color: #f1f5f9; background: transparent; border: none; "
-            "font-size: 14px; font-weight: 600;"
+        title_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>Select Sheets</span>"
+            "<br>"
+            f"<span style='color:#3b82f6; font-size:11px; font-family:Courier New,monospace;'>"
+            f"{self._excel_path.name}</span>"
         )
-        sub = QLabel(self._excel_path.name)
-        sub.setStyleSheet(
-            "color: #3b82f6; background: transparent; border: none; "
-            "font-size: 12px; font-family: 'Courier New', monospace;"
-        )
-        text_col.addWidget(title)
-        text_col.addWidget(sub)
-        lay.addLayout(text_col, 1)
+        title_lbl.setTextFormat(Qt.RichText)
+        title_lbl.setStyleSheet("background: transparent; border: none;")
+        lay.addWidget(title_lbl, 1)
 
         # Close button
         close_btn = QPushButton("✕")

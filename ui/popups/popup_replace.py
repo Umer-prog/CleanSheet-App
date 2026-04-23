@@ -162,9 +162,9 @@ class PopupReplace(QDialog):
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)
         close_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.06); "
-            "border: 1px solid rgba(255,255,255,0.14); "
-            "border-radius: 6px; color: #94a3b8; font-size: 11px; }"
+           "QPushButton { background: rgba(255,255,255,0.06); "
+            "border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self.reject)
@@ -239,7 +239,7 @@ class PopupReplace(QDialog):
         th_lay.setContentsMargins(14, 0, 14, 0)
         th_lay.setSpacing(8)
         _lbl(th_lay, "DIMENSION TABLE",
-             "color:#475569; font-size:10px; font-weight:600; letter-spacing:1px;")
+             "color:#64748b; font-size:10px; font-weight:600; letter-spacing:1px;")
         _lbl(th_lay, self._dim_table,
              "color:#60a5fa; font-size:11px; font-family:'Courier New';")
         th_lay.addStretch()
@@ -249,13 +249,13 @@ class PopupReplace(QDialog):
 
         # ── Search bar ────────────────────────────────────────────────
         search_frame = QFrame()
-        search_frame.setFixedHeight(44)
+        search_frame.setFixedHeight(54)
         search_frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-bottom: 1px solid rgba(255,255,255,0.06); }"
         )
         sf_lay = QHBoxLayout(search_frame)
-        sf_lay.setContentsMargins(12, 6, 12, 6)
+        sf_lay.setContentsMargins(12, 10, 12, 10)
         self._table_search = QLineEdit()
         self._table_search.setPlaceholderText("Search values...")
         self._table_search.setFixedHeight(30)
@@ -597,9 +597,9 @@ class PopupDimView(PopupReplace):
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)
         close_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.06); "
-            "border: 1px solid rgba(255,255,255,0.14); "
-            "border-radius: 6px; color: #94a3b8; font-size: 11px; }"
+        "QPushButton { background: rgba(255,255,255,0.06); "
+            "border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self.reject)

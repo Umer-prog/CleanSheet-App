@@ -13,6 +13,7 @@ Confirm Chain → saves the column_mapping into the chain entry and
 """
 from __future__ import annotations
 
+import tempfile
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -25,6 +26,16 @@ from PySide6.QtWidgets import (
 import ui.theme as theme
 from core.data_loader import get_sheet_as_dataframe
 from ui.workers import ScreenBase, clear_layout
+
+_ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow_s15.svg"
+_ARROW_PATH.write_text(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+    "</svg>",
+    encoding="utf-8",
+)
+_ARROW_URL = str(_ARROW_PATH).replace("\\", "/")
 
 _SIDEBAR_W = 300
 _NOT_MAPPED = "— Not Mapped —"
@@ -172,7 +183,7 @@ class Screen15ChainMapper(ScreenBase):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
+            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -181,7 +192,7 @@ class Screen15ChainMapper(ScreenBase):
 
         steps_label = QLabel("SETUP PROGRESS")
         steps_label.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -204,9 +215,9 @@ class Screen15ChainMapper(ScreenBase):
 
         proj_section = QLabel("PROJECT")
         proj_section.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
-            "padding: 8px 18px 4px 18px; margin-top: 4px;"
+            "padding: 8px 18px 12px 18px; margin-top: 4px;"
         )
         sb.addWidget(proj_section)
 
@@ -226,7 +237,7 @@ class Screen15ChainMapper(ScreenBase):
         )
         proj_company_lbl = QLabel(self.project.get("company", ""))
         proj_company_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 10px;"
+            "color: #64748b; background: transparent; border: none; font-size: 10px;"
         )
         pc_lay.addWidget(proj_name_lbl)
         pc_lay.addWidget(proj_company_lbl)
@@ -306,10 +317,10 @@ class Screen15ChainMapper(ScreenBase):
         tb_lay.setContentsMargins(28, 0, 28, 0)
 
         tb_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Chain Columns</span>"
-            "<br>"
-            "<span style='color:#334155; font-size:11px;'>"
-            "Map secondary sheet columns onto the primary sheet's columns</span>"
+            "<span style='color:#f1f5f9; font-size:20px; font-weight:600;'>Map Columns</span>"
+            # "<br>"
+            # "<span style='color:#334155; font-size:11px;'>"
+            # "Map secondary sheet columns onto the primary sheet's columns</span>"
         )
         tb_lbl.setTextFormat(Qt.RichText)
         tb_lbl.setStyleSheet("background: transparent; border: none;")
@@ -361,7 +372,7 @@ class Screen15ChainMapper(ScreenBase):
         rf_lay.addWidget(rules_title)
         for rule in [
             "Primary file columns are locked",
-            "Each secondary column can only be mapped once",
+            "Map secondary file columns according to primary file",
             "Auto-matched by name similarity on load",
         ]:
             r_lbl = QLabel(f"• {rule}")
@@ -566,9 +577,9 @@ class Screen15ChainMapper(ScreenBase):
             f"QComboBox {{ background: rgba(255,255,255,0.04); border: {border}; "
             "border-radius: 6px; color: #f1f5f9; font-size: 12px; "
             "font-family: 'Courier New', monospace; padding: 0 10px 0 10px; }"
-            "QComboBox::drop-down { border: none; "
-            "border-left: 1px solid rgba(255,255,255,0.07); width: 26px; "
-            "subcontrol-position: right center; }"
+            "QComboBox::drop-down { border: none; width: 28px; "
+            "subcontrol-origin: padding; subcontrol-position: right center; }"
+            f"QComboBox::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 6px; }}"
             "QComboBox QAbstractItemView { background: #13161e; color: #f1f5f9; "
             "border: 1px solid rgba(255,255,255,0.09); "
             "selection-background-color: rgba(59,130,246,0.18); outline: none; }"
@@ -635,7 +646,7 @@ class Screen15ChainMapper(ScreenBase):
         )
         sep_lay = QHBoxLayout(sep)
         sep_lay.setContentsMargins(20, 0, 20, 0)
-        sep_lbl = QLabel("EXTRA COLUMNS — included in output; empty for other sources")
+        sep_lbl = QLabel("EXTRA/UNMAPPED COLUMNS — not mapped with any primary file column")
         sep_lbl.setStyleSheet(
             "color: #334155; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 0.4px;"

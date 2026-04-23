@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -9,6 +10,16 @@ from PySide6.QtWidgets import (
 )
 
 import ui.theme as theme
+
+_ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow_ss.svg"
+_ARROW_PATH.write_text(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+    "</svg>",
+    encoding="utf-8",
+)
+_ARROW_URL = str(_ARROW_PATH).replace("\\", "/")
 
 
 class PopupSingleSheet(QDialog):
@@ -20,11 +31,13 @@ class PopupSingleSheet(QDialog):
         excel_path: Path,
         sheet_names: list[str],
         title: str = "Select Sheet",
+        default_sheet: str | None = None,
     ):
         super().__init__(parent)
         self._result: str | None = None
         self._sheet_names = sheet_names
         self._file_name = Path(excel_path).name
+        self._default_sheet = default_sheet
 
         self.setWindowTitle(title)
         self.setFixedSize(480, 280)
@@ -91,31 +104,22 @@ class PopupSingleSheet(QDialog):
         ib_lay.addWidget(icon_lbl)
         lay.addWidget(icon_box)
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(
-            "color: #f1f5f9; font-size: 14px; font-weight: 600; "
-            "background: transparent; border: none;"
-        )
-        text_col.addWidget(title_lbl)
-        sub = QLabel(
-            f"<span style='color:#60a5fa; font-family:\"Courier New\";'>"
+        title_lbl = QLabel(
+            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>{title}</span>"
+            "<br>"
+            f"<span style='color:#60a5fa; font-size:11px; font-family:Courier New,monospace;'>"
             f"{self._file_name}</span>"
         )
-        sub.setTextFormat(Qt.RichText)
-        sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
-        )
-        text_col.addWidget(sub)
-        lay.addLayout(text_col, 1)
+        title_lbl.setTextFormat(Qt.RichText)
+        title_lbl.setStyleSheet("background: transparent; border: none;")
+        lay.addWidget(title_lbl, 1)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)
         close_btn.setStyleSheet(
             "QPushButton { background: rgba(255,255,255,0.06); "
-            "border: 1px solid rgba(255,255,255,0.14); "
-            "border-radius: 6px; color: #94a3b8; font-size: 11px; }"
+            "border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; "
+            "color: #94a3b8; font-size: 12px; padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self.reject)
@@ -144,15 +148,19 @@ class PopupSingleSheet(QDialog):
             "border-radius: 7px; color: #f1f5f9; font-size: 13px; "
             "font-family: 'Segoe UI'; padding: 0 12px; }"
             "QComboBox:focus { border-color: rgba(59,130,246,0.5); }"
-            "QComboBox::drop-down { border: none; width: 24px; }"
-            "QComboBox::down-arrow { width: 0; height: 0; }"
+            "QComboBox::drop-down { border: none; width: 28px; "
+            "subcontrol-origin: padding; subcontrol-position: right center; }"
+            f"QComboBox::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 6px; }}"
             "QComboBox QAbstractItemView { background: #13161e; color: #f1f5f9; "
             "border: 1px solid rgba(255,255,255,0.09); "
             "selection-background-color: rgba(59,130,246,0.18); outline: none; }"
         )
         values = self._sheet_names if self._sheet_names else ["No sheets found"]
         self._combo.addItems(values)
-        self._combo.setCurrentIndex(0)
+        if self._default_sheet and self._default_sheet in values:
+            self._combo.setCurrentIndex(values.index(self._default_sheet))
+        else:
+            self._combo.setCurrentIndex(0)
         lay.addWidget(self._combo)
 
         lay.addStretch(1)
@@ -215,9 +223,13 @@ def select_single_sheet(
     excel_path: Path,
     sheet_names: list[str],
     title: str = "Select Sheet",
+    default_sheet: str | None = None,
 ) -> str | None:
     """Open the single sheet picker and return the selected sheet name, or None."""
-    dialog = PopupSingleSheet(parent, excel_path=excel_path, sheet_names=sheet_names, title=title)
+    dialog = PopupSingleSheet(
+        parent, excel_path=excel_path, sheet_names=sheet_names,
+        title=title, default_sheet=default_sheet,
+    )
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.result
     return None

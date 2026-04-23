@@ -76,11 +76,12 @@ def validate_confirm_requirements(
 class Screen1Sources(ScreenBase):
     """Stage 1 — add Excel files and categorize their sheets."""
 
-    def __init__(self, app, project: dict, sources: list | None = None, **kwargs):
+    def __init__(self, app, project: dict, sources: list | None = None, from_screen3: bool = False, **kwargs):
         super().__init__()
         self.app = app
         self.project = project
         self.project_path = Path(project["project_path"])
+        self._from_screen3 = from_screen3
         # Restore state when returning from Screen 1.5; empty on fresh entry
         self._sources: list[dict] = list(sources) if sources is not None else []
         self._pending_chain: dict | None = None  # context passed to Screen 1.5
@@ -133,7 +134,7 @@ class Screen1Sources(ScreenBase):
         brand_lbl = QLabel(
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>DATA MAPPING</span>"
+            "<span style='color:#64748b; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -143,7 +144,7 @@ class Screen1Sources(ScreenBase):
         # Progress steps section label
         steps_label = QLabel("SETUP PROGRESS")
         steps_label.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -151,7 +152,7 @@ class Screen1Sources(ScreenBase):
 
         # Steps
         steps_frame = QFrame()
-        steps_frame.setStyleSheet("QFrame { background: transparent; border: none; }")
+        steps_frame.setStyleSheet("QFrame { background: transparent; border: none; color: #64748b;}")
         sf_lay = QVBoxLayout(steps_frame)
         sf_lay.setContentsMargins(12, 8, 12, 8)
         sf_lay.setSpacing(4)
@@ -167,9 +168,9 @@ class Screen1Sources(ScreenBase):
         # Project info section label
         proj_section = QLabel("PROJECT")
         proj_section.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
-            "padding: 8px 18px 4px 18px; margin-top: 4px;"
+            "padding: 8px 18px 12px 18px; margin-top: 4px; "
         )
         sb.addWidget(proj_section)
 
@@ -213,10 +214,20 @@ class Screen1Sources(ScreenBase):
         )
         bf_lay = QHBoxLayout(back_footer)
         bf_lay.setContentsMargins(12, 10, 12, 10)
-        back_btn = QPushButton("← Back to Projects")
-        back_btn.setObjectName("btn_ghost")
-        back_btn.setFixedHeight(34)
-        back_btn.clicked.connect(self._go_back)
+        if self._from_screen3:
+            back_btn = QPushButton("✕  Cancel")
+            back_btn.setFixedHeight(34)
+            back_btn.setStyleSheet(
+                "QPushButton { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); "
+                "border-radius: 7px; color: #f87171; font-size: 12px; padding: 0 12px; }"
+                "QPushButton:hover { background: rgba(239,68,68,0.18); color: #fca5a5; }"
+            )
+            back_btn.clicked.connect(self._cancel_to_screen3)
+        else:
+            back_btn = QPushButton("← Back to Projects")
+            back_btn.setObjectName("btn_ghost")
+            back_btn.setFixedHeight(34)
+            back_btn.clicked.connect(self._go_back)
         bf_lay.addWidget(back_btn)
         sb.addWidget(back_footer)
 
@@ -236,9 +247,7 @@ class Screen1Sources(ScreenBase):
         tb_lay.setContentsMargins(28, 0, 28, 0)
 
         tb_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Data Loader</span>"
-            "<br>"
-            "<span style='color:#334155; font-size:11px;'>Add Excel files and assign each sheet as Transaction or Dimension</span>"
+            "<span style='color:#f1f5f9; font-size:20px; font-weight:600;'>Data Loader</span>"
         )
         tb_lbl.setTextFormat(Qt.RichText)
         tb_lbl.setStyleSheet("background: transparent; border: none;")
@@ -272,7 +281,7 @@ class Screen1Sources(ScreenBase):
         )
         ban_icon.setFixedWidth(16)
         ban_text = QLabel(
-            "Add at least one Transaction and one Dimension file, then assign sheets before confirming."
+            "Add at least one Transaction and one Dimension file to continue."
         )
         ban_text.setStyleSheet(
             "color: #60a5fa; background: transparent; border: none; font-size: 12px;"
@@ -303,7 +312,7 @@ class Screen1Sources(ScreenBase):
         fh_lay.setContentsMargins(20, 0, 20, 0)
         fh_title = QLabel("LOADED FILES")
         fh_title.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #64748b; background: transparent; border: none; "
             "font-size: 11px; font-weight: 600; letter-spacing: 1px;"
         )
         fh_lay.addWidget(fh_title)
@@ -602,7 +611,7 @@ class Screen1Sources(ScreenBase):
         rm_btn = QPushButton("Remove")
         rm_btn.setObjectName("btn_danger")
         rm_btn.setFixedHeight(30)
-        rm_btn.setFixedWidth(74)
+        rm_btn.setFixedWidth(80)
         rm_btn.clicked.connect(lambda _=False, i=file_index: self._on_remove_file(i))
         hdr_row.addWidget(rm_btn)
 
@@ -663,8 +672,8 @@ class Screen1Sources(ScreenBase):
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 1px solid #3b82f6; "
-            "border-radius: 4px; color: #3b82f6; font-size: 13px; "
-            "font-weight: 600; padding: 0; }"
+            "border-radius: 4px; color: #3b82f6; font-size: 12px; "
+            "font-weight: 600; padding: 0 0 3px 0; }"
             "QPushButton:hover { background: #1e3a5f; }"
         )
         add_btn.clicked.connect(lambda _=False, fi=fi, si=si: self._on_chain_add(fi, si))
@@ -680,7 +689,7 @@ class Screen1Sources(ScreenBase):
             "QPushButton { background: rgba(239,68,68,0.08); "
             "border: 1px solid rgba(239,68,68,0.2); "
             "border-radius: 4px; color: #f87171; font-size: 11px; "
-            "font-weight: 600; padding: 0; }"
+            "font-weight: 600; padding: 0 0 1px 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.2); }"
         )
         sheet_del.clicked.connect(
@@ -727,6 +736,10 @@ class Screen1Sources(ScreenBase):
     def _go_back(self) -> None:
         from ui.screen0_launcher import Screen0Launcher
         self.app.show_screen(Screen0Launcher)
+
+    def _cancel_to_screen3(self) -> None:
+        from ui.screen3_main import Screen3Main
+        self.app.show_screen(Screen3Main, project=self.project)
 
     def _set_error(self, msg: str) -> None:
         self._footer_hint.setText(
