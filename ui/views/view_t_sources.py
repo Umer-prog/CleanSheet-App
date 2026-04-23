@@ -522,6 +522,9 @@ class ViewTSources(ScreenBase):
                 return
 
             primary_entry = chain[0]
+            primary_header_row = self.project.get("sheets_meta", {}).get(
+                table_name, {}
+            ).get("header_row", primary_entry.get("header_row", 1))
             chain_context = {
                 "return_to": "screen3",
                 "table_name": table_name,
@@ -530,9 +533,11 @@ class ViewTSources(ScreenBase):
                 "primary_file_path": primary_entry["file_path"],
                 "primary_sheet_name": primary_entry["sheet_name"],
                 "primary_label": primary_entry.get("label", ""),
+                "primary_header_row": primary_header_row,
                 "secondary_file_path": str(excel_path),
-                "secondary_sheet_name": picked,
+                "secondary_sheet_name": picked["sheet_name"],
                 "secondary_label": excel_path.name,
+                "secondary_header_row": picked.get("header_row", 1),
             }
             self._on_chain_append(chain_context)
 
@@ -617,13 +622,14 @@ class ViewTSources(ScreenBase):
                 return
 
             def update_worker():
-                df = get_sheet_as_dataframe(excel_path, selected)
+                df = get_sheet_as_dataframe(excel_path, selected["sheet_name"], header_row=selected.get("header_row"))
                 out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
                 df.to_csv(out, index=False, encoding="utf-8")
                 sheets_meta = dict(self.project.get("sheets_meta", {}))
                 existing = dict(sheets_meta.get(table_name, {}))
                 existing["file_path"] = str(excel_path)
-                existing["sheet_name"] = selected
+                existing["sheet_name"] = selected["sheet_name"]
+                existing["header_row"] = selected.get("header_row", 1)
                 existing["is_chained"] = False
                 sheets_meta[table_name] = existing
                 save_project_json(self.project_path, {

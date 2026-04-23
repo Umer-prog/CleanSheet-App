@@ -5,10 +5,11 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-    QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QLabel, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
+from core.data_loader import _find_header_row
 
 
 class PopupSheetSelector(QDialog):
@@ -19,6 +20,18 @@ class PopupSheetSelector(QDialog):
         self._result: list[dict] | None = None
         self._rows: list[dict] = []
         self._excel_path = Path(excel_path)
+
+        # Pre-detect header rows for all sheets (fast — scans max 20 rows each)
+        self._detected_header_rows: dict[str, int] = {}
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(excel_path), data_only=True, read_only=True)
+            for name in sheet_names:
+                if name in wb.sheetnames:
+                    self._detected_header_rows[name] = _find_header_row(wb[name])
+            wb.close()
+        except Exception:
+            pass
 
         self.setWindowTitle("Select Sheets")
         self.setFixedWidth(520)
@@ -174,6 +187,29 @@ class PopupSheetSelector(QDialog):
         cat_row.addWidget(dim_btn)
         rl.addLayout(cat_row)
 
+        # Header row selector
+        hdr_lbl = QLabel("Row")
+        hdr_lbl.setStyleSheet(
+            "color: #475569; font-size: 10px; background: transparent; border: none;"
+        )
+        rl.addWidget(hdr_lbl)
+
+        spinbox = QSpinBox()
+        spinbox.setRange(1, 100)
+        spinbox.setValue(self._detected_header_rows.get(sheet_name, 1))
+        spinbox.setFixedSize(52, 26)
+        spinbox.setEnabled(False)
+        spinbox.setStyleSheet(
+            "QSpinBox { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); border-radius: 5px; "
+            "color: #94a3b8; font-size: 11px; padding: 0 2px; }"
+            "QSpinBox:enabled { color: #f1f5f9; border-color: rgba(59,130,246,0.4); "
+            "background: rgba(59,130,246,0.07); }"
+            "QSpinBox::up-button, QSpinBox::down-button { width: 14px; border: none; "
+            "background: transparent; }"
+        )
+        rl.addWidget(spinbox)
+
         # Opacity effect for dimming unchecked rows
         opacity = QGraphicsOpacityEffect()
         opacity.setOpacity(0.4)
@@ -187,6 +223,7 @@ class PopupSheetSelector(QDialog):
             "chk_frame": chk_frame,
             "tx_btn": tx_btn,
             "dim_btn": dim_btn,
+            "spinbox": spinbox,
             "opacity": opacity,
         }
 
@@ -219,12 +256,14 @@ class PopupSheetSelector(QDialog):
                 "QFrame { background: #3b82f6; border: 1.5px solid #3b82f6; border-radius: 5px; }"
             )
             row_data["opacity"].setOpacity(1.0)
+            row_data["spinbox"].setEnabled(True)
         else:
             chk.setStyleSheet(
                 "QFrame { background: rgba(255,255,255,0.04); "
                 "border: 1.5px solid rgba(255,255,255,0.15); border-radius: 5px; }"
             )
             row_data["opacity"].setOpacity(0.4)
+            row_data["spinbox"].setEnabled(False)
             # Clear category when unchecked
             if row_data["category"]:
                 row_data["category"] = None
@@ -302,7 +341,11 @@ class PopupSheetSelector(QDialog):
 
     def _on_confirm(self) -> None:
         selections = [
-            {"sheet_name": r["sheet_name"], "category": r["category"]}
+            {
+                "sheet_name": r["sheet_name"],
+                "category": r["category"],
+                "header_row": r["spinbox"].value(),
+            }
             for r in self._rows
             if r["checked"] and r["category"]
         ]

@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFrame, QHBoxLayout,
-    QLabel, QPushButton, QVBoxLayout,
+    QLabel, QPushButton, QSpinBox, QVBoxLayout,
 )
 
 import ui.theme as theme
@@ -34,13 +34,14 @@ class PopupSingleSheet(QDialog):
         default_sheet: str | None = None,
     ):
         super().__init__(parent)
-        self._result: str | None = None
+        self._result: dict | None = None
         self._sheet_names = sheet_names
-        self._file_name = Path(excel_path).name
+        self._excel_path = Path(excel_path)
+        self._file_name = self._excel_path.name
         self._default_sheet = default_sheet
 
         self.setWindowTitle(title)
-        self.setFixedSize(480, 280)
+        self.setFixedSize(480, 330)
         self.setModal(True)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setStyleSheet("QDialog { background: #13161e; border-radius: 12px; }")
@@ -72,7 +73,7 @@ class PopupSingleSheet(QDialog):
         root.addWidget(card)
 
     @property
-    def result(self) -> str | None:  # type: ignore[override]
+    def result(self) -> dict | None:  # type: ignore[override]
         return self._result
 
     # ------------------------------------------------------------------
@@ -163,8 +164,44 @@ class PopupSingleSheet(QDialog):
             self._combo.setCurrentIndex(0)
         lay.addWidget(self._combo)
 
+        hdr_lbl = QLabel("HEADER ROW")
+        hdr_lbl.setStyleSheet(
+            "color: #475569; font-size: 10px; font-weight: 600; "
+            "letter-spacing: 0.7px; background: transparent; border: none;"
+        )
+        lay.addWidget(hdr_lbl)
+
+        self._spinbox = QSpinBox()
+        self._spinbox.setRange(1, 100)
+        self._spinbox.setFixedHeight(38)
+        self._spinbox.setStyleSheet(
+            "QSpinBox { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); "
+            "border-radius: 7px; color: #f1f5f9; font-size: 13px; "
+            "font-family: 'Segoe UI'; padding: 0 12px; }"
+            "QSpinBox:focus { border-color: rgba(59,130,246,0.5); }"
+            "QSpinBox::up-button, QSpinBox::down-button { width: 18px; border: none; "
+            "background: transparent; }"
+        )
+        lay.addWidget(self._spinbox)
+
+        # Auto-detect header row for the initially selected sheet
+        self._update_header_spinbox()
+        self._combo.currentIndexChanged.connect(self._update_header_spinbox)
+
         lay.addStretch(1)
         return body
+
+    def _update_header_spinbox(self) -> None:
+        sheet = self._combo.currentText().strip()
+        if not sheet or not self._excel_path.exists():
+            return
+        try:
+            from core.data_loader import detect_header_row
+            detected = detect_header_row(self._excel_path, sheet)
+            self._spinbox.setValue(detected)
+        except Exception:
+            self._spinbox.setValue(1)
 
     def _build_footer(self) -> QFrame:
         footer = QFrame()
@@ -214,7 +251,7 @@ class PopupSingleSheet(QDialog):
         if not choice:
             self._error_lbl.setText("Select a sheet.")
             return
-        self._result = choice
+        self._result = {"sheet_name": choice, "header_row": self._spinbox.value()}
         self.accept()
 
 
@@ -224,7 +261,7 @@ def select_single_sheet(
     sheet_names: list[str],
     title: str = "Select Sheet",
     default_sheet: str | None = None,
-) -> str | None:
+) -> dict | None:
     """Open the single sheet picker and return the selected sheet name, or None."""
     dialog = PopupSingleSheet(
         parent, excel_path=excel_path, sheet_names=sheet_names,

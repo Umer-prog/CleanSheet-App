@@ -814,17 +814,24 @@ class Screen1Sources(ScreenBase):
 
             sheet = self._sources[fi]["sheets"][si]
 
+            picked_sheet = picked["sheet_name"]
+            picked_header_row = picked.get("header_row", 1)
+
             # Guard: same file+sheet as primary
             if (str(excel_path) == str(self._sources[fi]["file_path"])
-                    and picked == sheet["sheet_name"]):
+                    and picked_sheet == sheet["sheet_name"]):
                 self._set_error("Cannot chain a sheet with itself.")
                 return
 
             # Guard: duplicate within existing chain
             for entry in sheet.get("chain", []):
-                if entry["file_path"] == str(excel_path) and entry["sheet_name"] == picked:
+                if entry["file_path"] == str(excel_path) and entry["sheet_name"] == picked_sheet:
                     self._set_error("This sheet is already in the chain.")
                     return
+
+            primary_header_row = self.project.get("sheets_meta", {}).get(
+                normalize_table_name(sheet["sheet_name"]), {}
+            ).get("header_row", 1)
 
             self._pending_chain = {
                 "fi": fi,
@@ -832,9 +839,11 @@ class Screen1Sources(ScreenBase):
                 "primary_file_path": str(self._sources[fi]["file_path"]),
                 "primary_sheet_name": sheet["sheet_name"],
                 "primary_label": Path(self._sources[fi]["file_path"]).name,
+                "primary_header_row": primary_header_row,
                 "secondary_file_path": str(excel_path),
-                "secondary_sheet_name": picked,
+                "secondary_sheet_name": picked_sheet,
                 "secondary_label": excel_path.name,
+                "secondary_header_row": picked_header_row,
             }
             self._launch_chain_mapper()
 
@@ -1004,7 +1013,8 @@ class Screen1Sources(ScreenBase):
                     sheets_meta[table_name] = sheet_meta
                 else:
                     # Normal (unchained) sheet — write plain CSV or JSON as before
-                    df = get_sheet_as_dataframe(file_path, sheet["sheet_name"])
+                    header_row = sheet.get("header_row")
+                    df = get_sheet_as_dataframe(file_path, sheet["sheet_name"], header_row=header_row)
                     if category == "Transaction":
                         save_as_csv(
                             df,
@@ -1021,6 +1031,7 @@ class Screen1Sources(ScreenBase):
                         "file_path": str(file_path),
                         "sheet_name": sheet["sheet_name"],
                         "category": category,
+                        "header_row": header_row or 1,
                     }
 
                 if category == "Transaction" and table_name not in tx_names:

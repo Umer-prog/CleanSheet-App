@@ -538,6 +538,9 @@ class ViewDSources(ScreenBase):
                 return
 
             primary_entry = chain[0]
+            primary_header_row = self.project.get("sheets_meta", {}).get(
+                dim_name, {}
+            ).get("header_row", primary_entry.get("header_row", 1))
             chain_context = {
                 "return_to": "screen3",
                 "table_name": dim_name,
@@ -546,9 +549,11 @@ class ViewDSources(ScreenBase):
                 "primary_file_path": primary_entry["file_path"],
                 "primary_sheet_name": primary_entry["sheet_name"],
                 "primary_label": primary_entry.get("label", ""),
+                "primary_header_row": primary_header_row,
                 "secondary_file_path": str(excel_path),
-                "secondary_sheet_name": picked,
+                "secondary_sheet_name": picked["sheet_name"],
                 "secondary_label": excel_path.name,
+                "secondary_header_row": picked.get("header_row", 1),
             }
             self._on_chain_append(chain_context)
 

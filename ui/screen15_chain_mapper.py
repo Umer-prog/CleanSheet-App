@@ -423,10 +423,12 @@ class Screen15ChainMapper(ScreenBase):
             p_df = get_sheet_as_dataframe(
                 Path(self._ctx["primary_file_path"]),
                 self._ctx["primary_sheet_name"],
+                header_row=self._ctx.get("primary_header_row"),
             )
             s_df = get_sheet_as_dataframe(
                 Path(self._ctx["secondary_file_path"]),
                 self._ctx["secondary_sheet_name"],
+                header_row=self._ctx.get("secondary_header_row"),
             )
             return p_df.columns.tolist(), s_df.columns.tolist()
 
@@ -770,6 +772,7 @@ class Screen15ChainMapper(ScreenBase):
             "file_path": self._ctx["secondary_file_path"],
             "sheet_name": self._ctx["secondary_sheet_name"],
             "label": self._ctx["secondary_label"],
+            "header_row": self._ctx.get("secondary_header_row", 1),
             "column_mapping": column_mapping or None,
         }
 

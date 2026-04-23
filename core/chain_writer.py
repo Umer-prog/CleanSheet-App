@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from core.data_loader import get_sheet_as_dataframe
 
 
 def write_unified_csv(
@@ -33,7 +34,7 @@ def write_unified_csv(
     if len(chain) <= 1:
         # Collapsed / single-source — write plain CSV, no source column
         if chain:
-            df = _load(chain[0]["file_path"], chain[0]["sheet_name"])
+            df = _load(chain[0]["file_path"], chain[0]["sheet_name"], chain[0].get("header_row"))
         else:
             df = pd.DataFrame()
         try:
@@ -45,7 +46,7 @@ def write_unified_csv(
     # ── Multi-entry merge ─────────────────────────────────────────────
 
     primary_entry = chain[0]
-    primary_df = _load(primary_entry["file_path"], primary_entry["sheet_name"])
+    primary_df = _load(primary_entry["file_path"], primary_entry["sheet_name"], primary_entry.get("header_row"))
     primary_cols: list[str] = primary_df.columns.tolist()
 
     # Collect extra columns: secondary cols that are NOT mapped to any primary col,
@@ -55,7 +56,7 @@ def write_unified_csv(
     for entry in chain[1:]:
         mapping: dict[str, str] = entry.get("column_mapping") or {}
         mapped_secondary_vals: set[str] = set(mapping.values())
-        sec_df = _load(entry["file_path"], entry["sheet_name"])
+        sec_df = _load(entry["file_path"], entry["sheet_name"], entry.get("header_row"))
         for col in sec_df.columns:
             if col not in mapped_secondary_vals and col not in seen_extra:
                 extra_cols.append(col)
@@ -76,7 +77,7 @@ def write_unified_csv(
     # Secondary rows
     for entry in chain[1:]:
         mapping = entry.get("column_mapping") or {}
-        sec_df = _load(entry["file_path"], entry["sheet_name"])
+        sec_df = _load(entry["file_path"], entry["sheet_name"], entry.get("header_row"))
         mapped_secondary_vals = set(mapping.values())
 
         n = len(sec_df)
@@ -108,9 +109,9 @@ def write_unified_csv(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _load(file_path: str, sheet_name: str) -> pd.DataFrame:
+def _load(file_path: str, sheet_name: str, header_row: int | None = None) -> pd.DataFrame:
     try:
-        return pd.read_excel(file_path, sheet_name=sheet_name)
+        return get_sheet_as_dataframe(Path(file_path), sheet_name, header_row=header_row)
     except Exception as e:
         raise ValueError(f"chain_writer: could not read '{sheet_name}' from '{file_path}': {e}") from e
 

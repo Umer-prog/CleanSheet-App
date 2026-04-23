@@ -80,7 +80,23 @@ def _find_header_row(ws) -> int:
     return 1
 
 
-def get_sheet_as_dataframe(file_path: Path, sheet_name: str) -> pd.DataFrame:
+def detect_header_row(file_path: Path, sheet_name: str) -> int:
+    """Return the 1-based index of the header row for *sheet_name* in *file_path*."""
+    import openpyxl
+    file_path = Path(file_path)
+    try:
+        wb = openpyxl.load_workbook(str(file_path), data_only=True, read_only=True)
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            return 1
+        result = _find_header_row(wb[sheet_name])
+        wb.close()
+        return result
+    except Exception:
+        return 1
+
+
+def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | None = None) -> pd.DataFrame:
     """Read a single sheet from an Excel file and return a DataFrame.
 
     Automatically detects the header row (it may not always be row 1 — some
@@ -106,8 +122,8 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str) -> pd.DataFrame:
             wb.close()
             return pd.DataFrame()
 
-        # --- auto-detect the header row ---
-        header_row = _find_header_row(ws)
+        # --- determine the header row (manual override or auto-detect) ---
+        header_row = header_row if header_row is not None else _find_header_row(ws)
         data_start_row = header_row + 1
 
         # --- headers (detected row) ---
