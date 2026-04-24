@@ -30,6 +30,7 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
         "project_name": name,
         "created_at": str(date.today()),
         "company": company,
+        "storage_format": "parquet",
         "transaction_tables": [],
         "dim_tables": [],
     }

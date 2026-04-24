@@ -6,6 +6,79 @@ from pathlib import Path
 import pandas as pd
 
 
+# ---------------------------------------------------------------------------
+# Storage-format helpers
+# ---------------------------------------------------------------------------
+
+def _find_project_root(path: Path) -> Path | None:
+    """Walk up from path to find the directory containing project.json."""
+    current = path if path.is_dir() else path.parent
+    for _ in range(10):
+        if (current / "project.json").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return None
+
+
+def get_storage_format(project_path: Path) -> str:
+    """Return 'parquet' or 'csv' for the given project. Defaults to 'csv' for old projects."""
+    pj = Path(project_path) / "project.json"
+    if pj.exists():
+        try:
+            with open(pj, encoding="utf-8") as f:
+                return json.load(f).get("storage_format", "csv")
+        except Exception:
+            pass
+    return "csv"
+
+
+def read_table(file_path: Path) -> pd.DataFrame:
+    """Read a tabular file (CSV or Parquet) into a DataFrame.
+
+    Tries the given path first; if not found, tries the alternate extension.
+    All columns are returned as strings (matching the CSV behaviour).
+    """
+    file_path = Path(file_path)
+
+    def _read(p: Path) -> pd.DataFrame:
+        if p.suffix == ".parquet":
+            df = pd.read_parquet(p)
+            return df.astype(str).where(df.notna(), "")
+        return pd.read_csv(p, dtype=str, keep_default_na=False, encoding="utf-8")
+
+    if file_path.exists():
+        return _read(file_path)
+    alt = file_path.with_suffix(".csv" if file_path.suffix == ".parquet" else ".parquet")
+    if alt.exists():
+        return _read(alt)
+    raise FileNotFoundError(f"Table file not found: '{file_path}'")
+
+
+def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
+    """Write a DataFrame to disk as CSV or Parquet based on dest_path's extension.
+
+    Raises FileExistsError if dest_path is .parquet but a .csv file already
+    exists at the same stem — existing CSV projects are never silently converted.
+    Returns the path actually written.
+    """
+    dest_path = Path(dest_path)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if dest_path.suffix == ".parquet":
+        csv_sibling = dest_path.with_suffix(".csv")
+        if csv_sibling.exists():
+            raise FileExistsError(
+                f"Cannot write Parquet: a CSV file already exists at '{csv_sibling}'. "
+                "Existing projects stay in their original format."
+            )
+        df.to_parquet(dest_path, index=False, compression="snappy")
+    else:
+        df.to_csv(dest_path, index=False, encoding="utf-8")
+    return dest_path
+
+
 def _excel_numfmt_to_strftime(number_format: str) -> str | None:
     """Convert an Excel number format string to a Python strftime string.
 
@@ -177,13 +250,20 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | N
 
 
 def save_as_csv(df: pd.DataFrame, dest_path: Path) -> None:
-    """Save a DataFrame as a CSV file."""
+    """Save a DataFrame to disk, using Parquet for new projects and CSV for existing ones.
+
+    Callers may pass a .csv path even for Parquet projects — the extension is
+    rewritten automatically based on the project's storage_format field.
+    """
     dest_path = Path(dest_path)
+    root = _find_project_root(dest_path)
+    fmt = get_storage_format(root) if root else "csv"
+    if fmt == "parquet":
+        dest_path = dest_path.with_suffix(".parquet")
     try:
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(dest_path, index=False, encoding="utf-8")
+        write_table(df, dest_path)
     except OSError as e:
-        raise OSError(f"Failed to save CSV to '{dest_path}': {e}") from e
+        raise OSError(f"Failed to save table to '{dest_path}': {e}") from e
 
 
 def save_as_json(df: pd.DataFrame, dest_path: Path) -> None:
@@ -199,14 +279,18 @@ def save_as_json(df: pd.DataFrame, dest_path: Path) -> None:
 
 
 def load_csv(file_path: Path) -> pd.DataFrame:
-    """Load a CSV file as a DataFrame (all columns as strings)."""
+    """Load a tabular file as a DataFrame (all columns as strings).
+
+    Accepts .csv or .parquet paths; falls back to the alternate extension if
+    the given path does not exist, preserving backward compatibility.
+    """
     file_path = Path(file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"CSV file not found: {file_path}")
     try:
-        return pd.read_csv(file_path, dtype=str, encoding="utf-8")
+        return read_table(file_path)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Table file not found: {file_path}")
     except Exception as e:
-        raise ValueError(f"Failed to load CSV '{file_path}': {e}") from e
+        raise ValueError(f"Failed to load table '{file_path}': {e}") from e
 
 
 def load_dim_json(file_path: Path) -> pd.DataFrame:

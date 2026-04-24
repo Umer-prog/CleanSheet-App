@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from core.data_loader import get_sheet_as_dataframe
+from core.data_loader import get_sheet_as_dataframe, get_storage_format, write_table
 
 
 def write_unified_csv(
@@ -32,13 +32,13 @@ def write_unified_csv(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if len(chain) <= 1:
-        # Collapsed / single-source — write plain CSV, no source column
+        # Collapsed / single-source — write plain file, no source column
         if chain:
             df = _load(chain[0]["file_path"], chain[0]["sheet_name"], chain[0].get("header_row"))
         else:
             df = pd.DataFrame()
         try:
-            df.to_csv(out_path, index=False)
+            write_table(df, out_path)
         except OSError as e:
             raise OSError(f"chain_writer: could not write {out_path}: {e}") from e
         return out_path
@@ -100,7 +100,7 @@ def write_unified_csv(
     merged = pd.concat(frames, ignore_index=True)[all_output_cols]
 
     try:
-        merged.to_csv(out_path, index=False)
+        write_table(merged, out_path)
     except OSError as e:
         raise OSError(f"chain_writer: could not write {out_path}: {e}") from e
 
@@ -117,6 +117,8 @@ def _load(file_path: str, sheet_name: str, header_row: int | None = None) -> pd.
 
 
 def _output_path(project_path: Path, table_name: str, category: str) -> Path:
+    fmt = get_storage_format(project_path)
+    ext = ".parquet" if fmt == "parquet" else ".csv"
     if category == "Dimension":
-        return project_path / "metadata" / "data" / "dim" / f"{table_name}.csv"
-    return project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv"
+        return project_path / "metadata" / "data" / "dim" / f"{table_name}{ext}"
+    return project_path / "metadata" / "data" / "transactions" / f"{table_name}{ext}"

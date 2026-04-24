@@ -13,6 +13,15 @@ from core.dim_manager import get_dim_dataframe
 from core.project_paths import active_transactions_dir
 
 
+def _find_table_file(directory: Path, table_name: str) -> Path | None:
+    """Return the path of a table file (.csv or .parquet) in directory, or None."""
+    for suffix in (".csv", ".parquet"):
+        candidate = directory / f"{table_name}{suffix}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Check functions
 # ---------------------------------------------------------------------------
@@ -97,14 +106,18 @@ def detect_errors(
     d_table = mapping["dim_table"]
     d_col = mapping["dim_column"]
 
-    t_path = active_transactions_dir(project_path) / f"{t_table}.csv"
-    if not t_path.exists():
+    t_path = _find_table_file(active_transactions_dir(project_path), t_table)
+    if t_path is None:
         raise FileNotFoundError(f"Transaction table not found: '{t_table}'")
 
+    # Read column names without loading all rows (CSV streams; Parquet reads schema)
     try:
-        tx_columns = pd.read_csv(t_path, dtype=str, encoding="utf-8", nrows=0).columns
+        if t_path.suffix == ".parquet":
+            tx_columns = pd.read_parquet(t_path).iloc[:0].columns
+        else:
+            tx_columns = pd.read_csv(t_path, dtype=str, encoding="utf-8", nrows=0).columns
     except Exception as e:
-        raise ValueError(f"Failed to load CSV '{t_path}': {e}") from e
+        raise ValueError(f"Failed to read column names from '{t_path}': {e}") from e
 
     col_lookup = {str(c).strip(): c for c in tx_columns}
     t_col_key = t_col.strip()
@@ -117,45 +130,69 @@ def detect_errors(
     errors: list[dict] = []
     total_found = 0
     matched_col = col_lookup[t_col_key]
-    row_offset = 0
-    try:
-        chunk_iter = pd.read_csv(
-            t_path,
-            dtype=str,
-            encoding="utf-8",
-            chunksize=5000,
-        )
-        for chunk in chunk_iter:
-            if matched_col not in chunk.columns:
+
+    if t_path.suffix == ".parquet":
+        # Parquet: read all at once (columnar — only the needed column is decompressed)
+        try:
+            col_series = (
+                pd.read_parquet(t_path, columns=[matched_col])[matched_col]
+                .fillna("").astype(str).str.strip()
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to read Parquet '{t_path}': {e}") from e
+
+        bad_mask = ~col_series.isin(dim_values)
+        if _ignored:
+            bad_mask &= ~col_series.isin(_ignored)
+
+        bad_positions = bad_mask.values.nonzero()[0]
+        bad_values = col_series.values[bad_mask.values]
+
+        for pos, value in zip(bad_positions, bad_values):
+            total_found += 1
+            if total_found <= MAX_ERRORS:
+                errors.append({
+                    "row_index": int(pos),
+                    "transaction_table": t_table,
+                    "transaction_column": t_col,
+                    "bad_value": str(value),
+                    "dim_table": d_table,
+                    "dim_column": d_col,
+                    "error_type": "value_not_in_dim",
+                })
+    else:
+        # CSV: stream in chunks to keep memory low for large files
+        row_offset = 0
+        try:
+            for chunk in pd.read_csv(t_path, dtype=str, encoding="utf-8", chunksize=5000):
+                if matched_col not in chunk.columns:
+                    row_offset += len(chunk)
+                    continue
+
+                col_series = chunk[matched_col].fillna("").astype(str).str.strip()
+                bad_mask = ~col_series.isin(dim_values)
+                if _ignored:
+                    bad_mask &= ~col_series.isin(_ignored)
+
+                bad_local_positions = bad_mask.values.nonzero()[0]
+                bad_values = col_series.values[bad_mask.values]
+
+                for local_pos, value in zip(bad_local_positions, bad_values):
+                    total_found += 1
+                    if total_found <= MAX_ERRORS:
+                        errors.append({
+                            "row_index": int(row_offset + local_pos),
+                            "transaction_table": t_table,
+                            "transaction_column": t_col,
+                            "bad_value": str(value),
+                            "dim_table": d_table,
+                            "dim_column": d_col,
+                            "error_type": "value_not_in_dim",
+                        })
+
                 row_offset += len(chunk)
-                continue
-
-            # Vectorised: normalise the whole column in one C-level pass
-            col_series = chunk[matched_col].fillna("").astype(str).str.strip()
-            bad_mask = ~col_series.isin(dim_values)
-            if _ignored:
-                bad_mask &= ~col_series.isin(_ignored)
-
-            # Only iterate over the bad rows (numpy indices, not every row)
-            bad_local_positions = bad_mask.values.nonzero()[0]
-            bad_values = col_series.values[bad_mask.values]
-
-            for local_pos, value in zip(bad_local_positions, bad_values):
-                total_found += 1
-                if total_found <= MAX_ERRORS:
-                    errors.append({
-                        "row_index": int(row_offset + local_pos),
-                        "transaction_table": t_table,
-                        "transaction_column": t_col,
-                        "bad_value": str(value),
-                        "dim_table": d_table,
-                        "dim_column": d_col,
-                        "error_type": "value_not_in_dim",
-                    })
-
-            row_offset += len(chunk)
-    except Exception as e:
-        raise ValueError(f"Failed to stream CSV '{t_path}': {e}") from e
+        except Exception as e:
+            raise ValueError(f"Failed to stream CSV '{t_path}': {e}") from e
 
     return errors, total_found
 

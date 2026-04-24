@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from core.data_loader import get_storage_format, write_table
 from core.project_paths import (
     active_dim_dir,
     active_mappings_dir,
@@ -103,14 +104,14 @@ def _read_commit_json(commit_dir: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _write_dimensions(dimensions_dir: Path, dim_data: dict) -> list[str]:
-    """Write dimension CSVs. Returns list of dim names written."""
-    import pandas as pd
+def _write_dimensions(dimensions_dir: Path, dim_data: dict, storage_format: str = "csv") -> list[str]:
+    """Write dimension tables to a commit directory. Returns list of dim names written."""
+    ext = ".parquet" if storage_format == "parquet" else ".csv"
     written = []
     for name, df in dim_data.items():
-        dest = dimensions_dir / f"{name}.csv"
+        dest = dimensions_dir / f"{name}{ext}"
         try:
-            df.to_csv(dest, index=False, encoding="utf-8")
+            write_table(df, dest)
             written.append(name)
         except OSError as e:
             raise OSError(f"Failed to write dimension '{name}': {e}") from e
@@ -130,16 +131,24 @@ def _write_mappings_to_commit(mappings_dir: Path, mappings: list) -> None:
 # ---------------------------------------------------------------------------
 
 def _load_dim_tables_from_dir(dim_dir: Path) -> dict:
-    """Load all dim tables from a directory of *.csv files."""
-    import pandas as pd
+    """Load all dim tables from a directory (CSV or Parquet)."""
     result: dict = {}
     if not dim_dir.exists():
         return result
-    for f in sorted(dim_dir.glob("*.csv")):
-        try:
-            result[f.stem] = pd.read_csv(f, dtype=str, keep_default_na=False)
-        except Exception:
-            continue
+    seen_stems: set = set()
+    for pattern in ("*.csv", "*.parquet"):
+        for f in sorted(dim_dir.glob(pattern)):
+            if f.stem in seen_stems:
+                continue
+            try:
+                if f.suffix == ".parquet":
+                    df = pd.read_parquet(f)
+                    result[f.stem] = df.astype(str).where(df.notna(), "")
+                else:
+                    result[f.stem] = pd.read_csv(f, dtype=str, keep_default_na=False)
+                seen_stems.add(f.stem)
+            except Exception:
+                continue
     return result
 
 
@@ -218,13 +227,15 @@ def create_snapshot(
     """
     project_path = Path(project_path)
     settings = _read_settings(project_path)
+    storage_format = get_storage_format(project_path)
+    ext = ".parquet" if storage_format == "parquet" else ".csv"
 
     # Always write transaction data to the live working area
     live_tx_dir = project_path / "metadata" / "data" / "transactions"
     try:
         live_tx_dir.mkdir(parents=True, exist_ok=True)
         for table_name, df in tables.items():
-            df.to_csv(live_tx_dir / f"{table_name}.csv", index=False, encoding="utf-8")
+            write_table(df, live_tx_dir / f"{table_name}{ext}")
     except OSError as e:
         raise OSError(f"Failed to update live transaction data: {e}") from e
 
@@ -242,16 +253,21 @@ def create_snapshot(
         raise OSError(f"Failed to create commit folder: {e}") from e
 
     # Snapshot ALL transaction tables from the live dir (not only the ones passed in)
-    tx_names = []
-    for csv_file in sorted(live_tx_dir.glob("*.csv")):
-        try:
-            shutil.copy2(csv_file, commit_dir / "transactions" / csv_file.name)
-            tx_names.append(csv_file.stem)
-        except OSError as e:
-            raise OSError(f"Failed to snapshot transaction '{csv_file.stem}': {e}") from e
+    tx_names: list[str] = []
+    seen_tx_stems: set = set()
+    for pattern in ("*.csv", "*.parquet"):
+        for f in sorted(live_tx_dir.glob(pattern)):
+            if f.stem in seen_tx_stems:
+                continue
+            try:
+                shutil.copy2(f, commit_dir / "transactions" / f.name)
+                tx_names.append(f.stem)
+                seen_tx_stems.add(f.stem)
+            except OSError as e:
+                raise OSError(f"Failed to snapshot transaction '{f.stem}': {e}") from e
 
     dim_data = _load_dim_tables(project_path)
-    dim_names = _write_dimensions(commit_dir / "dimensions", dim_data)
+    dim_names = _write_dimensions(commit_dir / "dimensions", dim_data, storage_format)
     mappings = _load_mappings(project_path)
     _write_mappings_to_commit(commit_dir / "mappings", mappings)
 
@@ -308,11 +324,19 @@ def create_initial_commit(project_path: Path) -> str | None:
         return None
 
     tables: dict = {}
-    for csv_file in sorted(transactions_dir.glob("*.csv")):
-        try:
-            tables[csv_file.stem] = pd.read_csv(csv_file, encoding="utf-8")
-        except Exception:
-            continue
+    seen_stems: set = set()
+    for pattern in ("*.csv", "*.parquet"):
+        for f in sorted(transactions_dir.glob(pattern)):
+            if f.stem in seen_stems:
+                continue
+            try:
+                if f.suffix == ".parquet":
+                    tables[f.stem] = pd.read_parquet(f)
+                else:
+                    tables[f.stem] = pd.read_csv(f, encoding="utf-8")
+                seen_stems.add(f.stem)
+            except Exception:
+                continue
 
     if not tables:
         return None
@@ -404,22 +428,28 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     tx_tables     = manifest.get("tables", [])
     restored_dims = list(manifest.get("dim_tables", []))  # restore ALL dims, including previously-deleted ones
 
+    def _find_in_dir(directory: Path, name: str) -> Path | None:
+        for suffix in (".csv", ".parquet"):
+            c = directory / f"{name}{suffix}"
+            if c.exists():
+                return c
+        return None
+
     # Validate all files exist before touching anything
     for name in tx_tables:
-        src = tx_commit_dir / f"{name}.csv"
-        if not src.exists():
-            raise FileNotFoundError(f"Snapshot file missing: '{src}'")
+        if _find_in_dir(tx_commit_dir, name) is None:
+            raise FileNotFoundError(f"Snapshot file missing: '{tx_commit_dir / name}'")
     for name in restored_dims:
-        src = dim_commit_dir / f"{name}.csv"
-        if not src.exists():
-            raise FileNotFoundError(f"Dim snapshot file missing: '{src}'")
+        if _find_in_dir(dim_commit_dir, name) is None:
+            raise FileNotFoundError(f"Dim snapshot file missing: '{dim_commit_dir / name}'")
 
     # Restore transactions → metadata/data/transactions/
     live_tx = project_path / "metadata" / "data" / "transactions"
     try:
         live_tx.mkdir(parents=True, exist_ok=True)
         for name in tx_tables:
-            shutil.copy2(tx_commit_dir / f"{name}.csv", live_tx / f"{name}.csv")
+            src = _find_in_dir(tx_commit_dir, name)
+            shutil.copy2(src, live_tx / src.name)
     except OSError as e:
         raise OSError(f"Failed to restore transaction data: {e}") from e
 
@@ -428,7 +458,8 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     try:
         live_dim.mkdir(parents=True, exist_ok=True)
         for name in restored_dims:
-            shutil.copy2(dim_commit_dir / f"{name}.csv", live_dim / f"{name}.csv")
+            src = _find_in_dir(dim_commit_dir, name)
+            shutil.copy2(src, live_dim / src.name)
     except OSError as e:
         raise OSError(f"Failed to restore dimension data: {e}") from e
 

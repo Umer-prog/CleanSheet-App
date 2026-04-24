@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from core.data_loader import load_csv
+from core.data_loader import read_table
 from core.project_manager import open_project
 from core.project_paths import active_dim_dir, active_transactions_dir
 
@@ -38,18 +38,18 @@ def export_final_workbook(project_path: Path, file_name: str = "final_updated.xl
     try:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             for table in tx_tables:
-                csv_path = active_transactions_dir(project_path) / f"{table}.csv"
-                if not csv_path.exists():
+                try:
+                    df = read_table(active_transactions_dir(project_path) / f"{table}.csv")
+                except FileNotFoundError:
                     continue
-                df = load_csv(csv_path)
                 df.to_excel(writer, sheet_name=_safe_sheet_name(table), index=False)
                 written += 1
 
             for table in dim_tables:
-                csv_path = active_dim_dir(project_path) / f"{table}.csv"
-                if not csv_path.exists():
+                try:
+                    df = read_table(active_dim_dir(project_path) / f"{table}.csv")
+                except FileNotFoundError:
                     continue
-                df = load_csv(csv_path)
                 df.to_excel(writer, sheet_name=_safe_sheet_name(table), index=False)
                 written += 1
     except OSError as e:
