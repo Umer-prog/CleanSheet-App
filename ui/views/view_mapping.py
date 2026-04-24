@@ -323,7 +323,7 @@ class ViewMapping(ScreenBase):
 
         refresh_btn = QPushButton("↻  Refresh")
         refresh_btn.setFixedHeight(34)
-        refresh_btn.clicked.connect(self._reload_data)
+        refresh_btn.clicked.connect(lambda: self._reload_data(force=True))
         refresh_btn.setStyleSheet(
             "QPushButton { "
             "background: rgba(255,255,255,0.04); "
@@ -609,18 +609,69 @@ class ViewMapping(ScreenBase):
     # Data loading
     # ------------------------------------------------------------------
 
-    def _reload_data(self) -> None:
+    def _reload_data(self, force: bool = False) -> None:
         self._selected_error = None
         self._selected_error_frame = None
         self._transaction_df = None
         self._errors = []
         self._current_page = 0
-        self._col_widths = []  # force re-measure on next load
+        self._col_widths = []
         self._ignored_rows, self._ignored_values = self._load_ignored()
+
+        mapping_id = str(self.mapping.get("id", ""))
+        cache = self.project.setdefault("_validation_cache", {})
+        entry = cache.get(mapping_id) if mapping_id else None
+
+        def on_error(exc):
+            self._transaction_df = None
+            self._errors = []
+            self._render_errors()
+            self._set_footer_hint(f"Load failed: {exc}", error=True)
+            self._set_generate_mode(False)
+
+        if not force and entry is not None and not entry.get("dirty", True):
+            if entry.get("tx_df") is not None:
+                # Full cache hit — render immediately, no background work needed
+                self._transaction_df = entry["tx_df"]
+                self._errors = entry["errors"]
+                self._total_errors = entry["total_errors"]
+                self._update_table_view()
+                self._render_errors()
+                self._refresh_generate_state()
+                return
+
+            # Partial cache hit: errors known from badge scan, tx_df not yet loaded
+            # Only read the transaction file — skip detect_errors entirely
+            _cached_errors = entry["errors"]
+            _cached_total  = entry["total_errors"]
+
+            def worker_tx_only():
+                csv_path = (
+                    active_transactions_dir(self.project_path)
+                    / f"{self.mapping['transaction_table']}.csv"
+                )
+                return load_csv(csv_path), _cached_errors, _cached_total
+
+            def on_partial_success(result):
+                tx_df, errors, total_found = result
+                self._transaction_df = tx_df
+                self._errors = errors
+                self._total_errors = total_found
+                if mapping_id:
+                    cache[mapping_id]["tx_df"] = tx_df
+                self._update_table_view()
+                self._render_errors()
+                self._refresh_generate_state()
+
+            self._update_table_view()
+            self._show_loading_errors()
+            self._run_background(worker_tx_only, on_partial_success, on_error)
+            return
+
+        # Full load: run detect_errors + read transaction table
         self._update_table_view()
         self._show_loading_errors()
 
-        # Capture ignored values for this mapping before entering the background thread
         _ign_key = (
             f"{self.mapping['transaction_table']}.{self.mapping['transaction_column']}"
         )
@@ -642,16 +693,16 @@ class ViewMapping(ScreenBase):
             self._transaction_df = tx_df
             self._errors = errors
             self._total_errors = total_found
+            if mapping_id:
+                cache[mapping_id] = {
+                    "dirty": False,
+                    "errors": errors,
+                    "total_errors": total_found,
+                    "tx_df": tx_df,
+                }
             self._update_table_view()
             self._render_errors()
             self._refresh_generate_state()
-
-        def on_error(exc):
-            self._transaction_df = None
-            self._errors = []
-            self._render_errors()
-            self._set_footer_hint(f"Load failed: {exc}", error=True)
-            self._set_generate_mode(False)
 
         self._run_background(worker, on_success, on_error)
 
@@ -1080,7 +1131,7 @@ class ViewMapping(ScreenBase):
 
                     self._run_background(
                         apply_worker,
-                        lambda _: self._reload_data(),
+                        lambda _: self._reload_data(force=True),
                         lambda exc: msgbox.critical(
                             self, "Error", f"Could not replace:\n{exc}"
                         ),
@@ -1143,7 +1194,7 @@ class ViewMapping(ScreenBase):
 
                 self._run_background(
                     apply_worker,
-                    lambda _: self._reload_data(),
+                    lambda _: self._reload_data(force=True),
                     lambda exc: msgbox.critical(
                         self, "Error", f"Could not add row:\n{exc}"
                     ),
@@ -1304,7 +1355,7 @@ class ViewMapping(ScreenBase):
 
         self._run_background(
             worker,
-            lambda _: self._reload_data(),
+            lambda _: self._reload_data(force=True),
             lambda exc: msgbox.critical(self, "Error", f"Could not delete row:\n{exc}"),
         )
 

@@ -155,6 +155,8 @@ class App(QMainWindow):
 
     def set_current_project(self, project_state: dict) -> None:
         self._current_project = project_state
+        # Runtime-only cache: not persisted, reset when a new project is opened
+        self._current_project.setdefault("_validation_cache", {})
 
     def get_current_project(self) -> dict | None:
         return self._current_project

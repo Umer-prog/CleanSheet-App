@@ -204,7 +204,8 @@ class Screen3Main(QWidget):
             return []
 
     def _init_mapping_badges(self) -> None:
-        """Run error detection for every mapping in background and seed the nav badges."""
+        """Run error detection for every mapping in background, seed nav badges, and
+        pre-warm the validation cache so the first nav click renders instantly."""
         mapping_items = [i for i in self._nav_items if i["kind"] == "mapping"]
         if not mapping_items:
             return
@@ -221,21 +222,37 @@ class Screen3Main(QWidget):
                 ignored_map = {}
 
             results: dict[str, int] = {}
+            cache_updates: dict[str, dict] = {}
             for item in mapping_items:
                 try:
                     errors, total = detect_errors(project_path, item["mapping"])
                     m = item["mapping"]
+                    mid = str(m.get("id", ""))
                     key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
                     ignored = ignored_map.get(key, set())
                     visible_count = len([e for e in errors if int(e["row_index"]) not in ignored])
                     results[item["key"]] = max(0, total - (len(errors) - visible_count))
+                    if mid:
+                        # Store errors/total; tx_df loaded lazily on first view open
+                        cache_updates[mid] = {
+                            "dirty": False,
+                            "errors": errors,
+                            "total_errors": total,
+                            "tx_df": None,
+                        }
                 except Exception:
                     results[item["key"]] = 0
-            return results
+            return results, cache_updates
 
-        def on_done(results: dict):
+        def on_done(data: tuple):
+            results, cache_updates = data
             for nav_key, count in results.items():
                 self.update_mapping_badge(nav_key, count)
+            # Pre-warm cache (only if an entry doesn't already exist from an earlier load)
+            cache = self.project.setdefault("_validation_cache", {})
+            for mid, entry in cache_updates.items():
+                if mid not in cache or cache[mid].get("dirty", True):
+                    cache[mid] = entry
 
         w = Worker(worker)
         w.finished.connect(on_done)
@@ -675,6 +692,9 @@ class Screen3Main(QWidget):
 
     def _show_item_view(self, item: dict) -> None:
         if self._active_view is not None:
+            # Stop background workers on the outgoing view before destroying it
+            if hasattr(self._active_view, "abandon_workers"):
+                self._active_view.abandon_workers()
             self._active_view.setParent(None)
             self._active_view.deleteLater()
 

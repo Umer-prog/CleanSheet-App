@@ -341,6 +341,21 @@ class ScreenBase(QWidget):
         worker.progress.connect(_progress)
         worker.start()
 
+    def abandon_workers(self) -> None:
+        """Stop delivering results from any running background workers.
+
+        The underlying threads keep running but their polling timers are stopped,
+        so no further signals will fire on this (now-replaced) widget.  Call this
+        before removing a view from the layout to avoid stale callbacks.
+        """
+        for worker in list(self._workers):
+            try:
+                worker._timer.stop()
+            except Exception:  # noqa: BLE001
+                pass
+        self._workers.clear()
+        self._loading_count = 0
+
     def _set_error(self, msg: str) -> None:
         """Override in subclasses to show inline error messages."""
 
