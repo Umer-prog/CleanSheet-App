@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_transactions_dir
@@ -416,7 +416,7 @@ class ViewTSources(ScreenBase):
         def worker():
             df = get_sheet_as_dataframe(excel_path, sheet_name)
             out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-            df.to_csv(out, index=False, encoding="utf-8")
+            save_as_csv(df, out)
 
         def on_done(_):
             self._set_error("")
@@ -467,7 +467,7 @@ class ViewTSources(ScreenBase):
                         excel_path = Path(meta["file_path"])
                         df = get_sheet_as_dataframe(excel_path, meta["sheet_name"])
                         out = active_transactions_dir(project_path) / f"{table_name}.csv"
-                        df.to_csv(out, index=False, encoding="utf-8")
+                        save_as_csv(df, out)
                     else:
                         errors.append(f"{table_name} (no source path stored)")
                 except Exception as exc:
@@ -571,9 +571,12 @@ class ViewTSources(ScreenBase):
 
         def worker():
             import json as _json
-            csv_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-            if csv_path.exists():
-                csv_path.unlink()
+            base = active_transactions_dir(self.project_path) / table_name
+            for suffix in (".csv", ".parquet"):
+                p = base.with_suffix(suffix)
+                if p.exists():
+                    p.unlink()
+                    break
             delete_mappings_for_table(self.project_path, table_name)
             proj_file = self.project_path / "project.json"
             with open(proj_file, encoding="utf-8") as f:
@@ -624,7 +627,7 @@ class ViewTSources(ScreenBase):
             def update_worker():
                 df = get_sheet_as_dataframe(excel_path, selected["sheet_name"], header_row=selected.get("header_row"))
                 out = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-                df.to_csv(out, index=False, encoding="utf-8")
+                save_as_csv(df, out)
                 sheets_meta = dict(self.project.get("sheets_meta", {}))
                 existing = dict(sheets_meta.get(table_name, {}))
                 existing["file_path"] = str(excel_path)
@@ -668,9 +671,12 @@ class ViewTSources(ScreenBase):
                 return
 
             def delete_worker():
-                csv_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-                if csv_path.exists():
-                    csv_path.unlink()
+                base = active_transactions_dir(self.project_path) / table_name
+                for suffix in (".csv", ".parquet"):
+                    p = base.with_suffix(suffix)
+                    if p.exists():
+                        p.unlink()
+                        break
                 delete_mappings_for_table(self.project_path, table_name)
                 save_project_json(self.project_path, {
                     "project_name": self.project.get("project_name", ""),

@@ -5,7 +5,7 @@ import queue as _queue
 import threading
 
 from PySide6.QtCore import QObject, QTimer, Signal, Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QWidget
 
 
 class Worker(QObject):
@@ -66,6 +66,68 @@ class Worker(QObject):
             self.errored.emit(value)
 
 
+class ProgressWorker(QObject):
+    """
+    Background worker that can emit per-step progress updates.
+
+    The wrapped function must accept a single positional argument: a callable
+    ``report_progress(done: int, total: int)`` that can be called from the
+    background thread to push progress events to the main thread.
+
+    Signals:
+        finished(object)    — result value returned by fn
+        errored(object)     — exception raised by fn
+        progress(int, int)  — (done, total) emitted each time report_progress is called
+    """
+
+    finished = Signal(object)
+    errored  = Signal(object)
+    progress = Signal(int, int)
+
+    _POLL_MS = 30
+
+    def __init__(self, fn):
+        super().__init__()
+        self._fn              = fn
+        self._result_queue    = _queue.SimpleQueue()
+        self._progress_queue  = _queue.SimpleQueue()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._timer  = QTimer(self)
+        self._timer.setInterval(self._POLL_MS)
+        self._timer.timeout.connect(self._poll)
+
+    def start(self) -> None:
+        self._timer.start()
+        self._thread.start()
+
+    def _report_progress(self, done: int, total: int) -> None:
+        self._progress_queue.put((done, total))
+
+    def _run(self) -> None:
+        try:
+            self._result_queue.put(("ok", self._fn(self._report_progress)))
+        except Exception as exc:  # noqa: BLE001
+            self._result_queue.put(("err", exc))
+
+    def _poll(self) -> None:
+        while True:
+            try:
+                done, total = self._progress_queue.get_nowait()
+                self.progress.emit(done, total)
+            except _queue.Empty:
+                break
+
+        try:
+            tag, value = self._result_queue.get_nowait()
+        except _queue.Empty:
+            return
+        self._timer.stop()
+        if tag == "ok":
+            self.finished.emit(value)
+        else:
+            self.errored.emit(value)
+
+
 class LoadingOverlay(QFrame):
     """Full-widget translucent loading overlay with a timer-driven dot animation.
 
@@ -113,6 +175,19 @@ class LoadingOverlay(QFrame):
         dot_row.addWidget(self._dot_lbl)
         card_layout.addLayout(dot_row)
 
+        # Progress bar (hidden until update_progress() is called)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setTextVisible(False)
+        self._progress_bar.setFixedHeight(6)
+        self._progress_bar.setStyleSheet(
+            "QProgressBar { background: #1e2330; border-radius: 3px; border: none; }"
+            "QProgressBar::chunk { background: #3b82f6; border-radius: 3px; }"
+        )
+        self._progress_bar.hide()
+        card_layout.addWidget(self._progress_bar)
+
         self._card = card
         self._frame_idx = 0
         card.adjustSize()
@@ -125,7 +200,7 @@ class LoadingOverlay(QFrame):
         self.hide()  # must come after _anim_timer is assigned
 
     def show_on(self) -> None:
-        """Show overlay covering the parent widget and start animation."""
+        """Show overlay covering the parent widget and start dot animation."""
         p = self.parent()
         if p:
             self.setGeometry(p.rect())
@@ -134,7 +209,22 @@ class LoadingOverlay(QFrame):
         self.show()
         self._frame_idx = 0
         self._dot_lbl.setText(self._FRAMES[0])
+        self._dot_lbl.show()
+        self._progress_bar.hide()
+        self._progress_bar.setValue(0)
         self._anim_timer.start()
+
+    def update_progress(self, done: int, total: int, message: str = "") -> None:
+        """Switch to progress-bar mode and update the bar value and message."""
+        self._anim_timer.stop()
+        self._dot_lbl.hide()
+        self._progress_bar.show()
+        if total > 0:
+            self._progress_bar.setValue(int(done / total * 100))
+        if message:
+            self._msg_lbl.setText(message)
+        self._card.adjustSize()
+        self._center_card()
 
     def hide(self) -> None:
         """Hide overlay and stop animation timer."""
@@ -200,6 +290,55 @@ class ScreenBase(QWidget):
 
         worker.finished.connect(_done)
         worker.errored.connect(_fail)
+        worker.start()
+
+    def _run_background_with_progress(
+        self,
+        fn,
+        on_progress=None,
+        on_success=None,
+        on_error=None,
+    ) -> None:
+        """Run *fn(report_progress)* in background with per-step progress signals.
+
+        *fn* receives a callable ``report_progress(done, total)`` it can call
+        from the background thread.  *on_progress(done, total)* is called on
+        the main thread after each report.
+        """
+        self._loading_count += 1
+        if self._loading_count == 1 and self._overlay:
+            self._overlay.show_on()
+
+        worker = ProgressWorker(fn)
+        self._workers.append(worker)
+
+        def _done(result):
+            if worker in self._workers:
+                self._workers.remove(worker)
+            self._loading_count = max(0, self._loading_count - 1)
+            if self._loading_count == 0 and self._overlay:
+                self._overlay.hide()
+            if on_success:
+                on_success(result)
+
+        def _fail(exc):
+            if worker in self._workers:
+                self._workers.remove(worker)
+            self._loading_count = max(0, self._loading_count - 1)
+            if self._loading_count == 0 and self._overlay:
+                self._overlay.hide()
+            if on_error:
+                on_error(exc)
+            else:
+                self._set_error(str(exc))
+
+        def _progress(done, total):
+            if on_progress:
+                on_progress(done, total)
+
+        worker.finished.connect(_done)
+        worker.errored.connect(_fail)
+        worker.progress.connect(_progress)
         worker.start()
 
     def _set_error(self, msg: str) -> None:

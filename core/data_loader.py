@@ -249,6 +249,77 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | N
         raise ValueError(f"Failed to read sheet '{sheet_name}' from '{file_path}': {e}") from e
 
 
+def get_sheets_as_dataframes(
+    file_path: Path,
+    sheets: list[tuple[str, int | None]],
+) -> dict[str, pd.DataFrame]:
+    """Read multiple sheets from one Excel file in a single workbook open.
+
+    sheets: list of (sheet_name, header_row). header_row=None triggers auto-detect.
+    Returns {sheet_name: DataFrame}.  Raises on any missing sheet or I/O error.
+    """
+    import openpyxl
+
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Excel file not found: {file_path}")
+
+    wb = openpyxl.load_workbook(str(file_path), data_only=True)
+    result: dict[str, pd.DataFrame] = {}
+    try:
+        for sheet_name, header_row in sheets:
+            if sheet_name not in wb.sheetnames:
+                raise ValueError(f"Sheet '{sheet_name}' not found in '{file_path}'")
+            ws = wb[sheet_name]
+            if not ws.max_row:
+                result[sheet_name] = pd.DataFrame()
+                continue
+
+            hr = header_row if header_row is not None else _find_header_row(ws)
+            data_start = hr + 1
+            headers = [
+                str(cell.value).strip() if cell.value is not None else f"Col{i}"
+                for i, cell in enumerate(ws[hr], start=1)
+            ]
+
+            col_strftime: dict[int, str] = {}
+            scan_end = min(ws.max_row, data_start + 19)
+            for ci in range(len(headers)):
+                for row_cells in ws.iter_rows(min_row=data_start, max_row=scan_end,
+                                              min_col=ci + 1, max_col=ci + 1):
+                    for cell in row_cells:
+                        if cell.value is not None and isinstance(cell.value, (date, datetime)):
+                            fmt = _excel_numfmt_to_strftime(cell.number_format or "")
+                            if fmt:
+                                col_strftime[ci] = fmt
+                        break
+                    if ci in col_strftime:
+                        break
+
+            data_rows = []
+            for row_cells in ws.iter_rows(min_row=data_start, values_only=False):
+                row_data = []
+                for ci in range(len(headers)):
+                    cell = row_cells[ci] if ci < len(row_cells) else None
+                    val = cell.value if cell is not None else None
+                    if val is None:
+                        row_data.append("")
+                    elif ci in col_strftime and isinstance(val, (date, datetime)):
+                        try:
+                            row_data.append(val.strftime(col_strftime[ci]))
+                        except Exception:
+                            row_data.append(str(val))
+                    else:
+                        row_data.append(str(val))
+                data_rows.append(row_data)
+
+            result[sheet_name] = pd.DataFrame(data_rows, columns=headers)
+    finally:
+        wb.close()
+
+    return result
+
+
 def save_as_csv(df: pd.DataFrame, dest_path: Path) -> None:
     """Save a DataFrame to disk, using Parquet for new projects and CSV for existing ones.
 

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv
+from core.data_loader import get_sheets_as_dataframes, load_excel_sheets, save_as_csv
 from core.project_manager import open_project, save_project_json
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -957,11 +957,20 @@ class Screen1Sources(ScreenBase):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        def worker():
-            self._persist_sources()
+        self._confirm_btn.setEnabled(False)
+
+        def worker(report_progress):
+            self._persist_sources(report_progress)
             return open_project(self.project_path)
 
+        def on_progress(done, total):
+            if self._overlay:
+                self._overlay.update_progress(
+                    done, total, f"Saving sheet {done} of {total}…"
+                )
+
         def on_success(updated_state):
+            self._confirm_btn.setEnabled(True)
             self.app.set_current_project(updated_state)
             self.project = updated_state
             self._sources.clear()
@@ -976,11 +985,14 @@ class Screen1Sources(ScreenBase):
                 )
 
         def on_error(exc):
+            self._confirm_btn.setEnabled(True)
             msgbox.critical(self, "Error", f"Could not save selected sheets:\n{exc}")
 
-        self._run_background(worker, on_success, on_error)
+        self._run_background_with_progress(worker, on_progress, on_success, on_error)
 
-    def _persist_sources(self) -> None:
+    def _persist_sources(self, report_progress) -> None:
+        from collections import defaultdict
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from core.chain_writer import write_unified_csv
 
         project_data = {
@@ -995,26 +1007,42 @@ class Screen1Sources(ScreenBase):
         dim_names = list(project_data["dim_tables"])
         sheets_meta = dict(project_data["sheets_meta"])
 
-        for source in self._sources:
-            file_path = Path(source["file_path"])
-            for sheet in source.get("sheets", []):
-                table_name = normalize_table_name(sheet["sheet_name"])
-                category = sheet["category"]
+        # Flatten and partition
+        all_sheets = [
+            (Path(source["file_path"]), sheet)
+            for source in self._sources
+            for sheet in source.get("sheets", [])
+        ]
+        normal_sheets  = [(fp, s) for fp, s in all_sheets if not (s.get("is_chained") and s.get("chain"))]
+        chained_sheets = [(fp, s) for fp, s in all_sheets if s.get("is_chained") and s.get("chain")]
+        total = len(all_sheets)
+        done = 0
 
-                if sheet.get("is_chained") and sheet.get("chain"):
-                    # Chained sheet — write the unified merged CSV
-                    sheet_meta = {
-                        "is_chained": True,
-                        "chain": sheet["chain"],
-                    }
-                    write_unified_csv(
-                        self.project_path, table_name, category, sheet_meta
-                    )
-                    sheets_meta[table_name] = sheet_meta
-                else:
-                    # Normal (unchained) sheet — write plain CSV or JSON as before
+        # Group normal sheets by file path so each file is opened only once
+        file_groups: dict[Path, list[dict]] = defaultdict(list)
+        for fp, sheet in normal_sheets:
+            file_groups[fp].append(sheet)
+
+        # Read each file once (concurrently across files), write results sequentially
+        with ThreadPoolExecutor(max_workers=min(8, len(file_groups) or 1)) as pool:
+            future_to_file = {
+                pool.submit(
+                    get_sheets_as_dataframes,
+                    fp,
+                    [(s["sheet_name"], s.get("header_row")) for s in sheets_list],
+                ): (fp, sheets_list)
+                for fp, sheets_list in file_groups.items()
+            }
+            for future in as_completed(future_to_file):
+                file_path, sheets_list = future_to_file[future]
+                df_map = future.result()  # {sheet_name: DataFrame}
+
+                for sheet in sheets_list:
+                    df = df_map[sheet["sheet_name"]]
+                    table_name = normalize_table_name(sheet["sheet_name"])
+                    category = sheet["category"]
                     header_row = sheet.get("header_row")
-                    df = get_sheet_as_dataframe(file_path, sheet["sheet_name"], header_row=header_row)
+
                     if category == "Transaction":
                         save_as_csv(
                             df,
@@ -1025,7 +1053,7 @@ class Screen1Sources(ScreenBase):
                             df,
                             self.project_path / "metadata" / "data" / "dim" / f"{table_name}.csv",
                         )
-                    # Store source path so Refresh can re-read from the same file later
+
                     sheets_meta[table_name] = {
                         "is_chained": False,
                         "file_path": str(file_path),
@@ -1033,11 +1061,27 @@ class Screen1Sources(ScreenBase):
                         "category": category,
                         "header_row": header_row or 1,
                     }
+                    if category == "Transaction" and table_name not in tx_names:
+                        tx_names.append(table_name)
+                    elif category == "Dimension" and table_name not in dim_names:
+                        dim_names.append(table_name)
 
-                if category == "Transaction" and table_name not in tx_names:
-                    tx_names.append(table_name)
-                elif category == "Dimension" and table_name not in dim_names:
-                    dim_names.append(table_name)
+                    done += 1
+                    report_progress(done, total)
+
+        # Handle chained sheets sequentially (they merge internally)
+        for file_path, sheet in chained_sheets:
+            table_name = normalize_table_name(sheet["sheet_name"])
+            category = sheet["category"]
+            sheet_meta = {"is_chained": True, "chain": sheet["chain"]}
+            write_unified_csv(self.project_path, table_name, category, sheet_meta)
+            sheets_meta[table_name] = sheet_meta
+            if category == "Transaction" and table_name not in tx_names:
+                tx_names.append(table_name)
+            elif category == "Dimension" and table_name not in dim_names:
+                dim_names.append(table_name)
+            done += 1
+            report_progress(done, total)
 
         project_data["transaction_tables"] = tx_names
         project_data["dim_tables"] = dim_names

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from core.data_loader import read_table
 from core.snapshot_manager import (
     create_snapshot,
     get_current_commit_id,
@@ -410,13 +411,14 @@ class ViewHistory(ScreenBase):
         tx_tables = list(self.project.get("transaction_tables", []))
 
         def worker():
-            import pandas as pd
             live_tx = project_path / "metadata" / "data" / "transactions"
             tables: dict = {}
             for name in tx_tables:
-                csv = live_tx / f"{name}.csv"
-                if csv.exists():
-                    tables[name] = pd.read_csv(csv)
+                for suffix in (".csv", ".parquet"):
+                    p = live_tx / f"{name}{suffix}"
+                    if p.exists():
+                        tables[name] = read_table(p)
+                        break
             create_snapshot(project_path, tables, label=label)
 
         self._run_background(

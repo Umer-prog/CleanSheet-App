@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
-from core.data_loader import load_csv
+from core.data_loader import load_csv, read_table
 from core.mapping_manager import add_mapping, delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_dim_dir, active_transactions_dir
@@ -792,16 +792,16 @@ class Screen2Mappings(ScreenBase):
 
     def _do_remove_table(self, table_name: str, kind: str) -> None:
         """Disk-side removal: delete data file, update project.json, purge saved mappings."""
-        if kind == "dim":
-            file_path = active_dim_dir(self.project_path) / f"{table_name}.csv"
-        else:
-            file_path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-
+        directory = active_dim_dir(self.project_path) if kind == "dim" else active_transactions_dir(self.project_path)
+        base = directory / table_name
         try:
-            if file_path.exists():
-                file_path.unlink()
+            for suffix in (".csv", ".parquet"):
+                p = base.with_suffix(suffix)
+                if p.exists():
+                    p.unlink()
+                    break
         except OSError as e:
-            raise OSError(f"Could not delete '{file_path.name}': {e}") from e
+            raise OSError(f"Could not delete '{table_name}': {e}") from e
 
         # Build updated project.json contents
         project_data = {
@@ -876,7 +876,7 @@ class Screen2Mappings(ScreenBase):
 
     def _load_transaction_columns(self, table_name: str) -> list[str]:
         path = active_transactions_dir(self.project_path) / f"{table_name}.csv"
-        return [str(c) for c in pd.read_csv(path, dtype=str, encoding="utf-8", nrows=0).columns]
+        return list(read_table(path).columns)
 
     def _compare_column_compatibility(
         self, dim_table: str, dim_col: str, tx_table: str, tx_col: str
@@ -896,7 +896,7 @@ class Screen2Mappings(ScreenBase):
         dim_vals = [str(v).strip() for v in dim_df[dim_col].dropna() if str(v).strip()]
 
         tx_path = active_transactions_dir(self.project_path) / f"{tx_table}.csv"
-        tx_df = pd.read_csv(tx_path, usecols=[tx_col], dtype=str, encoding="utf-8")
+        tx_df = read_table(tx_path)
         if tx_col not in tx_df.columns:
             return None
         tx_vals = [str(v).strip() for v in tx_df[tx_col].dropna() if str(v).strip()]

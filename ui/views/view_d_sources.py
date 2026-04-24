@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
-from core.data_loader import get_sheet_as_dataframe, load_excel_sheets
+from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, read_table
 from core.dim_manager import delete_dim_table
 from core.mapping_manager import get_active_dim_tables
 from core.project_manager import save_project_json
@@ -588,10 +588,12 @@ class ViewDSources(ScreenBase):
         def worker():
             import json as _json
             from core.mapping_manager import delete_mappings_for_table
-            # Chained dims are stored as CSV (not JSON)
-            csv_path = active_dim_dir(self.project_path) / f"{dim_name}.csv"
-            if csv_path.exists():
-                csv_path.unlink()
+            base = active_dim_dir(self.project_path) / dim_name
+            for suffix in (".csv", ".parquet"):
+                p = base.with_suffix(suffix)
+                if p.exists():
+                    p.unlink()
+                    break
             delete_mappings_for_table(self.project_path, dim_name)
             proj_file = self.project_path / "project.json"
             with open(proj_file, encoding="utf-8") as f:
@@ -615,9 +617,8 @@ class ViewDSources(ScreenBase):
 
     def _on_view_table(self, dim_name: str) -> None:
         def worker():
-            import pandas as pd
             path = active_dim_dir(self.project_path) / f"{dim_name}.csv"
-            return pd.read_csv(path, dtype=str, keep_default_na=False)
+            return read_table(path)
 
         def on_success(df):
             from ui.popups.popup_replace import PopupDimView
