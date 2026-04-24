@@ -99,6 +99,29 @@ def replace_transaction_values_bulk(project_path, mapping, old_value, new_value)
     return count
 
 
+_MAX_RENDERED_CARDS = 100   # error cards created on the main thread per render pass
+_COL_CHAR_PX        = 7     # approximate pixel width per character
+_COL_PADDING        = 14    # horizontal cell padding in pixels
+_COL_MIN_W          = 60
+_COL_MAX_W          = 220
+
+
+def _estimate_col_widths(df: pd.DataFrame) -> list[int]:
+    """Return per-column display widths estimated from the first 30 rows.
+
+    Runs on the background thread so the main thread never calls the
+    expensive Qt resizeColumnsToContents().
+    """
+    sample = df.head(30)
+    widths: list[int] = []
+    for col in df.columns:
+        header_w = len(str(col)) * _COL_CHAR_PX + _COL_PADDING
+        data_max = int(sample[col].astype(str).str.len().max() or 0) if len(sample) else 0
+        data_w   = data_max * _COL_CHAR_PX + _COL_PADDING
+        widths.append(max(_COL_MIN_W, min(max(header_w, data_w), _COL_MAX_W)))
+    return widths
+
+
 # ---------------------------------------------------------------------------
 # Table model
 # ---------------------------------------------------------------------------
@@ -635,13 +658,14 @@ class ViewMapping(ScreenBase):
                 self._transaction_df = entry["tx_df"]
                 self._errors = entry["errors"]
                 self._total_errors = entry["total_errors"]
+                self._col_widths = list(entry.get("col_widths") or [])
                 self._update_table_view()
                 self._render_errors()
                 self._refresh_generate_state()
                 return
 
-            # Partial cache hit: errors known from badge scan, tx_df not yet loaded
-            # Only read the transaction file — skip detect_errors entirely
+            # Partial cache hit: errors known from badge scan, tx_df not yet loaded.
+            # Only read the transaction file — skip detect_errors entirely.
             _cached_errors = entry["errors"]
             _cached_total  = entry["total_errors"]
 
@@ -650,15 +674,19 @@ class ViewMapping(ScreenBase):
                     active_transactions_dir(self.project_path)
                     / f"{self.mapping['transaction_table']}.csv"
                 )
-                return load_csv(csv_path), _cached_errors, _cached_total
+                tx_df      = load_csv(csv_path)
+                col_widths = _estimate_col_widths(tx_df)
+                return tx_df, _cached_errors, _cached_total, col_widths
 
             def on_partial_success(result):
-                tx_df, errors, total_found = result
+                tx_df, errors, total_found, col_widths = result
                 self._transaction_df = tx_df
                 self._errors = errors
                 self._total_errors = total_found
+                self._col_widths = col_widths
                 if mapping_id:
-                    cache[mapping_id]["tx_df"] = tx_df
+                    cache[mapping_id]["tx_df"]      = tx_df
+                    cache[mapping_id]["col_widths"]  = col_widths
                 self._update_table_view()
                 self._render_errors()
                 self._refresh_generate_state()
@@ -686,19 +714,22 @@ class ViewMapping(ScreenBase):
             errors, total_found = detect_errors(
                 self.project_path, self.mapping, ignored_values=_ign_vals
             )
-            return tx_df, errors, total_found
+            col_widths = _estimate_col_widths(tx_df)
+            return tx_df, errors, total_found, col_widths
 
         def on_success(result):
-            tx_df, errors, total_found = result
+            tx_df, errors, total_found, col_widths = result
             self._transaction_df = tx_df
             self._errors = errors
             self._total_errors = total_found
+            self._col_widths = col_widths
             if mapping_id:
                 cache[mapping_id] = {
                     "dirty": False,
                     "errors": errors,
                     "total_errors": total_found,
                     "tx_df": tx_df,
+                    "col_widths": col_widths,
                 }
             self._update_table_view()
             self._render_errors()
@@ -825,7 +856,7 @@ class ViewMapping(ScreenBase):
             self._errors_count_lbl.setText(f"{visible_total:,} unresolved")
             self._set_generate_mode(False)
 
-            for error in visible_errors:
+            for error in visible_errors[:_MAX_RENDERED_CARDS]:
                 row_num = int(error["row_index"]) + 1
                 bad_val = str(error.get("bad_value", ""))
                 col_name = error.get("transaction_column", "")
@@ -833,7 +864,20 @@ class ViewMapping(ScreenBase):
                     self._make_error_card(row_num, col_name, bad_val, error)
                 )
 
-            if truncated:
+            overflow = len(visible_errors) - _MAX_RENDERED_CARDS
+            if overflow > 0:
+                notice = QLabel(
+                    f"{overflow:,} more errors not shown — "
+                    f"resolve the ones above then click ↻ Refresh."
+                )
+                notice.setWordWrap(True)
+                notice.setStyleSheet(
+                    "color: #64748b; font-size: 11px; background: rgba(255,255,255,0.03); "
+                    "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
+                    "padding: 8px 12px; margin: 4px 0;"
+                )
+                self._err_list_layout.addWidget(notice)
+            elif truncated:
                 notice = QLabel(
                     f"Showing first {len(self._errors):,} of {self._total_errors:,} errors. "
                     f"Fix these, then refresh to see more."

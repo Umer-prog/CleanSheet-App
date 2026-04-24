@@ -214,6 +214,8 @@ class Screen3Main(QWidget):
 
         def worker():
             import json as _json
+            from concurrent.futures import ThreadPoolExecutor
+
             ignored_file = project_path / "metadata" / "data" / "ignored_errors.json"
             try:
                 with open(ignored_file, encoding="utf-8") as fh:
@@ -221,27 +223,34 @@ class Screen3Main(QWidget):
             except Exception:
                 ignored_map = {}
 
-            results: dict[str, int] = {}
-            cache_updates: dict[str, dict] = {}
-            for item in mapping_items:
+            def _detect_one(item: dict):
                 try:
                     errors, total = detect_errors(project_path, item["mapping"])
-                    m = item["mapping"]
+                    m   = item["mapping"]
                     mid = str(m.get("id", ""))
                     key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
-                    ignored = ignored_map.get(key, set())
-                    visible_count = len([e for e in errors if int(e["row_index"]) not in ignored])
-                    results[item["key"]] = max(0, total - (len(errors) - visible_count))
-                    if mid:
-                        # Store errors/total; tx_df loaded lazily on first view open
-                        cache_updates[mid] = {
-                            "dirty": False,
-                            "errors": errors,
-                            "total_errors": total,
-                            "tx_df": None,
-                        }
+                    ignored       = ignored_map.get(key, set())
+                    visible_count = sum(1 for e in errors if int(e["row_index"]) not in ignored)
+                    badge_count   = max(0, total - (len(errors) - visible_count))
+                    cache_entry   = {
+                        "dirty": False,
+                        "errors": errors,
+                        "total_errors": total,
+                        "tx_df": None,
+                        "col_widths": None,
+                    } if mid else None
+                    return item["key"], badge_count, mid, cache_entry
                 except Exception:
-                    results[item["key"]] = 0
+                    return item["key"], 0, None, None
+
+            results: dict[str, int] = {}
+            cache_updates: dict[str, dict] = {}
+            n_workers = min(4, len(mapping_items))
+            with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                for nav_key, badge_count, mid, cache_entry in pool.map(_detect_one, mapping_items):
+                    results[nav_key] = badge_count
+                    if mid and cache_entry:
+                        cache_updates[mid] = cache_entry
             return results, cache_updates
 
         def on_done(data: tuple):
