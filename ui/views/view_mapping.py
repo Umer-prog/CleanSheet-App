@@ -1407,27 +1407,52 @@ class ViewMapping(ScreenBase):
         if not self._generate_mode:
             return
 
+        self._generate_btn.setEnabled(False)
+
         # Capture snapshot of the current (error-free) transaction table
         table_name = self.mapping["transaction_table"]
         tx_df = self._transaction_df.copy() if self._transaction_df is not None else None
 
-        def worker():
+        def worker(report_progress):
             if tx_df is not None:
                 create_snapshot(
                     self.project_path,
                     {table_name: tx_df},
                     label=f"Generated output — {table_name}",
                 )
-            return export_final_workbook(self.project_path)
+            return export_final_workbook(
+                self.project_path,
+                report_progress=report_progress,
+            )
 
-        self._run_background(
+        def on_progress(done: int, total: int) -> None:
+            if self._overlay:
+                self._overlay.update_progress(done, total)
+
+        def on_success(path) -> None:
+            self._generate_btn.setEnabled(True)
+            from PySide6.QtWidgets import QMessageBox
+            answer = msgbox.question(
+                self,
+                "Export Complete",
+                f"Final file created:\n{path}\n\nOpen the output folder?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                import subprocess
+                folder = str(path.parent) if hasattr(path, "parent") else str(path)
+                subprocess.Popen(f'explorer "{folder}"')
+
+        def on_error(exc) -> None:
+            self._generate_btn.setEnabled(True)
+            msgbox.critical(self, "Export Failed", f"Could not generate final file:\n{exc}")
+
+        self._run_background_with_progress(
             worker,
-            lambda path: msgbox.information(
-                self, "Final File Generated", f"Final file created:\n{path}"
-            ),
-            lambda exc: msgbox.critical(
-                self, "Error", f"Could not generate final file:\n{exc}"
-            ),
+            on_progress=on_progress,
+            on_success=on_success,
+            on_error=on_error,
         )
 
 
