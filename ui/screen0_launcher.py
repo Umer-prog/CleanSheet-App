@@ -462,30 +462,34 @@ class Screen0Launcher(ScreenBase):
         self._clear_detail_card()
 
         paths = self.app.get_known_projects()
-        loaded = []
-        for p in paths:
-            try:
-                loaded.append(open_project(Path(p)))
-            except (FileNotFoundError, ValueError):
-                continue
 
-        count = len(loaded)
-        self._count_pill.setText(f"{count} project{'s' if count != 1 else ''}")
-        self._status_lbl.setText(
-            f"{theme.company_name()} v1.0 · {count} project{'s' if count != 1 else ''} loaded"
-        )
+        def _load():
+            loaded = []
+            for p in paths:
+                try:
+                    loaded.append(open_project(Path(p)))
+                except (FileNotFoundError, ValueError):
+                    continue
+            return loaded
 
-        if not loaded:
-            lbl = QLabel("No projects yet.")
-            lbl.setFont(theme.font(12))
-            lbl.setStyleSheet("color: #475569; padding: 16px 18px; background: transparent;")
-            self._list_layout.addWidget(lbl)
-            return
+        def _render(loaded):
+            count = len(loaded)
+            self._count_pill.setText(f"{count} project{'s' if count != 1 else ''}")
+            self._status_lbl.setText(
+                f"{theme.company_name()} v1.0 · {count} project{'s' if count != 1 else ''} loaded"
+            )
+            if not loaded:
+                lbl = QLabel("No projects yet.")
+                lbl.setFont(theme.font(12))
+                lbl.setStyleSheet("color: #475569; padding: 16px 18px; background: transparent;")
+                self._list_layout.addWidget(lbl)
+                return
+            for state in loaded:
+                row = self._make_project_row(state)
+                self._list_layout.addWidget(row)
+                self._project_rows.append((state, row))
 
-        for state in loaded:
-            row = self._make_project_row(state)
-            self._list_layout.addWidget(row)
-            self._project_rows.append((state, row))
+        self._run_background(_load, on_success=_render)
 
     def _make_project_row(self, state: dict) -> QFrame:
         path = state.get("project_path", "")
@@ -589,41 +593,45 @@ class Screen0Launcher(ScreenBase):
     def _on_open_click(self) -> None:
         if not self._selected_path:
             return
-        try:
-            state = open_project(Path(self._selected_path))
+        selected_path = self._selected_path
+
+        def _load():
+            state = open_project(Path(selected_path))
+            project_path = Path(state["project_path"])
+            try:
+                mappings = get_mappings(project_path)
+            except Exception:
+                mappings = []
+            return state, mappings
+
+        def _on_success(result):
+            state, mappings = result
             self.app.set_current_project(state)
-        except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not open project:\n{exc}")
-            return
-
-        project_path = Path(state["project_path"])
-        try:
-            mappings = get_mappings(project_path)
-        except Exception:
-            mappings = []
-
-        tx_tables = list(state.get("transaction_tables", []))
-        dim_tables = list(state.get("dim_tables", []))
-
-        if not tx_tables or not dim_tables:
-            target = "screen1"
-        elif not mappings:
-            target = "screen2"
-        else:
-            target = "screen3"
-
-        try:
-            if target == "screen1":
-                from ui.screen1_sources import Screen1Sources
-                self.app.show_screen(Screen1Sources, project=state)
-            elif target == "screen2":
-                from ui.screen2_mappings import Screen2Mappings
-                self.app.show_screen(Screen2Mappings, project=state)
+            tx_tables = list(state.get("transaction_tables", []))
+            dim_tables = list(state.get("dim_tables", []))
+            if not tx_tables or not dim_tables:
+                target = "screen1"
+            elif not mappings:
+                target = "screen2"
             else:
-                from ui.screen3_main import Screen3Main
-                self.app.show_screen(Screen3Main, project=state)
-        except ImportError as exc:
-            msgbox.critical(self, "Navigation Error", str(exc))
+                target = "screen3"
+            try:
+                if target == "screen1":
+                    from ui.screen1_sources import Screen1Sources
+                    self.app.show_screen(Screen1Sources, project=state)
+                elif target == "screen2":
+                    from ui.screen2_mappings import Screen2Mappings
+                    self.app.show_screen(Screen2Mappings, project=state)
+                else:
+                    from ui.screen3_main import Screen3Main
+                    self.app.show_screen(Screen3Main, project=state)
+            except ImportError as exc:
+                msgbox.critical(self, "Navigation Error", str(exc))
+
+        def _on_error(exc):
+            msgbox.critical(self, "Error", f"Could not open project:\n{exc}")
+
+        self._run_background(_load, on_success=_on_success, on_error=_on_error)
 
     def _on_new_click(self) -> None:
         self.app.show_screen(NewProjectScreen)
