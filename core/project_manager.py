@@ -120,12 +120,20 @@ def list_projects(root_path: Path) -> list:
     return projects
 
 
+_RUNTIME_ONLY_KEYS = {"_validation_cache"}
+
+
 def save_project_json(project_path: Path, project_data: dict) -> None:
-    """Write updated project.json to disk."""
+    """Write updated project.json to disk.
+
+    Runtime-only keys (e.g. _validation_cache) are stripped automatically
+    so callers never need to worry about non-serialisable values.
+    """
     project_path = Path(project_path)
+    clean = {k: v for k, v in project_data.items() if k not in _RUNTIME_ONLY_KEYS}
     try:
         with open(project_path / "project.json", "w", encoding="utf-8") as f:
-            json.dump(project_data, f, indent=2)
+            json.dump(clean, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to save project.json: {e}") from e
 

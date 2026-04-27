@@ -664,38 +664,6 @@ class ViewMapping(ScreenBase):
                 self._refresh_generate_state()
                 return
 
-            # Partial cache hit: errors known from badge scan, tx_df not yet loaded.
-            # Only read the transaction file — skip detect_errors entirely.
-            _cached_errors = entry["errors"]
-            _cached_total  = entry["total_errors"]
-
-            def worker_tx_only():
-                csv_path = (
-                    active_transactions_dir(self.project_path)
-                    / f"{self.mapping['transaction_table']}.csv"
-                )
-                tx_df      = load_csv(csv_path)
-                col_widths = _estimate_col_widths(tx_df)
-                return tx_df, _cached_errors, _cached_total, col_widths
-
-            def on_partial_success(result):
-                tx_df, errors, total_found, col_widths = result
-                self._transaction_df = tx_df
-                self._errors = errors
-                self._total_errors = total_found
-                self._col_widths = col_widths
-                if mapping_id:
-                    cache[mapping_id]["tx_df"]      = tx_df
-                    cache[mapping_id]["col_widths"]  = col_widths
-                self._update_table_view()
-                self._render_errors()
-                self._refresh_generate_state()
-
-            self._update_table_view()
-            self._show_loading_errors()
-            self._run_background(worker_tx_only, on_partial_success, on_error)
-            return
-
         # Full load: run detect_errors + read transaction table
         self._update_table_view()
         self._show_loading_errors()

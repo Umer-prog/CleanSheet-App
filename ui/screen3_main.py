@@ -204,8 +204,13 @@ class Screen3Main(QWidget):
             return []
 
     def _init_mapping_badges(self) -> None:
-        """Run error detection for every mapping in background, seed nav badges, and
-        pre-warm the validation cache so the first nav click renders instantly."""
+        """Run error detection for every mapping in background and update nav badges.
+
+        Intentionally does NOT write to the validation cache — the cache is only
+        populated by ViewMapping._reload_data so that navigating to a mapping always
+        runs a fresh detect_errors call, regardless of what the badge scan found.
+        This prevents stale cache hits after re-uploads or dimension table changes.
+        """
         mapping_items = [i for i in self._nav_items if i["kind"] == "mapping"]
         if not mapping_items:
             return
@@ -227,41 +232,24 @@ class Screen3Main(QWidget):
                 try:
                     errors, total = detect_errors(project_path, item["mapping"])
                     m   = item["mapping"]
-                    mid = str(m.get("id", ""))
                     key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
                     ignored       = ignored_map.get(key, set())
                     visible_count = sum(1 for e in errors if int(e["row_index"]) not in ignored)
                     badge_count   = max(0, total - (len(errors) - visible_count))
-                    cache_entry   = {
-                        "dirty": False,
-                        "errors": errors,
-                        "total_errors": total,
-                        "tx_df": None,
-                        "col_widths": None,
-                    } if mid else None
-                    return item["key"], badge_count, mid, cache_entry
+                    return item["key"], badge_count
                 except Exception:
-                    return item["key"], 0, None, None
+                    return item["key"], 0
 
             results: dict[str, int] = {}
-            cache_updates: dict[str, dict] = {}
             n_workers = min(4, len(mapping_items))
             with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                for nav_key, badge_count, mid, cache_entry in pool.map(_detect_one, mapping_items):
+                for nav_key, badge_count in pool.map(_detect_one, mapping_items):
                     results[nav_key] = badge_count
-                    if mid and cache_entry:
-                        cache_updates[mid] = cache_entry
-            return results, cache_updates
+            return results
 
-        def on_done(data: tuple):
-            results, cache_updates = data
+        def on_done(results: dict):
             for nav_key, count in results.items():
                 self.update_mapping_badge(nav_key, count)
-            # Pre-warm cache (only if an entry doesn't already exist from an earlier load)
-            cache = self.project.setdefault("_validation_cache", {})
-            for mid, entry in cache_updates.items():
-                if mid not in cache or cache[mid].get("dirty", True):
-                    cache[mid] = entry
 
         w = Worker(worker)
         w.finished.connect(on_done)
