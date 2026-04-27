@@ -3,11 +3,13 @@ from __future__ import annotations
 from typing import Callable
 
 import pandas as pd
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QTableView, QVBoxLayout, QWidget,
 )
+
+from ui.workers import Worker
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +39,11 @@ class _DataFrameModel(QAbstractTableModel):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             return str(self._df.columns[section]).upper()
         return None
+
+    def update_df(self, df: pd.DataFrame) -> None:
+        self.beginResetModel()
+        self._df = df
+        self.endResetModel()
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +88,10 @@ class PopupReplace(QDialog):
         self._selected_frame: QFrame | None = None
         self._row_frames: list[tuple[QFrame, str]] = []  # fallback list only
         self._table_view: QTableView | None = None
+        self._full_df: pd.DataFrame | None = self._dim_df
+        self._search_query: str = ""
+        self._search_debounce: QTimer | None = None
+        self._active_search_worker: Worker | None = None
 
         # Centre on parent
         if parent:
@@ -271,15 +282,17 @@ class PopupReplace(QDialog):
         sf_lay.addWidget(self._table_search)
         lay.addWidget(search_frame)
 
-        # ── QTableView — virtualised, filtered via proxy ──────────────
+        # Debounce timer — fires _fire_filter 300ms after the last keystroke
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(300)
+        self._search_debounce.timeout.connect(self._fire_filter)
+
+        # ── QTableView — direct model, filtered in background worker ──
         self._table_model = _DataFrameModel(self._dim_df)
-        self._proxy_model = QSortFilterProxyModel()
-        self._proxy_model.setSourceModel(self._table_model)
-        self._proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
-        self._proxy_model.setFilterKeyColumn(-1)  # search all columns
 
         self._table_view = QTableView()
-        self._table_view.setModel(self._proxy_model)
+        self._table_view.setModel(self._table_model)
         self._table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -314,20 +327,47 @@ class PopupReplace(QDialog):
         return wrap
 
     def _on_table_search(self, text: str) -> None:
-        self._proxy_model.setFilterFixedString(text)
-        visible = self._proxy_model.rowCount()
-        total = len(self._dim_df)
-        self._row_count_lbl.setText(
-            f"{visible} / {total} rows" if text.strip() else f"{total} rows"
-        )
+        self._search_query = text
+        self._search_debounce.stop()
+        self._search_debounce.start()
+
+    def _fire_filter(self) -> None:
+        query = self._search_query.strip()
+        full = self._full_df
+        if not query:
+            self._table_model.update_df(full)
+            self._row_count_lbl.setText(f"{len(full)} rows")
+            return
+
+        def _do_filter():
+            masks = [
+                full[col].astype(str).str.contains(query, case=False, na=False)
+                for col in full.columns
+            ]
+            mask = masks[0]
+            for m in masks[1:]:
+                mask = mask | m
+            return full[mask].reset_index(drop=True)
+
+        def _on_done(filtered: pd.DataFrame) -> None:
+            self._table_model.update_df(filtered)
+            visible = len(filtered)
+            total = len(self._full_df)
+            self._row_count_lbl.setText(
+                f"{visible} / {total} rows" if self._search_query.strip() else f"{total} rows"
+            )
+
+        w = Worker(_do_filter)
+        w.finished.connect(_on_done)
+        w.errored.connect(lambda _: None)
+        w.start()
+        self._active_search_worker = w
 
     def _on_dim_selection(self, selected, deselected) -> None:
         indexes = self._table_view.selectionModel().selectedRows()
         if not indexes:
             return
-        # Map filtered proxy index → original source DataFrame index
-        source_index = self._proxy_model.mapToSource(indexes[0])
-        df_row = self._dim_df.iloc[source_index.row()]
+        df_row = self._table_model._df.iloc[indexes[0].row()]
         val = (str(df_row[self._dim_column])
                if self._dim_column in df_row.index else str(df_row.iloc[0]))
         self._selected_value = val

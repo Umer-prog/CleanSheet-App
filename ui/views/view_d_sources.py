@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QVBoxLayout, QWidget,
@@ -160,6 +160,10 @@ class ViewDSources(ScreenBase):
         self._on_chain_append = on_chain_append
         self._orphaned_dims: set[str] = set()
         self._search_text = ""
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(300)
+        self._search_debounce.timeout.connect(self._render_rows)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -285,7 +289,8 @@ class ViewDSources(ScreenBase):
 
     def _on_search_changed(self, text: str) -> None:
         self._search_text = text.strip().lower()
-        self._render_rows()
+        self._search_debounce.stop()
+        self._search_debounce.start()
 
     def _load_orphan_state(self) -> None:
         def worker():
