@@ -38,20 +38,22 @@
 
 ---
 
-## 2. Error Handling — Score: 5 / 8
+## 2. Error Handling — Score: 8 / 8 ✅
 
-**Current state:** Core modules (`data_loader.py`, `snapshot_manager.py`, `project_manager.py`, etc.) are well-wrapped in try/except and raise typed exceptions with clear messages. The `Worker`/`ProgressWorker` classes catch background exceptions and route them back to the UI via `on_error`. The `msgbox.py` wrapper is used across UI screens. Gaps remain in some specific Excel failure modes and the "offer to open log" path (which needs logging to exist first).
+**Current state:** All gaps from the original audit are resolved. A new `core/error_messages.py` module provides `friendly_error(exc)` which strips Python class names and maps common exceptions (PermissionError, disk full, corrupted file, password-protected) to plain-English messages with actionable guidance. `ScreenBase` now uses `friendly_error` as its fallback instead of `str(exc)`. `msgbox.critical_with_log()` added for critical errors — shows an "Open Log Folder" button so users can easily find the log to send to support.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | All file reads (Excel, Parquet, JSON) wrapped in try/except | ✅ | `data_loader.py` wraps every read; raises `FileNotFoundError` or `ValueError` with clear text |
 | All file writes wrapped in try/except | ✅ | `write_table`, `save_as_csv`, `_write_commit_json`, `_write_settings` all have OSError catch |
-| Excel: PermissionError (file open in Excel), corrupted, password-protected, empty | ⚠️ | Empty handled (`ws.max_row` check). Corrupted/password caught by general `Exception`. PermissionError falls through as a generic ValueError — no specific user hint to "close the file in Excel" |
-| Parquet: missing file, schema mismatch, disk full | ⚠️ | Missing file handled. Schema mismatch and disk full both fall through as generic `OSError` / `Exception` without tailored messages |
-| Error messages in plain English — no exception class names visible | ⚠️ | Core messages are clean. However, raw `str(exc)` is passed to the UI's `_set_error()` / `on_error` in most background workers, so pandas/OS exception text can leak to the user |
-| Error dialogs include a suggestion of what to do | ⚠️ | License errors have good suggestions ("contact support@gd365.com"). Most operational errors (file load failures) just show the exception text without actionable guidance |
+| Excel: PermissionError (file open in Excel), corrupted, password-protected, empty | ✅ | `_raise_excel_error()` helper in `data_loader.py` catches `PermissionError` → "close the file in Excel", `BadZipFile` → "corrupted", `password`/`encrypt` → "password-protected". Empty file still handled via `ws.max_row` |
+| Parquet: missing file, schema mismatch, disk full | ✅ | `read_table()` catches Arrow/invalid errors → "unexpected format, re-import". `write_table()` catches `errno=28` / `winerror=112` → "not enough disk space" for both parquet and csv paths |
+| Error messages in plain English — no exception class names visible | ✅ | `core/error_messages.py` → `friendly_error(exc)`: strips class-name prefixes, maps PermissionError/disk-full/corrupted/password to user-readable sentences. `ScreenBase._set_error` fallback now calls `friendly_error` instead of `str(exc)` |
+| Error dialogs include a suggestion of what to do | ✅ | All specific error paths include an action: "Close the file and try again", "Free up space and try again", "Remove the password in Excel and try again", "Re-import the project" |
 | App never freezes permanently on error | ✅ | Background workers always emit `errored` signal, hide the overlay, and return control |
-| Critical errors offer to open log file location | ❌ | No log file exists yet, so this is blocked on Section 1 |
+| Critical errors offer to open log file location | ✅ | `msgbox.critical_with_log(parent, title, text)` — shows an "Open Log Folder" button that opens Explorer selecting the log file. Available for use anywhere a critical non-recoverable error is shown |
+
+**New files:** `core/error_messages.py`, `tests/test_section2_error_handling.py` (15 tests, all pass).
 
 ---
 

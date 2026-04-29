@@ -8,6 +8,8 @@ import threading
 from PySide6.QtCore import QObject, QTimer, Signal, Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QWidget
 
+from core.error_messages import friendly_error
+
 _log = logging.getLogger(__name__)
 
 
@@ -291,7 +293,7 @@ class ScreenBase(QWidget):
             if on_error:
                 on_error(exc)
             else:
-                self._set_error(str(exc))
+                self._set_error(friendly_error(exc))
 
         worker.finished.connect(_done)
         worker.errored.connect(_fail)
@@ -335,7 +337,7 @@ class ScreenBase(QWidget):
             if on_error:
                 on_error(exc)
             else:
-                self._set_error(str(exc))
+                self._set_error(friendly_error(exc))
 
         def _progress(done, total):
             if on_progress:

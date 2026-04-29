@@ -34,7 +34,7 @@ def seeded_project(project):
     save_dim_dataframe(project, "item_dim", dim_df)
 
     t_df = pd.DataFrame({"item": ["Widget", "Gadget", "Typo", "widget"]})
-    save_as_csv(t_df, project / "data" / "transactions" / "sales.csv")
+    save_as_csv(t_df, project / "metadata" / "data" / "transactions" / "sales.csv")
 
     mapping = {
         "transaction_table": "sales",
@@ -107,7 +107,7 @@ class TestDetectErrors:
     def test_returns_errors_for_bad_values(self, seeded_project):
         from core.mapping_manager import get_mappings
         mapping = get_mappings(seeded_project)[0]
-        errors = detect_errors(seeded_project, mapping)
+        errors, _ = detect_errors(seeded_project, mapping)
         bad_values = [e["bad_value"] for e in errors]
         assert "Typo" in bad_values
         assert "widget" in bad_values  # case-sensitive mismatch
@@ -115,7 +115,7 @@ class TestDetectErrors:
     def test_no_errors_for_valid_values(self, seeded_project):
         from core.mapping_manager import get_mappings
         mapping = get_mappings(seeded_project)[0]
-        errors = detect_errors(seeded_project, mapping)
+        errors, _ = detect_errors(seeded_project, mapping)
         bad_values = [e["bad_value"] for e in errors]
         assert "Widget" not in bad_values
         assert "Gadget" not in bad_values
@@ -123,7 +123,7 @@ class TestDetectErrors:
     def test_error_dict_structure(self, seeded_project):
         from core.mapping_manager import get_mappings
         mapping = get_mappings(seeded_project)[0]
-        errors = detect_errors(seeded_project, mapping)
+        errors, _ = detect_errors(seeded_project, mapping)
         assert len(errors) > 0
         e = errors[0]
         for key in ("row_index", "transaction_table", "transaction_column",
@@ -133,7 +133,7 @@ class TestDetectErrors:
     def test_row_index_is_int(self, seeded_project):
         from core.mapping_manager import get_mappings
         mapping = get_mappings(seeded_project)[0]
-        errors = detect_errors(seeded_project, mapping)
+        errors, _ = detect_errors(seeded_project, mapping)
         for e in errors:
             assert isinstance(e["row_index"], int)
 
@@ -161,14 +161,15 @@ class TestDetectErrors:
         dim_df = pd.DataFrame({"name": ["A", "B"]})
         save_dim_dataframe(project, "d", dim_df)
         t_df = pd.DataFrame({"col": ["A", "B"]})
-        save_as_csv(t_df, project / "data" / "transactions" / "t.csv")
+        save_as_csv(t_df, project / "metadata" / "data" / "transactions" / "t.csv")
         mapping = {
             "transaction_table": "t",
             "transaction_column": "col",
             "dim_table": "d",
             "dim_column": "name",
         }
-        assert detect_errors(project, mapping) == []
+        errors, _ = detect_errors(project, mapping)
+        assert errors == []
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +202,7 @@ class TestDetectAllErrors:
         save_dim_dataframe(project, "region_dim", dim2)
 
         t_df = pd.DataFrame({"item_col": ["A", "WRONG"], "region_col": ["North", "BAD"]})
-        save_as_csv(t_df, project / "data" / "transactions" / "sales.csv")
+        save_as_csv(t_df, project / "metadata" / "data" / "transactions" / "sales.csv")
 
         mid1 = add_mapping(project, {
             "transaction_table": "sales", "transaction_column": "item_col",

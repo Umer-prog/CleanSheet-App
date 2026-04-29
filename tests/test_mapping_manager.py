@@ -61,7 +61,7 @@ class TestAddMapping:
 
     def test_persists_to_store(self, project):
         add_mapping(project, sample_mapping())
-        store = json.loads((project / "mappings" / "mapping_store.json").read_text())
+        store = json.loads((project / "metadata" / "mappings" / "mapping_store.json").read_text())
         assert len(store["mappings"]) == 1
         m = store["mappings"][0]
         assert m["transaction_table"] == "sales"
@@ -170,9 +170,10 @@ class TestDimManager:
         self._make_dim(project)
         assert dim_exists(project, "item_dim")
 
-    def test_save_creates_json_file(self, project):
+    def test_save_creates_dim_file(self, project):
         self._make_dim(project)
-        assert (project / "data" / "dim" / "item_dim.json").exists()
+        dim_dir = project / "metadata" / "data" / "dim"
+        assert any(f.stem == "item_dim" for f in dim_dir.iterdir())
 
     def test_load_roundtrip(self, project):
         self._make_dim(project)

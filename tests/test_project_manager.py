@@ -34,10 +34,10 @@ class TestCreateProject:
         project_path = create_project("TestProject", "Acme", tmp_path)
 
         assert project_path.exists()
-        assert (project_path / "data" / "transactions").exists()
-        assert (project_path / "data" / "dim").exists()
+        assert (project_path / "metadata" / "data" / "transactions").exists()
+        assert (project_path / "metadata" / "data" / "dim").exists()
         assert (project_path / "history").exists()
-        assert (project_path / "mappings").exists()
+        assert (project_path / "metadata" / "mappings").exists()
 
     def test_writes_project_json(self, tmp_path):
         project_path = create_project("MyProject", "Corp", tmp_path)
@@ -58,7 +58,7 @@ class TestCreateProject:
 
     def test_writes_empty_mapping_store(self, tmp_path):
         project_path = create_project("P", "C", tmp_path)
-        ms = json.loads((project_path / "mappings" / "mapping_store.json").read_text())
+        ms = json.loads((project_path / "metadata" / "mappings" / "mapping_store.json").read_text())
 
         assert ms == {"mappings": []}
 
@@ -192,9 +192,13 @@ class TestSaveAndLoadJson:
 
 class TestExcelLoader:
     """
-    These tests require an actual Excel file. They create one in-memory using openpyxl
-    via pandas so no fixture file is needed.
+    These tests require openpyxl. They are skipped automatically when the
+    test runner's Python environment does not have it installed.
     """
+
+    @pytest.fixture(autouse=True)
+    def _require_openpyxl(self):
+        pytest.importorskip("openpyxl")
 
     def _make_excel(self, tmp_path) -> Path:
         path = tmp_path / "sample.xlsx"

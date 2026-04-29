@@ -48,8 +48,17 @@ def read_table(file_path: Path) -> pd.DataFrame:
 
     def _read(p: Path) -> pd.DataFrame:
         if p.suffix == ".parquet":
-            df = pd.read_parquet(p)
-            return df.astype(str).where(df.notna(), "")
+            try:
+                df = pd.read_parquet(p)
+                return df.astype(str).where(df.notna(), "")
+            except Exception as e:
+                msg = str(e).lower()
+                if "schema" in msg or "invalid" in msg or "arrow" in msg:
+                    raise ValueError(
+                        f"The data file '{p.name}' has an unexpected format.\n"
+                        "The project may need to be re-imported."
+                    ) from e
+                raise OSError(f"Could not read data file '{p.name}': {e}") from e
         return pd.read_csv(p, dtype=str, keep_default_na=False, encoding="utf-8")
 
     if file_path.exists():
@@ -76,9 +85,25 @@ def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
                 f"Cannot write Parquet: a CSV file already exists at '{csv_sibling}'. "
                 "Existing projects stay in their original format."
             )
-        df.to_parquet(dest_path, index=False, compression="snappy")
+        try:
+            df.to_parquet(dest_path, index=False, compression="snappy")
+        except OSError as e:
+            if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
+                raise OSError(
+                    "Not enough disk space to save the file.\n"
+                    "Free up space and try again."
+                ) from e
+            raise
     else:
-        df.to_csv(dest_path, index=False, encoding="utf-8")
+        try:
+            df.to_csv(dest_path, index=False, encoding="utf-8")
+        except OSError as e:
+            if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
+                raise OSError(
+                    "Not enough disk space to save the file.\n"
+                    "Free up space and try again."
+                ) from e
+            raise
     return dest_path
 
 
@@ -116,6 +141,30 @@ def _excel_numfmt_to_strftime(number_format: str) -> str | None:
     return result if '%' in result else None
 
 
+def _raise_excel_error(file_path: Path, exc: Exception) -> None:
+    """Re-raise an Excel open/read error as a typed, user-friendly exception."""
+    _log.error("Failed to open Excel file '%s': %s", file_path, exc, exc_info=True)
+    msg = str(exc).lower()
+    if isinstance(exc, PermissionError):
+        raise PermissionError(
+            f"'{file_path.name}' is open in another program.\n"
+            "Close the file in Excel and try again."
+        ) from exc
+    if "password" in msg or "encrypt" in msg:
+        raise ValueError(
+            f"'{file_path.name}' is password-protected.\n"
+            "Remove the password in Excel and try again."
+        ) from exc
+    if "bad zip" in msg or "not a zip" in msg:
+        raise ValueError(
+            f"'{file_path.name}' appears to be corrupted and cannot be opened.\n"
+            "Try re-exporting the file from its source."
+        ) from exc
+    raise ValueError(
+        f"Could not open '{file_path.name}': {exc}"
+    ) from exc
+
+
 def load_excel_sheets(file_path: Path) -> list:
     """Return the list of sheet names in an Excel file."""
     file_path = Path(file_path)
@@ -126,9 +175,10 @@ def load_excel_sheets(file_path: Path) -> list:
         sheets = xl.sheet_names
         _log.info("File loaded: '%s' (%d sheet(s))", file_path.name, len(sheets))
         return sheets
+    except (FileNotFoundError, ValueError):
+        raise
     except Exception as e:
-        _log.error("Failed to open Excel file '%s': %s", file_path, e, exc_info=True)
-        raise ValueError(f"Failed to open Excel file '{file_path}': {e}") from e
+        _raise_excel_error(file_path, e)
 
 
 def _find_header_row(ws) -> int:
@@ -192,7 +242,12 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | N
     if not file_path.exists():
         raise FileNotFoundError(f"Excel file not found: {file_path}")
     try:
-        wb = openpyxl.load_workbook(str(file_path), data_only=True)
+        try:
+            wb = openpyxl.load_workbook(str(file_path), data_only=True)
+        except PermissionError as e:
+            _raise_excel_error(file_path, e)
+        except Exception as e:
+            _raise_excel_error(file_path, e)
         if sheet_name not in wb.sheetnames:
             raise ValueError(f"Sheet '{sheet_name}' not found in '{file_path}'")
         ws = wb[sheet_name]
@@ -270,7 +325,12 @@ def get_sheets_as_dataframes(
     if not file_path.exists():
         raise FileNotFoundError(f"Excel file not found: {file_path}")
 
-    wb = openpyxl.load_workbook(str(file_path), data_only=True)
+    try:
+        wb = openpyxl.load_workbook(str(file_path), data_only=True)
+    except PermissionError as e:
+        _raise_excel_error(file_path, e)
+    except Exception as e:
+        _raise_excel_error(file_path, e)
     result: dict[str, pd.DataFrame] = {}
     try:
         for sheet_name, header_row in sheets:
