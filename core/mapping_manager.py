@@ -1,5 +1,8 @@
 import json
+import logging
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 from core.project_paths import active_mappings_dir
 
@@ -61,6 +64,12 @@ def add_mapping(project_path: Path, mapping: dict) -> str:
     }
     store["mappings"].append(entry)
     _write_store(project_path, store)
+    _log.info(
+        "Mapping saved: %s → %s.%s ↔ %s.%s",
+        mapping_id,
+        entry["transaction_table"], entry["transaction_column"],
+        entry["dim_table"], entry["dim_column"],
+    )
     return mapping_id
 
 

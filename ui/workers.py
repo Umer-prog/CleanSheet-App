@@ -1,11 +1,14 @@
 """Shared threading and loading overlay utilities for all UI screens and views."""
 from __future__ import annotations
 
+import logging
 import queue as _queue
 import threading
 
 from PySide6.QtCore import QObject, QTimer, Signal, Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QProgressBar, QWidget
+
+_log = logging.getLogger(__name__)
 
 
 class Worker(QObject):
@@ -51,6 +54,7 @@ class Worker(QObject):
         try:
             self._queue.put(("ok", self._fn()))
         except Exception as exc:  # noqa: BLE001
+            _log.error("Background worker error: %s", exc, exc_info=True)
             self._queue.put(("err", exc))
 
     def _poll(self) -> None:
@@ -107,6 +111,7 @@ class ProgressWorker(QObject):
         try:
             self._result_queue.put(("ok", self._fn(self._report_progress)))
         except Exception as exc:  # noqa: BLE001
+            _log.error("Background worker error: %s", exc, exc_info=True)
             self._result_queue.put(("err", exc))
 
     def _poll(self) -> None:

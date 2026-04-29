@@ -1,9 +1,12 @@
 import json
+import logging
 import re
 from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +123,11 @@ def load_excel_sheets(file_path: Path) -> list:
         raise FileNotFoundError(f"Excel file not found: {file_path}")
     try:
         xl = pd.ExcelFile(file_path, engine="openpyxl")
-        return xl.sheet_names
+        sheets = xl.sheet_names
+        _log.info("File loaded: '%s' (%d sheet(s))", file_path.name, len(sheets))
+        return sheets
     except Exception as e:
+        _log.error("Failed to open Excel file '%s': %s", file_path, e, exc_info=True)
         raise ValueError(f"Failed to open Excel file '{file_path}': {e}") from e
 
 

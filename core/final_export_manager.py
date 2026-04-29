@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Callable
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from core.data_loader import read_table
 from core.project_manager import open_project
@@ -86,5 +89,6 @@ def export_final_workbook(
     if written == 0:
         raise ValueError("No transaction/dimension tables were available to export.")
 
+    _log.info("Export completed: %s (%d tables written)", output_path, written)
     return output_path
 

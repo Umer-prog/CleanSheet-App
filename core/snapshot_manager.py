@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from core.data_loader import get_storage_format, write_table
 from core.project_paths import (
@@ -301,6 +304,7 @@ def create_snapshot(
     except Exception:
         pass   # pruning failure is non-critical
 
+    _log.info("Snapshot created: %s (label='%s', tables=%s)", commit_id, label, tx_names)
     return commit_id
 
 
@@ -513,6 +517,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     settings = _read_settings(project_path)
     settings["current_manifest"] = manifest_id
     _write_settings(project_path, settings)
+    _log.info("Reverted to snapshot: %s", manifest_id)
 
 
 def update_manifest_label(project_path: Path, manifest_id: str, label: str) -> None:

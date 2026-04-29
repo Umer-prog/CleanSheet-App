@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
+from core.app_logger import get_log_file_path
 from core.project_manager import save_project_json, save_settings_json
 from ui.workers import ScreenBase
 
@@ -191,6 +193,41 @@ class ViewSettings(ScreenBase):
         )
         toggle_row.addWidget(self._history_check, 0, Qt.AlignVCenter)
         form_lay.addLayout(toggle_row)
+
+        form_lay.addSpacing(20)
+
+        # Divider
+        div2 = QFrame()
+        div2.setFixedHeight(1)
+        div2.setStyleSheet("background: rgba(255,255,255,0.06); border: none;")
+        form_lay.addWidget(div2)
+        form_lay.addSpacing(20)
+
+        # Log file location row
+        form_lay.addWidget(_field_label("LOG FILE LOCATION"))
+        form_lay.addSpacing(8)
+        log_path = get_log_file_path()
+        log_path_str = str(log_path) if log_path else "Logging not initialised"
+        log_row = QHBoxLayout()
+        log_row.setSpacing(8)
+        log_path_entry = _field_input(value=log_path_str, readonly=True)
+        log_row.addWidget(log_path_entry, 1)
+        open_log_btn = QPushButton("Open Folder")
+        open_log_btn.setFixedHeight(38)
+        open_log_btn.setFixedWidth(100)
+        open_log_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 8px; color: #94a3b8; font-size: 11px; font-weight: 500; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.25); color: #f1f5f9; }"
+        )
+        if log_path:
+            open_log_btn.clicked.connect(lambda: subprocess.Popen(
+                ["explorer", "/select,", str(log_path)]
+            ))
+        else:
+            open_log_btn.setEnabled(False)
+        log_row.addWidget(open_log_btn)
+        form_lay.addLayout(log_row)
 
         body_lay.addWidget(form_wrap)
         scroll.setWidget(body)

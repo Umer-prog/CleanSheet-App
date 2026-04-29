@@ -1,14 +1,22 @@
 import json
+import logging
 import sys
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 import ui.theme as theme
+from core.app_logger import setup_logging
+from core.license_constants import APP_VERSION
 from utils.paths import resource_path, user_data_path
+
+_log = logging.getLogger(__name__)
 
 
 def main() -> None:
     """Entry point: validate license, load branding, launch the app."""
+    setup_logging()
+    _log.info("CleanSheet v%s starting up", APP_VERSION)
+
     theme.load(resource_path("branding.json"))
 
     app = QApplication(sys.argv)
@@ -39,6 +47,7 @@ def main() -> None:
     from ui.app import App
     window = App()
     window.show()
+    _log.info("Main window displayed")
 
     # Non-blocking expiry warning — shown after main window is visible
     days_left = get_days_until_expiry(result)

@@ -1,6 +1,9 @@
 import json
+import logging
 from datetime import date
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 
 def create_project(name: str, company: str, root_path: Path) -> Path:
@@ -60,6 +63,7 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
     except OSError as e:
         raise OSError(f"Failed to write mapping_store.json: {e}") from e
 
+    _log.info("Project created: '%s' at %s", name, project_path)
     return project_path
 
 
@@ -86,6 +90,7 @@ def open_project(project_path: Path) -> dict:
         except (OSError, json.JSONDecodeError) as e:
             raise ValueError(f"Failed to read settings.json: {e}") from e
 
+    _log.info("Project opened: '%s'", project_data.get("project_name", project_path.name))
     return {**project_data, "settings": settings_data, "project_path": str(project_path)}
 
 
