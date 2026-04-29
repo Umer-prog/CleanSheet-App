@@ -1,0 +1,252 @@
+# CleanSheet — Quality Checklist Audit
+**Date:** 2026-04-29  
+**Environment:** Development (no installer, running from source)  
+**Audited against:** `CLEANSHEET_QUALITY_CHECKLIST.md`
+
+> Items marked `C:\ProgramData\...` in the checklist are installer-only targets. This audit scores them **Dev-N/A** where they genuinely don't apply in dev, and flags them as **Shipping blocker** where the underlying feature is missing regardless of path.
+
+---
+
+## Score Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Done — code exists and works correctly |
+| ⚠️ | Partial — feature exists but incomplete or has gaps |
+| ❌ | Missing — not implemented at all |
+| 🔒 | Dev-N/A — installer/shipping path only, not applicable in dev |
+
+---
+
+## 1. Logging — Score: 1 / 8
+
+**Current state:** Two files (`core/machine_id.py` and `core/license_validator.py`) import `logging` and create module loggers. That's it. There is no logging infrastructure configured anywhere in the app. `main.py` has no logging setup call. No handler, no formatter, no file, no rotation.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `logging` module configured at startup with rotating file handler | ❌ | `main.py` has zero logging setup. loggers exist in 2 files but write to `NullHandler` (Python default) |
+| Log file written to `C:\ProgramData\CleanSheet\logs\cleansheet.log` | 🔒 | Installer path — but the underlying capability (write a log file) doesn't exist yet |
+| Rotate at 5 MB, keep 3 files | ❌ | No handler configured at all |
+| Every major user action logged at INFO | ❌ | No logging calls in any UI, project_manager, data_loader, snapshot_manager, etc. |
+| Every exception logged at ERROR with full traceback | ❌ | Only 2 `logger.warning()` calls exist — both in license code |
+| Log includes timestamp, level, module on every line | ❌ | No formatter defined anywhere |
+| App version written to log on every startup | ❌ | `APP_VERSION` constant exists but nothing writes it to a log |
+| Log file path shown to user (About / Help) | ❌ | No About screen exists |
+
+**Priority:** High. This is the single most impactful missing feature. Adding a rotating file handler in `main.py` and a few key log calls takes an afternoon.
+
+---
+
+## 2. Error Handling — Score: 5 / 8
+
+**Current state:** Core modules (`data_loader.py`, `snapshot_manager.py`, `project_manager.py`, etc.) are well-wrapped in try/except and raise typed exceptions with clear messages. The `Worker`/`ProgressWorker` classes catch background exceptions and route them back to the UI via `on_error`. The `msgbox.py` wrapper is used across UI screens. Gaps remain in some specific Excel failure modes and the "offer to open log" path (which needs logging to exist first).
+
+| Item | Status | Notes |
+|------|--------|-------|
+| All file reads (Excel, Parquet, JSON) wrapped in try/except | ✅ | `data_loader.py` wraps every read; raises `FileNotFoundError` or `ValueError` with clear text |
+| All file writes wrapped in try/except | ✅ | `write_table`, `save_as_csv`, `_write_commit_json`, `_write_settings` all have OSError catch |
+| Excel: PermissionError (file open in Excel), corrupted, password-protected, empty | ⚠️ | Empty handled (`ws.max_row` check). Corrupted/password caught by general `Exception`. PermissionError falls through as a generic ValueError — no specific user hint to "close the file in Excel" |
+| Parquet: missing file, schema mismatch, disk full | ⚠️ | Missing file handled. Schema mismatch and disk full both fall through as generic `OSError` / `Exception` without tailored messages |
+| Error messages in plain English — no exception class names visible | ⚠️ | Core messages are clean. However, raw `str(exc)` is passed to the UI's `_set_error()` / `on_error` in most background workers, so pandas/OS exception text can leak to the user |
+| Error dialogs include a suggestion of what to do | ⚠️ | License errors have good suggestions ("contact support@gd365.com"). Most operational errors (file load failures) just show the exception text without actionable guidance |
+| App never freezes permanently on error | ✅ | Background workers always emit `errored` signal, hide the overlay, and return control |
+| Critical errors offer to open log file location | ❌ | No log file exists yet, so this is blocked on Section 1 |
+
+---
+
+## 3. Version Number — Score: 2 / 6
+
+**Current state:** `APP_VERSION = "1.0.0"` lives at the bottom of `core/license_constants.py` — mixed in with licensing constants, not in a dedicated file. The version is not surfaced anywhere in the UI that a user or support agent would see.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Version defined in one place only | ⚠️ | Exists in `core/license_constants.py:43` — correct that it's one place, but semantically wrong location (license constants ≠ app constants) |
+| Version shown in title bar or window title | ❌ | `app.py` sets `setWindowTitle(theme.company_name())` — company name only, no version |
+| Version shown on About screen or Help menu | ❌ | No About screen exists anywhere in the codebase |
+| Version written to log file on every startup | ❌ | Blocked by missing logging infrastructure (Section 1) |
+| Follows semantic versioning (MAJOR.MINOR.PATCH) | ✅ | `"1.0.0"` format is correct |
+| PyInstaller .spec includes FileVersion in exe properties | ❌ | `cleansheet.spec` has no `version=`, `file_version=`, or `version_file=` parameter in the `EXE()` block |
+
+---
+
+## 4. Installer (Inno Setup) — Score: 1 / 11
+
+**Current state:** PyInstaller .spec is written and complete. No Inno Setup work has been started. The .spec also builds in **one-file mode** (no `COLLECT` step), which the checklist says to avoid for startup speed and antivirus reasons.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Inno Setup installed on dev machine | ❌ | No .iss file found; unknown if installed |
+| PyInstaller configured in one-dir mode | ❌ | `cleansheet.spec` uses the single-bundle `EXE()` pattern (one-file). No `COLLECT()` step present |
+| Inno Setup .iss file created and committed | ❌ | Not found anywhere in repository |
+| Installer places app in `C:\Program Files\CleanSheet\` | ❌ | |
+| Installer creates Start Menu shortcut | ❌ | |
+| Installer creates Desktop shortcut (optional) | ❌ | |
+| Installer registers in Add/Remove Programs | ❌ | |
+| Installer includes uninstaller | ❌ | |
+| Installer does NOT delete `C:\ProgramData\CleanSheet\` on uninstall | ❌ | |
+| Final distributable is `CleanSheet_Setup_v1.0.0.exe` | ❌ | |
+| Tested on clean Windows machine | ❌ | |
+
+**Note:** A `dist/CleanSheet.exe` is produced by the spec, so the bare executable exists. The full installer pipeline is the remaining work.
+
+---
+
+## 5. License System — Score: 9 / 10
+
+**Current state:** Excellent. This is the most complete section in the codebase. RSA-2048 machine-locked licensing is fully implemented and runs on every startup before any screen loads.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| RSA key pair generated, private key stored securely | ✅ | `tools/generate_keys.py` exists; `keys/private_key.pem` excluded via `.gitignore` |
+| Public key baked into app at build time | ✅ | Embedded in `core/license_constants.py` as `PUBLIC_KEY_PEM` string |
+| Activation screen shown when no valid .lic found | ✅ | `activation_screen.py` (335 lines), launched from `main.py` before window shows |
+| Machine ID from 2-3 hardware identifiers | ✅ | `machine_id.py`: CPU registry + WMI motherboard serial + Windows GUID → SHA256 → `XXXX-XXXX-XXXX` format |
+| Machine ID displayed with one-click copy | ✅ | Present in activation_screen |
+| License generator script working | ✅ | `tools/generate_license.py` |
+| .lic validation: signature + expiry + machine fingerprint | ✅ | All three checks in `license_validator.py`; each failure returns distinct `LicenseResult` |
+| Validation runs on every startup before any screen | ✅ | Called in `main.py` before `App()` is created |
+| Each failure shows distinct clear message | ✅ | `NO_FILE`, `INVALID_FORMAT`, `INVALID_SIGNATURE`, `EXPIRED`, `WRONG_MACHINE` — all have user-friendly text |
+| License file location documented for support | ⚠️ | `LICENSE_SEARCH_PATHS` is defined in code but there is no user-visible display of where to drop the `.lic` file (activation_screen asks the user to pick a file via dialog — good, but the expected location isn't written anywhere for support docs) |
+
+---
+
+## 6. Background Threading — Score: 6 / 7
+
+**Current state:** Excellent architecture. `Worker` + `ProgressWorker` + `LoadingOverlay` + `ScreenBase` form a complete, well-designed threading system. The threading.Thread + QTimer polling approach is specifically chosen to keep the Qt event loop alive during GIL-bound Python work — and this is documented inline. Used consistently across all views.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Audit every button action for blocking I/O | ✅ | `ScreenBase._run_background()` is the standard pattern; all major operations use it |
+| File loading (Excel import) runs in background | ✅ | `screen1_sources.py` uses `_run_background` for sheet loading |
+| Mapping/processing runs in background | ✅ | Error detection in `view_mapping.py` uses `_run_background_with_progress` |
+| Export runs in background | ✅ | `export_final_workbook` is called via `_run_background_with_progress` |
+| UI shows loading state during background work | ✅ | `LoadingOverlay` with animated dot pulse (`●  ·  ·` → `·  ●  ·` etc.) on all operations |
+| Background errors caught and sent to UI thread | ✅ | `Worker._run()` wraps everything in `try/except`, queues `("err", exc)`, `_poll()` emits `errored` signal on main thread |
+| App cannot be closed mid-operation corrupting data | ⚠️ | Background threads are `daemon=True` (will be killed on close). No close-guard or warning is shown when a background operation is running. A force-quit mid-export could leave a partially written file |
+
+---
+
+## 7. Input Validation — Score: 4 / 9
+
+**Current state:** Some validation is solid (empty sheets, header detection, duplicate table names). Other areas are missing or rely on exceptions bubbling up rather than proactive user-facing validation.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Empty Excel files handled gracefully | ✅ | `get_sheet_as_dataframe` checks `ws.max_row` and returns empty `DataFrame()`; UI should handle gracefully |
+| Excel with no headers (row 1 blank) | ✅ | `_find_header_row()` auto-detects header row by scanning first 20 rows for highest non-empty cell count |
+| Sheets with merged cells handled | ❌ | openpyxl's `read_only=True` mode does not expand merged cells. Merged cells read as a single cell value; adjacent cells in the merge return `None` silently. No detection or user warning |
+| Column names with special characters / whitespace | ✅ | Headers are `.strip()`-ped; blank headers fall back to `Col{i}` |
+| Very large files (100k+ rows): responsiveness + warning | ⚠️ | Parquet reads single column only (fast). CSV streams in `chunksize=5000` (memory safe). But NO user warning is shown for large files and no row-count threshold triggers anything |
+| Dimension tables with duplicate values flagged | ⚠️ | `find_duplicate_table_names()` detects duplicate table names between new imports and existing tables. But duplicate *values within* a single dim column are not detected or flagged |
+| Mapping with mismatched column types | ❌ | All data is stored as strings (dtype=str), so type mismatch is silently absorbed. No warning when mapping numeric transaction column to text dim column |
+| Project names validated (no path-breaking characters) | ⚠️ | `normalize_table_name()` strips illegal characters from *table/sheet* names. But `create_project(name, ...)` uses the raw `name` as the folder name without validation — a name with `/`, `\`, `:` etc. will fail with an `OSError` that surfaces as a raw exception |
+| Text inputs have maximum length limits | ❌ | No `setMaxLength()` calls found on any QLineEdit in project creation, mapping screens, or popups |
+
+---
+
+## 8. Data Integrity — Score: 3 / 6
+
+**Current state:** The commit/snapshot system is the strongest integrity feature. The weakest area is the absence of atomic writes and post-write validation.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Original uploaded files never modified | ✅ | Excel files are only read via openpyxl in read-only mode. Data is written to `metadata/data/` as a copy — the source `.xlsx` is never touched |
+| Write operations atomic (write temp, then rename) | ❌ | `write_table()` writes directly to the destination path. If the process dies mid-write, the destination file is partially written with no recovery path |
+| Commit system prevents partial saves | ✅ | `create_snapshot()` writes the full commit folder before updating `settings.json`. A failure during snapshot leaves the live data intact and the bad commit folder stranded (does not corrupt the previous state) |
+| Crash mid-write: previous valid state still recoverable | ⚠️ | History commits preserve prior state. However the live `metadata/data/transactions/` file is overwritten directly (not atomically). A crash mid-overwrite of the live file leaves a corrupt current file; the previous state is in history but requires a manual revert |
+| Export produces identical results on same data | ✅ | `export_final_workbook()` reads from static files; no randomness or ordering variation introduced |
+| Parquet files validated after write (read-back row check) | ❌ | `write_table()` calls `df.to_parquet()` and returns — no read-back validation. A silent corruption (disk error, filesystem issue) would not be caught until the next read |
+
+---
+
+## 9. UX Consistency — Score: 4 / 10
+
+**Current state:** Loading states and threading feedback are excellent. Navigation and screen structure are clean. Several polish items are missing: no keyboard shortcuts, no window position memory, no About screen, some destructive actions lack confirmations.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Every screen has a clear title indicating location | ⚠️ | Screens have header areas but consistency varies. Screen 3's mapping view titles are dynamic (mapping name). Screen 0 has a hero banner. No standardised "breadcrumb" or screen title component |
+| Every destructive action has a confirmation dialog | ⚠️ | Revert: ✅ `popup_revert_confirm.py`. Delete transaction row: needs checking. Bulk delete in `popup_replace.py`: present. Delete table from T-sources: needs checking |
+| Confirmation dialogs clearly explain what will happen | ✅ | `popup_revert_confirm.py` shows files to be restored; bulk-replace popup shows before/after |
+| Back/cancel available everywhere | ✅ | Cancel buttons present in all popups and dialogs |
+| Success actions give clear feedback | ⚠️ | Export shows a success dialog. Replace/add actions refresh the error count but don't explicitly confirm "X rows replaced". Some operations are silent on success |
+| All loading states visible | ✅ | `LoadingOverlay` appears on every background operation via `ScreenBase` |
+| Keyboard shortcuts (Ctrl+S, Escape) | ❌ | No `QShortcut` or `keyPressEvent` handlers found anywhere in the codebase |
+| Window remembers last position/size | ❌ | Fixed-size window (`setFixedSize(1600, 920 + _TITLEBAR_H)`), no position persistence. Window always opens at OS default position |
+| Buttons disabled when action invalid | ⚠️ | Some buttons disable correctly (mapping flow validation). Not universally enforced — depends on screen |
+| Tooltips on icon-only buttons | ⚠️ | Not verified across all icon-only controls. Navbar icons in Screen 3 likely lack tooltips |
+
+---
+
+## 10. Configuration & Constants — Score: 4 / 6
+
+**Current state:** Paths are consistently built with `pathlib.Path` throughout. No hardcoded dev-machine paths found. The version/name constants are slightly scattered but not dangerously so.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| App name, version, company defined in one constants file | ⚠️ | `APP_VERSION = "1.0.0"` is in `core/license_constants.py` (wrong home). Company name is in `branding.json`. App name "CleanSheet" is hardcoded as a string literal in `license_validator.py` failure messages. No single `constants.py` or `__version__.py` file |
+| All file paths constructed from a base path | ✅ | `pathlib.Path` used consistently throughout. `project_paths.py` provides canonical base-path helpers (`active_transactions_dir`, `active_dim_dir`, etc.) |
+| Data directory resolved at runtime, not hard-coded | ✅ | `user_data_path()` in `utils/paths.py` resolves correctly for both dev and frozen (PyInstaller) mode. Project paths are always passed as parameters, never embedded |
+| No credentials, keys, or secrets in source code | ✅ | Public key is in source intentionally (by design). Private key excluded by `.gitignore`. No passwords, API keys, or secrets found |
+| No absolute paths to dev machine in code | ✅ | No hardcoded `C:\Users\...` or `D:\...` dev paths found |
+| Settings that may change live in config, not code | ⚠️ | Dark mode: ✅ in `app_config.json`. Colors/branding: ✅ in `branding.json`. Default export format ("parquet") is hardcoded in `project_manager.py:create_project()` — not in config |
+
+---
+
+## 11. Code Structure — Score: 3 / 7
+
+**Current state:** Architectural separation (core vs ui vs utils) is clean and well-enforced. The problem is file and function size — several UI files are enormous, making navigation and maintenance difficult.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| UI files contain only display logic | ✅ | `view_mapping.py` has some utility functions at module level (`replace_transaction_values_bulk`, etc.) which are technically logic — but they're there for popup reuse and are acceptably close to the boundary |
+| Business logic in separate modules from UI | ✅ | All core operations in `core/`. UI calls managers. No pandas operations in UI files except for display prep |
+| Data access in separate layer from business logic | ✅ | `data_loader.py`, `dim_manager.py`, `snapshot_manager.py` form the data layer. Business logic in `error_detector.py`, `mapping_manager.py` calls into them |
+| No function longer than ~50 lines | ❌ | Many functions far exceed 50 lines. `detect_errors()` is ~90 lines. `revert_to_manifest()` is ~110 lines. UI methods regularly run 60-100+ lines |
+| No file longer than ~500 lines | ❌ | `view_mapping.py`: 1703 lines. `screen1_sources.py`: 1089 lines. `screen2_mappings.py`: 1211 lines. `screen3_main.py`: 789 lines. `screen0_launcher.py`: 893 lines. `workers.py`: 396 lines. `snapshot_manager.py`: 527 lines. Most files are over the threshold |
+| No copy-pasted blocks | ⚠️ | The `col_strftime` detection loop appears nearly verbatim in both `get_sheet_as_dataframe()` and `get_sheets_as_dataframes()` in `data_loader.py`. Chain-handling logic has some duplication |
+| Imports organised (stdlib → third-party → local) | ✅ | Generally well-organised across all files |
+
+---
+
+## 12. Security — Score: 4 / 6
+
+**Current state:** Strong posture for an offline desktop app. Main gap is unpinned dependency versions.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Private RSA key never committed to git | ✅ | `keys/private_key.pem` is in `.gitignore` |
+| `.gitignore` includes private key file | ✅ | Lines: `keys/private_key.pem` and `keys/private_key.pem.bak` |
+| No client data transmitted anywhere | ✅ | No `requests`, `httpx`, `urllib`, or socket calls found. Fully offline |
+| ProgramData directory has correct permissions | 🔒 | Installer-only concern — not applicable in dev |
+| No `eval()` or `exec()` on user-provided data | ✅ | No `eval()` or `exec()` calls found in the codebase |
+| Dependency versions pinned in requirements.txt | ❌ | `requirements.txt` uses `>=` minimum bounds only (e.g. `pandas>=2.0.0`). A breaking release of any dependency would be silently adopted on next install. Should use `==` (exact pin) or `~=` (compatible release) |
+
+**Note:** `requirements.txt` still lists `customtkinter>=5.2.0` and `rapidfuzz>=3.0.0` — the app has migrated to PySide6 and rapidfuzz is not yet used. These are stale entries. Also missing from requirements: `PySide6`, `pyarrow`, `xlsxwriter`, `fastparquet`.
+
+---
+
+## Overall Summary
+
+| # | Area | Score | Shipping Blocker? | Priority |
+|---|------|-------|-------------------|----------|
+| 1 | Logging | 1/8 | **Yes** | Start here |
+| 2 | Error Handling | 5/8 | **Partial** | Fix PermissionError hint, pin log path |
+| 3 | Version Number | 2/6 | **Yes** | Low effort |
+| 4 | Installer | 1/11 | **Yes** | Large effort, do last |
+| 5 | License System | 9/10 | No — excellent | Minor doc tweak |
+| 6 | Background Threading | 6/7 | No — excellent | Add close-guard |
+| 7 | Input Validation | 4/9 | **Partial** | Project name validation urgent |
+| 8 | Data Integrity | 3/6 | **Partial** | Atomic writes medium effort |
+| 9 | UX Consistency | 4/10 | No — recommended | Keyboard shortcuts low effort |
+| 10 | Configuration | 4/6 | No — recommended | Move version to constants.py |
+| 11 | Code Structure | 3/7 | No — ongoing | Background work |
+| 12 | Security | 4/6 | **Yes** | Pin requirements.txt today |
+
+### Top 5 actions before first client delivery
+
+1. **Add logging infrastructure** — 15 lines in `main.py`: configure `RotatingFileHandler`, format, write version on startup. Everything else in Section 1 follows from this.
+2. **Pin `requirements.txt`** — Run `pip freeze` and replace `>=` bounds with `==` exact pins. Also remove `customtkinter`/`rapidfuzz` and add `PySide6`, `pyarrow`, `xlsxwriter`.
+3. **Add version to title bar and create an About dialog** — `APP_VERSION` already exists in `license_constants.py`; move it to a `constants.py`, import it in `app.py` for the window title.
+4. **Atomic writes** — In `write_table()`, write to `dest_path.with_suffix('.tmp')` then `os.replace()` to destination. Five lines of change, major integrity improvement.
+5. **Validate project name input** — In Screen 0's new-project dialog, add a regex check on the project name before calling `create_project()`. Prevents an ugly OSError from reaching the user.
