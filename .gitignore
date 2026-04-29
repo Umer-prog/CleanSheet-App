@@ -54,3 +54,10 @@ mappings/
 
 # Temp icon generated at runtime
 _veriflow_icon.ico
+
+# License keys — never commit the private key
+keys/private_key.pem
+keys/private_key.pem.bak
+
+# Generated license files (client-specific)
+license/*.lic
