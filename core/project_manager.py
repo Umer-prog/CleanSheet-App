@@ -6,7 +6,7 @@ from pathlib import Path
 _log = logging.getLogger(__name__)
 
 
-def create_project(name: str, company: str, root_path: Path) -> Path:
+def create_project(name: str, company: str, root_path: Path, storage_format: str = "parquet") -> Path:
     """Create a new project folder structure on disk and return the project path."""
     project_path = Path(root_path) / name
 
@@ -33,7 +33,7 @@ def create_project(name: str, company: str, root_path: Path) -> Path:
         "project_name": name,
         "created_at": str(date.today()),
         "company": company,
-        "storage_format": "parquet",
+        "storage_format": storage_format,
         "transaction_tables": [],
         "dim_tables": [],
     }

@@ -874,8 +874,10 @@ class NewProjectScreen(ScreenBase):
             return
         self._error_lbl.setText("")
 
+        storage_format = self.app.get_default_storage_format()
+
         def worker():
-            project_path = create_project(name, company, Path(folder))
+            project_path = create_project(name, company, Path(folder), storage_format)
             return open_project(project_path)
 
         def on_success(state):

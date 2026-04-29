@@ -41,7 +41,7 @@ class ActivationScreen(QDialog):
 
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedSize(540, 560)
+        self.setFixedSize(540, 600)
         self.setStyleSheet("QDialog { background: #0f1117; }")
 
         root = QVBoxLayout(self)
@@ -130,6 +130,7 @@ class ActivationScreen(QDialog):
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
 
+        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -142,6 +143,7 @@ class ActivationScreen(QDialog):
         browse = _primary_button("Browse for New License File")
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
+        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -167,6 +169,7 @@ class ActivationScreen(QDialog):
         browse = _primary_button("Browse for License File")
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
+        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -332,4 +335,17 @@ def _error_label() -> QLabel:
     lbl.setWordWrap(True)
     lbl.setStyleSheet("color: #f87171; font-size: 12px; background: transparent;")
     lbl.setVisible(False)
+    return lbl
+
+
+def _license_hint_label() -> QLabel:
+    """Shows expected .lic drop path(s) so support can guide users without ambiguity."""
+    lines = ["Expected location:"] + [
+        str(p / LICENSE_FILE_NAME) for p in LICENSE_SEARCH_PATHS
+    ]
+    lbl = QLabel("\n".join(lines))
+    lbl.setWordWrap(True)
+    lbl.setStyleSheet(
+        "color: #334155; font-size: 11px; font-family: Consolas; background: transparent;"
+    )
     return lbl

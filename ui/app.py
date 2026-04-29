@@ -242,3 +242,7 @@ class App(QMainWindow):
         config = self._read_app_config()
         config["projects"] = [p for p in config.get("projects", []) if p != project_path]
         self._write_app_config(config)
+
+    def get_default_storage_format(self) -> str:
+        """Return the default storage format for new projects (from app_config.json)."""
+        return self._read_app_config().get("default_storage_format", "parquet")

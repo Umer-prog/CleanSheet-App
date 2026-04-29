@@ -96,7 +96,7 @@
 
 ---
 
-## 5. License System — Score: 9 / 10
+## 5. License System — Score: 10 / 10 ✅
 
 **Current state:** Excellent. This is the most complete section in the codebase. RSA-2048 machine-locked licensing is fully implemented and runs on every startup before any screen loads.
 
@@ -104,14 +104,14 @@
 |------|--------|-------|
 | RSA key pair generated, private key stored securely | ✅ | `tools/generate_keys.py` exists; `keys/private_key.pem` excluded via `.gitignore` |
 | Public key baked into app at build time | ✅ | Embedded in `core/license_constants.py` as `PUBLIC_KEY_PEM` string |
-| Activation screen shown when no valid .lic found | ✅ | `activation_screen.py` (335 lines), launched from `main.py` before window shows |
+| Activation screen shown when no valid .lic found | ✅ | `activation_screen.py`, launched from `main.py` before window shows |
 | Machine ID from 2-3 hardware identifiers | ✅ | `machine_id.py`: CPU registry + WMI motherboard serial + Windows GUID → SHA256 → `XXXX-XXXX-XXXX` format |
 | Machine ID displayed with one-click copy | ✅ | Present in activation_screen |
 | License generator script working | ✅ | `tools/generate_license.py` |
 | .lic validation: signature + expiry + machine fingerprint | ✅ | All three checks in `license_validator.py`; each failure returns distinct `LicenseResult` |
 | Validation runs on every startup before any screen | ✅ | Called in `main.py` before `App()` is created |
 | Each failure shows distinct clear message | ✅ | `NO_FILE`, `INVALID_FORMAT`, `INVALID_SIGNATURE`, `EXPIRED`, `WRONG_MACHINE` — all have user-friendly text |
-| License file location documented for support | ⚠️ | `LICENSE_SEARCH_PATHS` is defined in code but there is no user-visible display of where to drop the `.lic` file (activation_screen asks the user to pick a file via dialog — good, but the expected location isn't written anywhere for support docs) |
+| License file location documented for support | ✅ | `_license_hint_label()` added to `activation_screen.py` — shown below the Browse button in NO_FILE, EXPIRED, and INVALID states. Renders all `LICENSE_SEARCH_PATHS` entries (e.g. `…/license/cleansheet.lic`) so support staff can send exact instructions without consulting source code |
 
 ---
 
@@ -183,9 +183,9 @@
 
 ---
 
-## 10. Configuration & Constants — Score: 5 / 6
+## 10. Configuration & Constants — Score: 6 / 6 ✅
 
-**Current state:** Paths are consistently built with `pathlib.Path` throughout. No hardcoded dev-machine paths found. `core/constants.py` now provides a single source of truth for app name, version, and company. One remaining gap: default export format hard-coded in `project_manager.py`.
+**Current state:** Paths are consistently built with `pathlib.Path` throughout. No hardcoded dev-machine paths found. `core/constants.py` now provides a single source of truth for app name, version, and company. Default storage format moved to config.
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -194,7 +194,7 @@
 | Data directory resolved at runtime, not hard-coded | ✅ | `user_data_path()` in `utils/paths.py` resolves correctly for both dev and frozen (PyInstaller) mode. Project paths are always passed as parameters, never embedded |
 | No credentials, keys, or secrets in source code | ✅ | Public key is in source intentionally (by design). Private key excluded by `.gitignore`. No passwords, API keys, or secrets found |
 | No absolute paths to dev machine in code | ✅ | No hardcoded `C:\Users\...` or `D:\...` dev paths found |
-| Settings that may change live in config, not code | ⚠️ | Dark mode: ✅ in `app_config.json`. Colors/branding: ✅ in `branding.json`. Default export format ("parquet") is hardcoded in `project_manager.py:create_project()` — not in config |
+| Settings that may change live in config, not code | ✅ | Dark mode: ✅ `app_config.json`. Colors/branding: ✅ `branding.json`. Default storage format: ✅ `"default_storage_format": "parquet"` added to `app_config.json`. `App.get_default_storage_format()` reads it with `"parquet"` fallback. `create_project()` now accepts a `storage_format` parameter; `screen0_launcher.py` reads from config and passes it through |
 
 ---
 
@@ -239,12 +239,12 @@
 | 2 | Error Handling | 8/8 ✅ | No — complete | Done |
 | 3 | Version Number | 6/6 ✅ | No — complete | Done |
 | 4 | Installer | 1/11 | **Yes** | Large effort, do last |
-| 5 | License System | 9/10 | No — excellent | Minor doc tweak |
+| 5 | License System | 10/10 ✅ | No — complete | Done |
 | 6 | Background Threading | 7/7 ✅ | No — complete | Done |
 | 7 | Input Validation | 4/9 | **Partial** | Project name validation urgent |
 | 8 | Data Integrity | 3/6 | **Partial** | Atomic writes medium effort |
 | 9 | UX Consistency | 4/10 | No — recommended | Keyboard shortcuts low effort |
-| 10 | Configuration | 5/6 | No — recommended | Pin requirements.txt |
+| 10 | Configuration | 6/6 ✅ | No — complete | Done |
 | 11 | Code Structure | 3/7 | No — ongoing | Background work |
 | 12 | Security | 4/6 | **Yes** | Pin requirements.txt today |
 
