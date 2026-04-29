@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -18,7 +19,8 @@ def setup_logging() -> Path:
     global _LOG_FILE
 
     if getattr(sys, "frozen", False):
-        log_dir = Path("C:/ProgramData/CleanSheet/logs")
+        program_data = os.environ.get("PROGRAMDATA", "C:/ProgramData")
+        log_dir = Path(program_data) / "CleanSheet" / "logs"
     else:
         log_dir = Path(__file__).parent.parent / "logs"
 
