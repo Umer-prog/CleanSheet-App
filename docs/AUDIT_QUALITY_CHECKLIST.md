@@ -18,22 +18,23 @@
 
 ---
 
-## 1. Logging — Score: 1 / 8
+## 1. Logging — Score: 8 / 8 ✅
 
-**Current state:** Two files (`core/machine_id.py` and `core/license_validator.py`) import `logging` and create module loggers. That's it. There is no logging infrastructure configured anywhere in the app. `main.py` has no logging setup call. No handler, no formatter, no file, no rotation.
+**Current state:** Full logging infrastructure implemented. `core/app_logger.py` is the central setup module. Called as the very first line of `main.py` before any other imports. Rotating file handler active, formatter applied, version written on every startup. All major user actions and all background exceptions are logged. Log file path is surfaced in the Settings view with an "Open Folder" button.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `logging` module configured at startup with rotating file handler | ❌ | `main.py` has zero logging setup. loggers exist in 2 files but write to `NullHandler` (Python default) |
-| Log file written to `C:\ProgramData\CleanSheet\logs\cleansheet.log` | 🔒 | Installer path — but the underlying capability (write a log file) doesn't exist yet |
-| Rotate at 5 MB, keep 3 files | ❌ | No handler configured at all |
-| Every major user action logged at INFO | ❌ | No logging calls in any UI, project_manager, data_loader, snapshot_manager, etc. |
-| Every exception logged at ERROR with full traceback | ❌ | Only 2 `logger.warning()` calls exist — both in license code |
-| Log includes timestamp, level, module on every line | ❌ | No formatter defined anywhere |
-| App version written to log on every startup | ❌ | `APP_VERSION` constant exists but nothing writes it to a log |
-| Log file path shown to user (About / Help) | ❌ | No About screen exists |
+| `logging` module configured at startup with rotating file handler | ✅ | `core/app_logger.py` → `setup_logging()` called first in `main.py`. `RotatingFileHandler` attached to the root logger |
+| Log file written to `C:\ProgramData\CleanSheet\logs\cleansheet.log` | ✅ | Frozen: resolves via `%PROGRAMDATA%` env var (not hardcoded `C:`). Dev: `<project_root>/logs/cleansheet.log` |
+| Rotate at 5 MB, keep 3 files | ✅ | `maxBytes=5*1024*1024`, `backupCount=3` |
+| Every major user action logged at INFO | ✅ | Project created/opened (`project_manager`), file loaded (`data_loader`), mapping saved (`mapping_manager`), snapshot created/reverted (`snapshot_manager`), export completed (`final_export_manager`) |
+| Every exception logged at ERROR with full traceback | ✅ | Both `Worker._run` and `ProgressWorker._run` in `workers.py` log `exc_info=True`. `data_loader.load_excel_sheets` logs errors before re-raising |
+| Log includes timestamp, level, module on every line | ✅ | Format: `2026-04-29 13:22:26  INFO      core.project_manager — message` |
+| App version written to log on every startup | ✅ | `main.py` logs `CleanSheet v1.0.0 starting up` immediately after `setup_logging()` |
+| Log file path shown to user (About / Help) | ✅ | Settings view (`view_settings.py`) shows path in a read-only field with an "Open Folder" button that opens Explorer to the file |
 
-**Priority:** High. This is the single most impactful missing feature. Adding a rotating file handler in `main.py` and a few key log calls takes an afternoon.
+**Fallback:** If `ProgramData` is not writable, logging silently falls back to `%TEMP%\CleanSheet\logs\` — the app never crashes due to a logging failure.  
+**Inno Setup note:** Add `C:\ProgramData\CleanSheet\logs` to the `[Dirs]` section with `Permissions: users-modify` so the directory exists and is writable from first launch.
 
 ---
 
@@ -230,7 +231,7 @@
 
 | # | Area | Score | Shipping Blocker? | Priority |
 |---|------|-------|-------------------|----------|
-| 1 | Logging | 1/8 | **Yes** | Start here |
+| 1 | Logging | 8/8 ✅ | No — complete | Done |
 | 2 | Error Handling | 5/8 | **Partial** | Fix PermissionError hint, pin log path |
 | 3 | Version Number | 2/6 | **Yes** | Low effort |
 | 4 | Installer | 1/11 | **Yes** | Large effort, do last |
@@ -245,7 +246,7 @@
 
 ### Top 5 actions before first client delivery
 
-1. **Add logging infrastructure** — 15 lines in `main.py`: configure `RotatingFileHandler`, format, write version on startup. Everything else in Section 1 follows from this.
+1. ~~**Add logging infrastructure**~~ ✅ Done — `core/app_logger.py`, full rotating file handler, version on startup, user actions logged, log path in Settings view.
 2. **Pin `requirements.txt`** — Run `pip freeze` and replace `>=` bounds with `==` exact pins. Also remove `customtkinter`/`rapidfuzz` and add `PySide6`, `pyarrow`, `xlsxwriter`.
 3. **Add version to title bar and create an About dialog** — `APP_VERSION` already exists in `license_constants.py`; move it to a `constants.py`, import it in `app.py` for the window title.
 4. **Atomic writes** — In `write_table()`, write to `dest_path.with_suffix('.tmp')` then `os.replace()` to destination. Five lines of change, major integrity improvement.
