@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
 from core.mapping_manager import get_mappings
-from core.project_manager import create_project, open_project
+from core.project_manager import create_project, open_project, validate_project_name
 from ui.workers import LoadingOverlay, ScreenBase, Worker, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 340
@@ -772,10 +772,12 @@ class NewProjectScreen(ScreenBase):
 
         name_wrap, self._name_entry = _field("Project Name")
         self._name_entry.setPlaceholderText("e.g. Sales Module")
+        self._name_entry.setMaxLength(100)
         b_lay.addWidget(name_wrap)
 
         company_wrap, self._company_entry = _field("Company Name")
         self._company_entry.setPlaceholderText("e.g. Acme Corp")
+        self._company_entry.setMaxLength(100)
         b_lay.addWidget(company_wrap)
 
         # Save location row
@@ -860,8 +862,9 @@ class NewProjectScreen(ScreenBase):
         company = self._company_entry.text().strip()
         folder = self._folder_entry.text().strip()
 
-        if not name:
-            self._error_lbl.setText("Project name is required.")
+        name_error = validate_project_name(name)
+        if name_error:
+            self._error_lbl.setText(name_error)
             return
         if not company:
             self._error_lbl.setText("Company name is required.")

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 import ui.theme as theme
 import ui.popups.msgbox as msgbox
-from core.data_loader import get_sheets_as_dataframes, load_excel_sheets, save_as_csv
+from core.data_loader import detect_merged_cells, get_sheets_as_dataframes, load_excel_sheets, save_as_csv
 from core.project_manager import open_project, save_project_json
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -958,6 +958,7 @@ class Screen1Sources(ScreenBase):
             return
 
         self._confirm_btn.setEnabled(False)
+        self._sheet_warnings: list[str] = []
 
         def worker(report_progress):
             self._persist_sources(report_progress)
@@ -976,6 +977,12 @@ class Screen1Sources(ScreenBase):
             self._sources.clear()
             self._render_sources()
             self._set_error("")
+            if self._sheet_warnings:
+                msgbox.warning(
+                    self,
+                    "Data Import Warnings",
+                    "\n\n".join(self._sheet_warnings),
+                )
             try:
                 from ui.screen2_mappings import Screen2Mappings
                 self.app.show_screen(Screen2Mappings, project=updated_state)
@@ -1042,6 +1049,23 @@ class Screen1Sources(ScreenBase):
                     table_name = normalize_table_name(sheet["sheet_name"])
                     category = sheet["category"]
                     header_row = sheet.get("header_row")
+
+                    # Merged cell advisory
+                    if detect_merged_cells(file_path, sheet["sheet_name"]):
+                        self._sheet_warnings.append(
+                            f"'{sheet['sheet_name']}' contains merged cells. "
+                            "Merged cells are read as a single value — adjacent cells in "
+                            "the merged region will appear empty. "
+                            "Un-merge the cells in Excel if the data looks incorrect."
+                        )
+
+                    # Large file advisory
+                    if len(df) > 100_000:
+                        self._sheet_warnings.append(
+                            f"'{sheet['sheet_name']}' contains {len(df):,} rows. "
+                            "Large files may slow down error detection and export. "
+                            "Consider splitting the file into smaller batches if performance is an issue."
+                        )
 
                     if category == "Transaction":
                         save_as_csv(

@@ -229,6 +229,26 @@ def _find_header_row(ws) -> int:
     return 1
 
 
+def detect_merged_cells(file_path: Path, sheet_name: str) -> bool:
+    """Return True if *sheet_name* contains any merged cell ranges.
+
+    openpyxl silently reads the top-left value of a merged region and returns
+    None for all other cells in the merge — no error, no warning.  Callers use
+    this to decide whether to show a user-facing advisory.
+    """
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(str(Path(file_path)), data_only=True)
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            return False
+        has_merged = bool(wb[sheet_name].merged_cells.ranges)
+        wb.close()
+        return has_merged
+    except Exception:
+        return False
+
+
 def detect_header_row(file_path: Path, sheet_name: str) -> int:
     """Return the 1-based index of the header row for *sheet_name* in *file_path*."""
     import openpyxl

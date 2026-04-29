@@ -56,6 +56,15 @@ def critical_with_log(parent, title: str, text: str) -> int:
     return box.exec()
 
 
+def warning(parent, title: str, text: str) -> int:
+    box = _apply(QMessageBox(parent))
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle(title)
+    box.setText(text)
+    box.setStandardButtons(QMessageBox.StandardButton.Ok)
+    return box.exec()
+
+
 def information(parent, title: str, text: str,
                 buttons=QMessageBox.StandardButton.Ok, default=None) -> int:
     box = _apply(QMessageBox(parent))

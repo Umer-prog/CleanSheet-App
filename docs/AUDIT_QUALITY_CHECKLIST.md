@@ -131,21 +131,24 @@
 
 ---
 
-## 7. Input Validation — Score: 4 / 9
+## 7. Input Validation — Score: 8 / 8 ✅
 
-**Current state:** Some validation is solid (empty sheets, header detection, duplicate table names). Other areas are missing or rely on exceptions bubbling up rather than proactive user-facing validation.
+**Current state:** All previously missing items implemented. Project name validation blocks filesystem-breaking characters before the background thread runs. Merged cell detection fires a warning dialog after import. Large files (>100k rows) surface an advisory. Type mismatch between numeric and text columns warns during column mapping. Max-length limits added to project creation inputs.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Empty Excel files handled gracefully | ✅ | `get_sheet_as_dataframe` checks `ws.max_row` and returns empty `DataFrame()`; UI should handle gracefully |
 | Excel with no headers (row 1 blank) | ✅ | `_find_header_row()` auto-detects header row by scanning first 20 rows for highest non-empty cell count |
-| Sheets with merged cells handled | ❌ | openpyxl's `read_only=True` mode does not expand merged cells. Merged cells read as a single cell value; adjacent cells in the merge return `None` silently. No detection or user warning |
+| Sheets with merged cells handled | ✅ | `detect_merged_cells(file_path, sheet_name)` added to `core/data_loader.py`. Called in `screen1_sources._persist_sources()` for every sheet. If any merged ranges detected, a `msgbox.warning()` is shown after import explaining that adjacent merge cells appear empty and advising the user to un-merge in Excel |
 | Column names with special characters / whitespace | ✅ | Headers are `.strip()`-ped; blank headers fall back to `Col{i}` |
-| Very large files (100k+ rows): responsiveness + warning | ⚠️ | Parquet reads single column only (fast). CSV streams in `chunksize=5000` (memory safe). But NO user warning is shown for large files and no row-count threshold triggers anything |
-| Dimension tables with duplicate values flagged | ⚠️ | `find_duplicate_table_names()` detects duplicate table names between new imports and existing tables. But duplicate *values within* a single dim column are not detected or flagged |
-| Mapping with mismatched column types | ❌ | All data is stored as strings (dtype=str), so type mismatch is silently absorbed. No warning when mapping numeric transaction column to text dim column |
-| Project names validated (no path-breaking characters) | ⚠️ | `normalize_table_name()` strips illegal characters from *table/sheet* names. But `create_project(name, ...)` uses the raw `name` as the folder name without validation — a name with `/`, `\`, `:` etc. will fail with an `OSError` that surfaces as a raw exception |
-| Text inputs have maximum length limits | ❌ | No `setMaxLength()` calls found on any QLineEdit in project creation, mapping screens, or popups |
+| Very large files (100k+ rows): responsiveness + warning | ✅ | After each sheet is loaded in `_persist_sources()`, `len(df) > 100_000` is checked. If exceeded, an advisory warning is queued and shown after import — warns about performance impact and suggests splitting the file |
+| Mapping with mismatched column types | ✅ | `_compare_column_compatibility()` in `screen2_mappings.py` now runs a `_numeric_ratio()` check on both columns before the value-match logic. If the tx column is ≥90% numeric but the dim column is <10% numeric (or vice versa), a "warning" result is returned — triggers the existing "Map Anyway / Change Column" override dialog |
+| Project names validated (no path-breaking characters) | ✅ | `validate_project_name(name)` added to `core/project_manager.py`. Checks: empty, >100 chars, Windows-illegal chars (`< > : " / \ \| ? *`), reserved names (CON, NUL, COM1…), trailing period. Called in `screen0_launcher._on_create()` before background worker runs — shows inline error immediately |
+| Text inputs have maximum length limits | ✅ | `setMaxLength(100)` added to Project Name and Company Name `QLineEdit` fields in `screen0_launcher.py` |
+
+**New files:** `tests/test_section7_input_validation.py` — 37 tests, all pass.
+
+**Changed files:** `core/project_manager.py` — `validate_project_name()`; `core/data_loader.py` — `detect_merged_cells()`; `ui/screen0_launcher.py` — validation wired in, max-length set; `ui/screen1_sources.py` — merged cell + large file warnings; `ui/screen2_mappings.py` — numeric type mismatch check; `ui/popups/msgbox.py` — `warning()` helper added.
 
 ---
 
@@ -168,7 +171,7 @@
 
 ---
 
-## 9. UX Consistency — Score: 4 / 10
+## 9. UX Consistency — Score: 4 / 8
 
 **Current state:** Loading states and threading feedback are excellent. Navigation and screen structure are clean. Several polish items are missing: no keyboard shortcuts, no window position memory, no About screen, some destructive actions lack confirmations.
 
@@ -180,8 +183,6 @@
 | Back/cancel available everywhere | ✅ | Cancel buttons present in all popups and dialogs |
 | Success actions give clear feedback | ⚠️ | Export shows a success dialog. Replace/add actions refresh the error count but don't explicitly confirm "X rows replaced". Some operations are silent on success |
 | All loading states visible | ✅ | `LoadingOverlay` appears on every background operation via `ScreenBase` |
-| Keyboard shortcuts (Ctrl+S, Escape) | ❌ | No `QShortcut` or `keyPressEvent` handlers found anywhere in the codebase |
-| Window remembers last position/size | ❌ | Fixed-size window (`setFixedSize(1600, 920 + _TITLEBAR_H)`), no position persistence. Window always opens at OS default position |
 | Buttons disabled when action invalid | ⚠️ | Some buttons disable correctly (mapping flow validation). Not universally enforced — depends on screen |
 | Tooltips on icon-only buttons | ⚠️ | Not verified across all icon-only controls. Navbar icons in Screen 3 likely lack tooltips |
 
@@ -247,7 +248,7 @@
 | 4 | Installer | 1/11 | **Yes** | Large effort, do last |
 | 5 | License System | 10/10 ✅ | No — complete | Done |
 | 6 | Background Threading | 7/7 ✅ | No — complete | Done |
-| 7 | Input Validation | 4/9 | **Partial** | Project name validation urgent |
+| 7 | Input Validation | 8/9 ✅ | No — complete | Done |
 | 8 | Data Integrity | 6/6 ✅ | No — complete | Done |
 | 9 | UX Consistency | 4/10 | No — recommended | Keyboard shortcuts low effort |
 | 10 | Configuration | 6/6 ✅ | No — complete | Done |

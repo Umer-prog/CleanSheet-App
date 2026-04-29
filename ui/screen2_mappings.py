@@ -906,6 +906,42 @@ class Screen2Mappings(ScreenBase):
         if not dim_vals:
             return ("error", f"Dimension column '{dim_col}' is empty — cannot use an empty reference column.")
 
+        # ── Type mismatch check: numeric tx column vs text dim column ─────────
+        def _numeric_ratio(vals: list[str]) -> float:
+            if not vals:
+                return 0.0
+            sample = vals[:200]
+            count = 0
+            for v in sample:
+                try:
+                    float(v.replace(",", "").replace(" ", ""))
+                    count += 1
+                except ValueError:
+                    pass
+            return count / len(sample)
+
+        tx_numeric_ratio  = _numeric_ratio(tx_vals)
+        dim_numeric_ratio = _numeric_ratio(dim_vals)
+
+        if tx_numeric_ratio >= 0.9 and dim_numeric_ratio < 0.1:
+            return (
+                "warning",
+                f"'{tx_col}' appears to contain numeric values "
+                f"({int(tx_numeric_ratio * 100)}% of sampled rows) "
+                f"but '{dim_col}' is a text column.\n\n"
+                "Mapping a numeric column to a text reference is unlikely to find "
+                "any matches. You can proceed anyway or choose a different column.",
+            )
+
+        if dim_numeric_ratio >= 0.9 and tx_numeric_ratio < 0.1:
+            return (
+                "warning",
+                f"'{dim_col}' is a numeric dimension column "
+                f"but '{tx_col}' contains text values.\n\n"
+                "Mapping a text column to a numeric reference is unlikely to find "
+                "any matches. You can proceed anyway or choose a different column.",
+            )
+
         dim_lower = {v.lower() for v in dim_vals}
         tx_sample  = tx_vals[:100]
 

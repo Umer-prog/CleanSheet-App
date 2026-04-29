@@ -1,9 +1,33 @@
 import json
 import logging
+import re
 from datetime import date
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
+
+_ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+}
+
+
+def validate_project_name(name: str) -> str | None:
+    """Return a user-facing error message if *name* is not a valid folder name, else None."""
+    name = name.strip()
+    if not name:
+        return "Project name is required."
+    if len(name) > 100:
+        return "Project name must be 100 characters or fewer."
+    if _ILLEGAL_CHARS.search(name):
+        return 'Project name cannot contain:  < > : " / \\ | ? *'
+    if name.upper() in _RESERVED_NAMES:
+        return f"'{name}' is a reserved Windows name. Please choose a different name."
+    if name[-1] in (".", " "):
+        return "Project name cannot end with a period or space."
+    return None
 
 
 def create_project(name: str, company: str, root_path: Path, storage_format: str = "parquet") -> Path:
