@@ -40,4 +40,5 @@ else:
     ]
 
 # ── App version ───────────────────────────────────────────────────────────────
-APP_VERSION = "1.0.0"
+# Canonical definition lives in core/constants.py — imported here for backwards compat.
+from core.constants import APP_VERSION as APP_VERSION  # noqa: F401

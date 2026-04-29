@@ -88,3 +88,42 @@ ValueError: Column 'Region' not found in transaction table 'co'
 2026-04-29 13:55:12  INFO      core.project_manager — Project opened: 'Sales Dashboard'
 2026-04-29 13:55:12  INFO      core.project_manager — Project opened: 'rest'
 2026-04-29 13:55:13  INFO      __main__ — Main window displayed
+2026-04-29 14:04:21  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-29 14:04:22  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 14:04:22  INFO      core.project_manager — Project opened: 'rest'
+2026-04-29 14:04:23  INFO      __main__ — Main window displayed
+2026-04-29 14:45:31  INFO      core.project_manager — Project created: 'ExportTest' at C:\Users\AI TECH\AppData\Local\Temp\pytest-of-AI TECH\pytest-131\test_export_final_workbook_cre0\ExportTest
+2026-04-29 14:45:31  INFO      core.project_manager — Project opened: 'ExportTest'
+2026-04-29 14:51:43  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-29 14:51:44  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 14:51:44  INFO      core.project_manager — Project opened: 'rest'
+2026-04-29 14:51:47  INFO      __main__ — Main window displayed
+2026-04-29 14:51:53  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 14:51:55  ERROR     ui.workers — Background worker error: Column 'Region' not found in transaction table 'co'
+Traceback (most recent call last):
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\ui\workers.py", line 57, in _run
+    self._queue.put(("ok", self._fn()))
+                           ^^^^^^^^^^
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\ui\views\view_mapping.py", line 682, in worker
+    errors, total_found = detect_errors(
+                          ^^^^^^^^^^^^^^
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\core\error_detector.py", line 125, in detect_errors
+    raise ValueError(f"Column '{t_col}' not found in transaction table '{t_table}'")
+ValueError: Column 'Region' not found in transaction table 'co'
+2026-04-29 14:52:01  ERROR     ui.workers — Background worker error: Column 'Region' not found in transaction table 'co'
+Traceback (most recent call last):
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\ui\workers.py", line 57, in _run
+    self._queue.put(("ok", self._fn()))
+                           ^^^^^^^^^^
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\ui\views\view_mapping.py", line 682, in worker
+    errors, total_found = detect_errors(
+                          ^^^^^^^^^^^^^^
+  File "d:\OneDrive - Global Data 365\mapper app\CleanSheet\core\error_detector.py", line 125, in detect_errors
+    raise ValueError(f"Column '{t_col}' not found in transaction table '{t_table}'")
+ValueError: Column 'Region' not found in transaction table 'co'
+2026-04-29 14:52:04  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 14:52:07  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 15:03:09  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-29 15:03:10  INFO      core.project_manager — Project opened: 'Sales Dashboard'
+2026-04-29 15:03:10  INFO      core.project_manager — Project opened: 'rest'
+2026-04-29 15:03:11  INFO      __main__ — Main window displayed

@@ -250,6 +250,17 @@ class ViewSettings(ScreenBase):
         )
         ft_lay.addWidget(self._error_lbl, 1)
 
+        about_btn = QPushButton("About")
+        about_btn.setFixedHeight(34)
+        about_btn.setFixedWidth(80)
+        about_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 7px; color: #94a3b8; font-size: 12px; font-weight: 500; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.25); color: #f1f5f9; }"
+        )
+        about_btn.clicked.connect(self._show_about)
+        ft_lay.addWidget(about_btn)
+
         save_btn = QPushButton("Save Changes")
         save_btn.setFixedHeight(34)
         save_btn.setFixedWidth(120)
@@ -266,6 +277,11 @@ class ViewSettings(ScreenBase):
         self._setup_overlay("Saving settings...")
 
     # ------------------------------------------------------------------
+
+    def _show_about(self) -> None:
+        from ui.popups.popup_about import PopupAbout
+        dlg = PopupAbout(self)
+        dlg.exec()
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)

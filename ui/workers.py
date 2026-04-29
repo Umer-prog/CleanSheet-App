@@ -348,6 +348,10 @@ class ScreenBase(QWidget):
         worker.progress.connect(_progress)
         worker.start()
 
+    def is_busy(self) -> bool:
+        """Return True if at least one background worker is currently running."""
+        return self._loading_count > 0
+
     def abandon_workers(self) -> None:
         """Stop delivering results from any running background workers.
 

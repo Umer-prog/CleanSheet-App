@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication, QHBoxLayout, QLabel, QMainWindow,
-    QPushButton, QVBoxLayout, QWidget,
+    QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
+from core.constants import APP_NAME, APP_VERSION
 from utils.paths import user_data_path
 
 _APP_CONFIG   = user_data_path("app_config.json")
@@ -39,7 +41,7 @@ class _TitleBar(QWidget):
         lay.setContentsMargins(14, 0, 4, 0)
         lay.setSpacing(0)
 
-        app_lbl = QLabel(theme.company_name())
+        app_lbl = QLabel(f"{APP_NAME}  v{APP_VERSION}")
         app_lbl.setStyleSheet(
             "color: #334155; font-size: 11px; font-weight: 500; "
             "background: transparent; border: none;"
@@ -103,7 +105,7 @@ class App(QMainWindow):
         self._current_project: dict | None = None
         self._current_screen:  QWidget    | None = None
 
-        self.setWindowTitle(theme.company_name())
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setFixedSize(1600, 920 + _TITLEBAR_H)
 
@@ -136,6 +138,37 @@ class App(QMainWindow):
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Guard against closing while a background operation is running."""
+        if self._is_app_busy():
+            reply = QMessageBox.warning(
+                self,
+                "Operation in Progress",
+                "A background operation is still running.\n"
+                "Closing now may corrupt data.\n\n"
+                "Close anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+        event.accept()
+
+    def _is_app_busy(self) -> bool:
+        """Return True if the active screen or its active sub-view is busy."""
+        screen = self._current_screen
+        if screen is None:
+            return False
+        if hasattr(screen, "is_busy") and screen.is_busy():
+            return True
+        # Screen3 hosts a sub-view — check it too
+        if hasattr(screen, "_active_view"):
+            view = screen._active_view
+            if view is not None and hasattr(view, "is_busy") and view.is_busy():
+                return True
+        return False
 
     def show_screen(self, screen_class, **kwargs) -> None:
         """Swap the active screen inside the content area."""

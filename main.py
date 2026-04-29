@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 import ui.theme as theme
 from core.app_logger import setup_logging
-from core.license_constants import APP_VERSION
+from core.constants import APP_VERSION
 from utils.paths import resource_path, user_data_path
 
 _log = logging.getLogger(__name__)

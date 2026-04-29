@@ -57,18 +57,20 @@
 
 ---
 
-## 3. Version Number — Score: 2 / 6
+## 3. Version Number — Score: 6 / 6 ✅
 
-**Current state:** `APP_VERSION = "1.0.0"` lives at the bottom of `core/license_constants.py` — mixed in with licensing constants, not in a dedicated file. The version is not surfaced anywhere in the UI that a user or support agent would see.
+**Current state:** Fully implemented. `APP_VERSION`, `APP_NAME`, and `COMPANY` are defined in the new `core/constants.py` — the single source of truth. `core/license_constants.py` re-exports `APP_VERSION` from there for backwards compatibility. The version appears in the custom title bar, in the OS window title (taskbar), in the About dialog reachable from Settings, in the startup log line, and in the compiled `.exe` file properties via `version_info.txt`.
+
+**New files:** `core/constants.py`, `ui/popups/popup_about.py`, `version_info.txt`.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Version defined in one place only | ⚠️ | Exists in `core/license_constants.py:43` — correct that it's one place, but semantically wrong location (license constants ≠ app constants) |
-| Version shown in title bar or window title | ❌ | `app.py` sets `setWindowTitle(theme.company_name())` — company name only, no version |
-| Version shown on About screen or Help menu | ❌ | No About screen exists anywhere in the codebase |
-| Version written to log file on every startup | ❌ | Blocked by missing logging infrastructure (Section 1) |
+| Version defined in one place only | ✅ | `core/constants.py` — `APP_NAME = "CleanSheet"`, `APP_VERSION = "1.0.0"`, `COMPANY = "Global Data 365"`. `license_constants.py` re-exports via `from core.constants import APP_VERSION as APP_VERSION` |
+| Version shown in title bar or window title | ✅ | `_TitleBar` in `app.py` displays `"CleanSheet  v1.0.0"`. `setWindowTitle(f"{APP_NAME} v{APP_VERSION}")` also sets the OS taskbar title |
+| Version shown on About screen or Help menu | ✅ | `ui/popups/popup_about.py` — `PopupAbout` dialog shows app name, version, publisher, support email, and log file path. Opened via the "About" button in the Settings view footer |
+| Version written to log file on every startup | ✅ | `main.py` logs `CleanSheet v1.0.0 starting up` immediately after `setup_logging()` — unchanged from Section 1 implementation |
 | Follows semantic versioning (MAJOR.MINOR.PATCH) | ✅ | `"1.0.0"` format is correct |
-| PyInstaller .spec includes FileVersion in exe properties | ❌ | `cleansheet.spec` has no `version=`, `file_version=`, or `version_file=` parameter in the `EXE()` block |
+| PyInstaller .spec includes FileVersion in exe properties | ✅ | `version_info.txt` created with `FileVersion`, `ProductVersion`, `CompanyName`, `LegalCopyright`, `FileDescription`. Referenced in `cleansheet.spec` `EXE()` block via `version='version_info.txt'` |
 
 ---
 
@@ -113,9 +115,9 @@
 
 ---
 
-## 6. Background Threading — Score: 6 / 7
+## 6. Background Threading — Score: 7 / 7 ✅
 
-**Current state:** Excellent architecture. `Worker` + `ProgressWorker` + `LoadingOverlay` + `ScreenBase` form a complete, well-designed threading system. The threading.Thread + QTimer polling approach is specifically chosen to keep the Qt event loop alive during GIL-bound Python work — and this is documented inline. Used consistently across all views.
+**Current state:** Complete. `Worker` + `ProgressWorker` + `LoadingOverlay` + `ScreenBase` form a well-designed threading system used consistently across all views. The close-guard added in this session prevents data corruption from force-quitting during an active background operation.
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -125,7 +127,7 @@
 | Export runs in background | ✅ | `export_final_workbook` is called via `_run_background_with_progress` |
 | UI shows loading state during background work | ✅ | `LoadingOverlay` with animated dot pulse (`●  ·  ·` → `·  ●  ·` etc.) on all operations |
 | Background errors caught and sent to UI thread | ✅ | `Worker._run()` wraps everything in `try/except`, queues `("err", exc)`, `_poll()` emits `errored` signal on main thread |
-| App cannot be closed mid-operation corrupting data | ⚠️ | Background threads are `daemon=True` (will be killed on close). No close-guard or warning is shown when a background operation is running. A force-quit mid-export could leave a partially written file |
+| App cannot be closed mid-operation corrupting data | ✅ | `App.closeEvent()` calls `_is_app_busy()` which checks `_loading_count > 0` on the active screen and its `_active_view` (Screen 3 sub-views). If busy, shows a blocking `QMessageBox.warning` — user must confirm before close proceeds. `ScreenBase.is_busy()` added as the public check method |
 
 ---
 
@@ -181,13 +183,13 @@
 
 ---
 
-## 10. Configuration & Constants — Score: 4 / 6
+## 10. Configuration & Constants — Score: 5 / 6
 
-**Current state:** Paths are consistently built with `pathlib.Path` throughout. No hardcoded dev-machine paths found. The version/name constants are slightly scattered but not dangerously so.
+**Current state:** Paths are consistently built with `pathlib.Path` throughout. No hardcoded dev-machine paths found. `core/constants.py` now provides a single source of truth for app name, version, and company. One remaining gap: default export format hard-coded in `project_manager.py`.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| App name, version, company defined in one constants file | ⚠️ | `APP_VERSION = "1.0.0"` is in `core/license_constants.py` (wrong home). Company name is in `branding.json`. App name "CleanSheet" is hardcoded as a string literal in `license_validator.py` failure messages. No single `constants.py` or `__version__.py` file |
+| App name, version, company defined in one constants file | ✅ | `core/constants.py` — `APP_NAME`, `APP_VERSION`, `COMPANY`. `license_constants.py` re-exports `APP_VERSION` from there. `branding.json` still holds display/colour config (intentional separation) |
 | All file paths constructed from a base path | ✅ | `pathlib.Path` used consistently throughout. `project_paths.py` provides canonical base-path helpers (`active_transactions_dir`, `active_dim_dir`, etc.) |
 | Data directory resolved at runtime, not hard-coded | ✅ | `user_data_path()` in `utils/paths.py` resolves correctly for both dev and frozen (PyInstaller) mode. Project paths are always passed as parameters, never embedded |
 | No credentials, keys, or secrets in source code | ✅ | Public key is in source intentionally (by design). Private key excluded by `.gitignore`. No passwords, API keys, or secrets found |
@@ -234,22 +236,22 @@
 | # | Area | Score | Shipping Blocker? | Priority |
 |---|------|-------|-------------------|----------|
 | 1 | Logging | 8/8 ✅ | No — complete | Done |
-| 2 | Error Handling | 5/8 | **Partial** | Fix PermissionError hint, pin log path |
-| 3 | Version Number | 2/6 | **Yes** | Low effort |
+| 2 | Error Handling | 8/8 ✅ | No — complete | Done |
+| 3 | Version Number | 6/6 ✅ | No — complete | Done |
 | 4 | Installer | 1/11 | **Yes** | Large effort, do last |
 | 5 | License System | 9/10 | No — excellent | Minor doc tweak |
-| 6 | Background Threading | 6/7 | No — excellent | Add close-guard |
+| 6 | Background Threading | 7/7 ✅ | No — complete | Done |
 | 7 | Input Validation | 4/9 | **Partial** | Project name validation urgent |
 | 8 | Data Integrity | 3/6 | **Partial** | Atomic writes medium effort |
 | 9 | UX Consistency | 4/10 | No — recommended | Keyboard shortcuts low effort |
-| 10 | Configuration | 4/6 | No — recommended | Move version to constants.py |
+| 10 | Configuration | 5/6 | No — recommended | Pin requirements.txt |
 | 11 | Code Structure | 3/7 | No — ongoing | Background work |
 | 12 | Security | 4/6 | **Yes** | Pin requirements.txt today |
 
 ### Top 5 actions before first client delivery
 
 1. ~~**Add logging infrastructure**~~ ✅ Done — `core/app_logger.py`, full rotating file handler, version on startup, user actions logged, log path in Settings view.
-2. **Pin `requirements.txt`** — Run `pip freeze` and replace `>=` bounds with `==` exact pins. Also remove `customtkinter`/`rapidfuzz` and add `PySide6`, `pyarrow`, `xlsxwriter`.
-3. **Add version to title bar and create an About dialog** — `APP_VERSION` already exists in `license_constants.py`; move it to a `constants.py`, import it in `app.py` for the window title.
-4. **Atomic writes** — In `write_table()`, write to `dest_path.with_suffix('.tmp')` then `os.replace()` to destination. Five lines of change, major integrity improvement.
-5. **Validate project name input** — In Screen 0's new-project dialog, add a regex check on the project name before calling `create_project()`. Prevents an ugly OSError from reaching the user.
+2. ~~**Add version to title bar and create an About dialog**~~ ✅ Done — `core/constants.py` is the single version source; title bar shows `CleanSheet v1.0.0`; `PopupAbout` reachable from Settings; `.spec` includes `version_info.txt` for exe file properties.
+3. ~~**Add close-guard for background operations**~~ ✅ Done — `App.closeEvent()` checks `_is_app_busy()` and prompts the user before allowing close mid-operation.
+4. **Pin `requirements.txt`** — Run `pip freeze` and replace `>=` bounds with `==` exact pins. Also remove `customtkinter`/`rapidfuzz` and add `PySide6`, `pyarrow`, `xlsxwriter`.
+5. **Atomic writes** — In `write_table()`, write to `dest_path.with_suffix('.tmp')` then `os.replace()` to destination. Five lines of change, major integrity improvement.
