@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -78,32 +79,51 @@ def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
     """
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    if dest_path.suffix == ".parquet":
-        csv_sibling = dest_path.with_suffix(".csv")
-        if csv_sibling.exists():
-            raise FileExistsError(
-                f"Cannot write Parquet: a CSV file already exists at '{csv_sibling}'. "
-                "Existing projects stay in their original format."
-            )
-        try:
-            df.to_parquet(dest_path, index=False, compression="snappy")
-        except OSError as e:
-            if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
+    tmp_path = dest_path.with_suffix(dest_path.suffix + ".tmp")
+    try:
+        if dest_path.suffix == ".parquet":
+            csv_sibling = dest_path.with_suffix(".csv")
+            if csv_sibling.exists():
+                raise FileExistsError(
+                    f"Cannot write Parquet: a CSV file already exists at '{csv_sibling}'. "
+                    "Existing projects stay in their original format."
+                )
+            try:
+                df.to_parquet(tmp_path, index=False, compression="snappy")
+            except OSError as e:
+                if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
+                    raise OSError(
+                        "Not enough disk space to save the file.\n"
+                        "Free up space and try again."
+                    ) from e
+                raise
+            # Read-back validation: confirm row count matches
+            written = pd.read_parquet(tmp_path)
+            if len(written) != len(df):
                 raise OSError(
-                    "Not enough disk space to save the file.\n"
-                    "Free up space and try again."
-                ) from e
-            raise
-    else:
+                    f"Parquet write validation failed for '{dest_path.name}': "
+                    f"wrote {len(df)} rows but read back {len(written)}. "
+                    "The file may be corrupted — please try again."
+                )
+        else:
+            try:
+                df.to_csv(tmp_path, index=False, encoding="utf-8")
+            except OSError as e:
+                if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
+                    raise OSError(
+                        "Not enough disk space to save the file.\n"
+                        "Free up space and try again."
+                    ) from e
+                raise
+        # Atomic replace: tmp → destination (safe even if dest already exists)
+        os.replace(tmp_path, dest_path)
+    except BaseException:
+        # Clean up the temp file if anything went wrong
         try:
-            df.to_csv(dest_path, index=False, encoding="utf-8")
-        except OSError as e:
-            if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
-                raise OSError(
-                    "Not enough disk space to save the file.\n"
-                    "Free up space and try again."
-                ) from e
-            raise
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return dest_path
 
 

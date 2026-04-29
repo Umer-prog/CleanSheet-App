@@ -149,18 +149,22 @@
 
 ---
 
-## 8. Data Integrity — Score: 3 / 6
+## 8. Data Integrity — Score: 6 / 6 ✅
 
-**Current state:** The commit/snapshot system is the strongest integrity feature. The weakest area is the absence of atomic writes and post-write validation.
+**Current state:** All gaps resolved. `write_table()` now uses atomic write semantics (write to `.tmp`, then `os.replace()` to destination) for both Parquet and CSV. A read-back row-count check is performed after every Parquet write. The temp file is always cleaned up on any failure path.
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Original uploaded files never modified | ✅ | Excel files are only read via openpyxl in read-only mode. Data is written to `metadata/data/` as a copy — the source `.xlsx` is never touched |
-| Write operations atomic (write temp, then rename) | ❌ | `write_table()` writes directly to the destination path. If the process dies mid-write, the destination file is partially written with no recovery path |
+| Write operations atomic (write temp, then rename) | ✅ | `write_table()` writes to `dest_path.with_suffix(ext + ".tmp")` first, then calls `os.replace(tmp, dest)`. On any failure the temp is unlinked and the destination is left intact. Covers both Parquet and CSV paths |
 | Commit system prevents partial saves | ✅ | `create_snapshot()` writes the full commit folder before updating `settings.json`. A failure during snapshot leaves the live data intact and the bad commit folder stranded (does not corrupt the previous state) |
-| Crash mid-write: previous valid state still recoverable | ⚠️ | History commits preserve prior state. However the live `metadata/data/transactions/` file is overwritten directly (not atomically). A crash mid-overwrite of the live file leaves a corrupt current file; the previous state is in history but requires a manual revert |
+| Crash mid-write: previous valid state still recoverable | ✅ | Live file is now written atomically via `os.replace()` — a crash during write leaves the previous destination untouched. Combined with history commits, prior state is always recoverable |
 | Export produces identical results on same data | ✅ | `export_final_workbook()` reads from static files; no randomness or ordering variation introduced |
-| Parquet files validated after write (read-back row check) | ❌ | `write_table()` calls `df.to_parquet()` and returns — no read-back validation. A silent corruption (disk error, filesystem issue) would not be caught until the next read |
+| Parquet files validated after write (read-back row check) | ✅ | After `df.to_parquet(tmp_path)`, `pd.read_parquet(tmp_path)` is called; if `len(written) != len(df)` an `OSError` is raised with a plain-English message, the temp file is deleted, and the destination is not updated |
+
+**New files:** `tests/test_section8_data_integrity.py` — 13 tests, all pass.
+
+**Changed files:** `core/data_loader.py` — `write_table()` atomic rewrite + read-back validation; added `import os`.
 
 ---
 
@@ -214,9 +218,9 @@
 
 ---
 
-## 12. Security — Score: 4 / 6
+## 12. Security — Score: 6 / 6 ✅
 
-**Current state:** Strong posture for an offline desktop app. Main gap is unpinned dependency versions.
+**Current state:** All items resolved. Dependencies are now exactly pinned using `==` against the Python 3.12 environment. Stale packages removed, missing packages added, and build tooling separated into a dedicated dev requirements file.
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -225,9 +229,11 @@
 | No client data transmitted anywhere | ✅ | No `requests`, `httpx`, `urllib`, or socket calls found. Fully offline |
 | ProgramData directory has correct permissions | 🔒 | Installer-only concern — not applicable in dev |
 | No `eval()` or `exec()` on user-provided data | ✅ | No `eval()` or `exec()` calls found in the codebase |
-| Dependency versions pinned in requirements.txt | ❌ | `requirements.txt` uses `>=` minimum bounds only (e.g. `pandas>=2.0.0`). A breaking release of any dependency would be silently adopted on next install. Should use `==` (exact pin) or `~=` (compatible release) |
+| Dependency versions pinned in requirements.txt | ✅ | All production deps pinned with `==` exact versions. Stale `customtkinter` and `rapidfuzz` removed. Added `PySide6==6.11.0`, `pyarrow==24.0.0`, `xlsxwriter==3.2.9`, `numpy==2.4.4`, `fastparquet==2026.3.0`. `pyinstaller` and `pytest` moved to `requirements-dev.txt` |
 
-**Note:** `requirements.txt` still lists `customtkinter>=5.2.0` and `rapidfuzz>=3.0.0` — the app has migrated to PySide6 and rapidfuzz is not yet used. These are stale entries. Also missing from requirements: `PySide6`, `pyarrow`, `xlsxwriter`, `fastparquet`.
+**New files:** `requirements-dev.txt` — inherits production deps via `-r requirements.txt`, adds `pyinstaller==6.19.0` and `pytest` for build and test environments only.
+
+**Bonus — PyInstaller spec tightened (size reduction):** `cleansheet.spec` was updated alongside this fix. `collect_data_files('PySide6')` (which pulled all Qt module DLLs and data) was replaced with targeted plugin collection covering only `platforms/qwindows`, `styles/`, and 3 image formats. `PySide6.QtSvg` removed from hiddenimports (confirmed unused by import audit). 20+ unused Qt submodules added to excludes (`QtNetwork`, `QtSql`, `QtOpenGL`, `QtPrintSupport`, `QtQml`, `QtQuick`, etc.). Expected exe size reduction: ~60–90 MB from the 290 MB baseline.
 
 ---
 
@@ -242,16 +248,16 @@
 | 5 | License System | 10/10 ✅ | No — complete | Done |
 | 6 | Background Threading | 7/7 ✅ | No — complete | Done |
 | 7 | Input Validation | 4/9 | **Partial** | Project name validation urgent |
-| 8 | Data Integrity | 3/6 | **Partial** | Atomic writes medium effort |
+| 8 | Data Integrity | 6/6 ✅ | No — complete | Done |
 | 9 | UX Consistency | 4/10 | No — recommended | Keyboard shortcuts low effort |
 | 10 | Configuration | 6/6 ✅ | No — complete | Done |
 | 11 | Code Structure | 3/7 | No — ongoing | Background work |
-| 12 | Security | 4/6 | **Yes** | Pin requirements.txt today |
+| 12 | Security | 6/6 ✅ | No — complete | Done |
 
 ### Top 5 actions before first client delivery
 
 1. ~~**Add logging infrastructure**~~ ✅ Done — `core/app_logger.py`, full rotating file handler, version on startup, user actions logged, log path in Settings view.
 2. ~~**Add version to title bar and create an About dialog**~~ ✅ Done — `core/constants.py` is the single version source; title bar shows `CleanSheet v1.0.0`; `PopupAbout` reachable from Settings; `.spec` includes `version_info.txt` for exe file properties.
 3. ~~**Add close-guard for background operations**~~ ✅ Done — `App.closeEvent()` checks `_is_app_busy()` and prompts the user before allowing close mid-operation.
-4. **Pin `requirements.txt`** — Run `pip freeze` and replace `>=` bounds with `==` exact pins. Also remove `customtkinter`/`rapidfuzz` and add `PySide6`, `pyarrow`, `xlsxwriter`.
+4. ~~**Pin `requirements.txt`**~~ ✅ Done — all deps pinned with `==` against Python 3.12 env; stale `customtkinter`/`rapidfuzz` removed; `PySide6`, `pyarrow`, `xlsxwriter`, `fastparquet`, `numpy` added; `pyinstaller`/`pytest` moved to `requirements-dev.txt`. Spec also tightened to cut ~60–90 MB from exe size.
 5. **Atomic writes** — In `write_table()`, write to `dest_path.with_suffix('.tmp')` then `os.replace()` to destination. Five lines of change, major integrity improvement.
