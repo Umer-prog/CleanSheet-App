@@ -203,7 +203,8 @@ class Screen3Main(QWidget):
         try:
             return get_mappings(self.project_path)
         except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not load mappings:\n{exc}")
+            msgbox.critical(self, "Failed to Load Mappings",
+                            f"Mappings could not be read. The mappings file may be missing or corrupted.\n\nDetail: {exc}")
             return []
 
     def _init_mapping_badges(self) -> None:
@@ -667,16 +668,15 @@ class Screen3Main(QWidget):
             if newly_orphaned:
                 answer = msgbox.information(
                     self,
-                    "Dimension Table Now Orphaned",
-                    f"The dimension table <b>{dim_table}</b> is no longer referenced "
-                    f"by any mapping.<br><br>"
-                    f"It can now be permanently deleted from the "
-                    f"<b>Dimension Tables</b> panel.",
+                    "Dimension Table No Longer In Use",
+                    f"<b>{dim_table}</b> is no longer referenced by any mapping.<br><br>"
+                    f"You can go to the <b>Dimension Tables</b> panel to delete it and "
+                    f"free up space, or leave it for now.",
                     QMessageBox.Ok | QMessageBox.Ignore,
                     QMessageBox.Ok,
                 )
-                # Navigate to d_sources if user clicked Ok (not Ignore)
-                go_to_dims = (answer == QMessageBox.Ok)
+                # Navigate to d_sources if user clicked OK (not Ignore)
+                go_to_dims = (answer == QMessageBox.Yes)
             else:
                 go_to_dims = False
 
@@ -687,7 +687,8 @@ class Screen3Main(QWidget):
         w.finished.connect(on_done)
         w.errored.connect(
             lambda exc: msgbox.critical(
-                self, "Error", f"Could not delete mapping:\n{exc}"
+                self, "Failed to Delete Mapping",
+                f"The mapping could not be deleted. Check that the project files are accessible.\n\nDetail: {exc}"
             )
         )
         w.start()
@@ -781,7 +782,8 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Failed to Reload Project",
+                            f"The project data could not be reloaded from disk. Try restarting the app if this persists.\n\nDetail: {exc}")
             return
         self.app.set_current_project(updated)
         self.app.show_screen(Screen3Main, project=updated, initial_nav_key=target_key)
@@ -790,7 +792,8 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Failed to Reload Project",
+                            f"The project data could not be reloaded from disk. Try restarting the app if this persists.\n\nDetail: {exc}")
             return
         self.app.set_current_project(updated)
         self.app.show_screen(Screen2Mappings, project=updated, from_screen3=True)
@@ -799,7 +802,8 @@ class Screen3Main(QWidget):
         try:
             updated = open_project(self.project_path)
         except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not refresh project:\n{exc}")
+            msgbox.critical(self, "Failed to Reload Project",
+                            f"The project data could not be reloaded from disk. Try restarting the app if this persists.\n\nDetail: {exc}")
             return
         self.app.set_current_project(updated)
         from ui.screen1_sources import Screen1Sources

@@ -424,7 +424,8 @@ class ViewHistory(ScreenBase):
         self._run_background(
             worker,
             lambda _: self._load_manifests(),
-            lambda exc: msgbox.critical(self, "Error", f"Could not create snapshot:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Create Snapshot",
+                                         f"The snapshot could not be saved. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -674,14 +675,15 @@ class ViewHistory(ScreenBase):
                 worker,
                 lambda _: (
                     msgbox.information(
-                        self, "Reverted",
-                        f"Reverted to {display_id}.\n"
-                        f"Transactions, dimension tables, and mappings have been restored."
+                        self, "Revert Successful",
+                        f"Your project has been restored to snapshot <b>{display_id}</b>.<br><br>"
+                        f"Transaction data, dimension tables, and mappings have all been rolled back."
                     ),
                     self.on_project_changed(target_key="history"),
                 ),
                 lambda exc: msgbox.critical(
-                    self, "Error", f"Could not revert:\n{exc}"
+                    self, "Revert Failed",
+                    f"The project could not be restored to this snapshot. The snapshot data may be incomplete.\n\nDetail: {exc}"
                 ),
             )
 

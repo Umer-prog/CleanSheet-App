@@ -142,12 +142,12 @@ class App(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         """Guard against closing while a background operation is running."""
         if self._is_app_busy():
-            reply = QMessageBox.warning(
+            import ui.popups.msgbox as msgbox
+            reply = msgbox.question(
                 self,
                 "Operation in Progress",
-                "A background operation is still running.\n"
-                "Closing now may corrupt data.\n\n"
-                "Close anyway?",
+                "A background operation is still running.<br><br>"
+                "Closing the app now may corrupt your data. Are you sure you want to exit?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

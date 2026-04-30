@@ -339,8 +339,9 @@ class ViewSettings(ScreenBase):
         prev_history = bool(self.project.get("settings", {}).get("history_enabled", True))
         if prev_history and not history_enabled:
             reply = msgbox.question(
-                self, "History Off Warning",
-                "Existing history will be kept but no new snapshots will be created. Continue?",
+                self, "Disable History Tracking?",
+                "Turning off history will stop new snapshots from being created.<br><br>"
+                "Your existing snapshots will be kept and you can re-enable history at any time.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
@@ -358,10 +359,11 @@ class ViewSettings(ScreenBase):
             )
 
         def on_success(_):
-            msgbox.information(self, "Saved", "Settings saved successfully.")
+            msgbox.information(self, "Settings Saved", "Your project settings have been saved.")
             self.on_project_changed(target_key="settings")
 
         self._run_background(worker, on_success,
                              lambda exc: msgbox.critical(
-                                 self, "Error", f"Could not save settings:\n{exc}"
+                                 self, "Failed to Save Settings",
+                                 f"Your settings could not be saved. Check that the project folder is accessible.\n\nDetail: {exc}"
                              ))

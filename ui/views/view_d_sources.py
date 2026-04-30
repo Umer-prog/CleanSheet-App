@@ -565,7 +565,8 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             on_sheets_loaded,
-            lambda exc: msgbox.critical(self, "Error", f"Could not read file:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Read File",
+                                         f"The Excel file could not be opened. Make sure it is not open in another application.\n\nDetail: {exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -580,10 +581,10 @@ class ViewDSources(ScreenBase):
         )
         reply = msgbox.question(
             self,
-            "Delete Chained Source",
-            f"This will permanently remove the chained dimension '{dim_name}' "
-            f"and ALL its linked sources:\n\n{chain_summary}\n\n"
-            f"All associated mappings will also be removed. This cannot be undone.",
+            "Delete Chained Dimension",
+            f"Deleting <b>{dim_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
+            f"{chain_summary}<br><br>"
+            f"All mappings referencing this dimension will also be deleted. This cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -613,7 +614,8 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             lambda _: self.on_project_changed(target_key="d_sources"),
-            lambda exc: msgbox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Delete Source",
+                                         f"The source could not be deleted. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -633,7 +635,8 @@ class ViewDSources(ScreenBase):
         self._run_background(
             worker,
             on_success,
-            lambda exc: msgbox.critical(self, "Error", f"Could not load table:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Load Table",
+                                         f"The dimension table data could not be read. The file may be missing or corrupted.\n\nDetail: {exc}"),
         )
 
     def _on_delete_orphan(self, dim_name: str) -> None:
@@ -663,6 +666,7 @@ class ViewDSources(ScreenBase):
             worker,
             on_done,
             lambda exc: msgbox.critical(
-                self, "Error", f"Could not delete dimension table:\n{exc}"
+                self, "Failed to Delete Table",
+                f"The dimension table could not be deleted. Check that the project folder is accessible.\n\nDetail: {exc}"
             ),
         )

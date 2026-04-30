@@ -752,9 +752,9 @@ class Screen2Mappings(ScreenBase):
         reply = msgbox.question(
             self,
             "Remove Table",
-            f"Remove '{table_name}' from this project?\n\n"
-            f"This will delete the {kind_label} data file from disk "
-            f"and remove any mappings that reference it.",
+            f"Remove <b>{table_name}</b> from this project?<br><br>"
+            f"The {kind_label} data file will be deleted from disk and any mappings "
+            f"that reference it will also be removed.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -787,7 +787,8 @@ class Screen2Mappings(ScreenBase):
             self._clear_current_selection()
 
         def on_error(exc):
-            msgbox.critical(self, "Error", f"Could not remove '{table_name}':\n{exc}")
+            msgbox.critical(self, "Failed to Remove Table",
+                            f"<b>{table_name}</b> could not be removed. The file may be locked.\n\nDetail: {exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -842,7 +843,8 @@ class Screen2Mappings(ScreenBase):
                 return
             self._dim_column_menu.clear()
             self._dim_column_menu.addItem("Select Column")
-            msgbox.critical(self, "Error", f"Could not load dim table '{table_name}':\n{exc}")
+            msgbox.critical(self, "Failed to Load Table",
+                            f"The columns for <b>{table_name}</b> could not be read. The file may be missing or corrupted.\n\nDetail: {exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -867,7 +869,8 @@ class Screen2Mappings(ScreenBase):
                 return
             self._tx_column_menu.clear()
             self._tx_column_menu.addItem("Select Column")
-            msgbox.critical(self, "Error", f"Could not load transaction table '{table_name}':\n{exc}")
+            msgbox.critical(self, "Failed to Load Table",
+                            f"The columns for <b>{table_name}</b> could not be read. The file may be missing or corrupted.\n\nDetail: {exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -1032,16 +1035,10 @@ class Screen2Mappings(ScreenBase):
                 self._set_error(message)
                 return
             # soft warning — user may override
-            box = QMessageBox(self)
-            box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
-            box.setWindowTitle("Low Column Match")
-            box.setText(message)
-            box.setIcon(QMessageBox.Icon.Warning)
-            map_btn    = box.addButton("Map Anyway",     QMessageBox.ButtonRole.AcceptRole)
-            change_btn = box.addButton("Change Column",  QMessageBox.ButtonRole.RejectRole)
-            box.setDefaultButton(change_btn)
-            box.exec()
-            if box.clickedButton() is map_btn:
+            if msgbox.warning_question(
+                self, "Low Column Match", message,
+                confirm_label="Map Anyway", cancel_label="Change Column",
+            ):
                 _add_mapping()
 
         self._run_background(do_compare, on_compared, lambda *_: _add_mapping())
@@ -1197,7 +1194,8 @@ class Screen2Mappings(ScreenBase):
                         msgbox.information(self, "Done", "Mappings saved. Screen 3 not built yet.")
 
                 def on_save_error(exc):
-                    msgbox.critical(self, "Error", f"Could not save mappings:\n{exc}")
+                    msgbox.critical(self, "Failed to Save Mappings",
+                                    f"Your mappings could not be saved. Check that the project folder is accessible.\n\nDetail: {exc}")
 
                 self._run_background(save_worker, on_save_success, on_save_error)
 
@@ -1206,43 +1204,40 @@ class Screen2Mappings(ScreenBase):
             )
 
             if not missing_tx and not missing_dim:
-                box = QMessageBox(self)
-                box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
-                box.setWindowTitle("Finish Setup")
-                box.setText("All tables are mapped.\n\nDo you want to finish setup and continue?")
-                box.setIcon(QMessageBox.Icon.Question)
-                confirm_btn = box.addButton("Finish Setup", QMessageBox.ButtonRole.AcceptRole)
-                box.addButton("Go Back", QMessageBox.ButtonRole.RejectRole)
-                box.setDefaultButton(confirm_btn)
-                box.exec()
-                if box.clickedButton() is confirm_btn:
+                reply = msgbox.question(
+                    self,
+                    "Finish Setup",
+                    "All tables are mapped and ready to go.<br><br>"
+                    "Continue to the main workspace?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply == QMessageBox.Yes:
                     do_save()
                 return
 
             # Build warning listing the unmapped tables
             parts = []
             if missing_tx:
-                parts.append(f"Transaction: {', '.join(missing_tx)}")
+                parts.append(f"Transaction tables: {', '.join(missing_tx)}")
             if missing_dim:
-                parts.append(f"Dimension: {', '.join(missing_dim)}")
-            unmapped_str = "\n".join(parts)
+                parts.append(f"Dimension tables: {', '.join(missing_dim)}")
+            unmapped_str = "<br>".join(parts)
 
-            box = QMessageBox(self)
-            box.setWindowFlags(box.windowFlags() | Qt.FramelessWindowHint)
-            box.setWindowTitle("Unmapped Tables")
-            box.setText(
-                f"The following tables have no mappings and will be passed through unchanged:\n\n"
-                f"{unmapped_str}\n\nDo you want to continue?"
+            reply = msgbox.question(
+                self,
+                "Some Tables Are Not Mapped",
+                f"The following tables have no mappings and will pass through without any column matching:<br><br>"
+                f"{unmapped_str}<br><br>"
+                f"Continue anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            box.setIcon(QMessageBox.Icon.Warning)
-            continue_btn = box.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
-            box.addButton("Go Back", QMessageBox.ButtonRole.RejectRole)
-            box.setDefaultButton(continue_btn)
-            box.exec()
-            if box.clickedButton() is continue_btn:
+            if reply == QMessageBox.Yes:
                 do_save()
 
         def on_existing_error(exc):
-            msgbox.critical(self, "Error", f"Could not read existing mappings:\n{exc}")
+            msgbox.critical(self, "Failed to Load Mappings",
+                            f"Existing mappings could not be read. The mappings file may be corrupted.\n\nDetail: {exc}")
 
         self._run_background(load_existing, on_existing_loaded, on_existing_error)

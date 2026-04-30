@@ -1145,7 +1145,8 @@ class ViewMapping(ScreenBase):
                         apply_worker,
                         lambda _: self._reload_data(force=True),
                         lambda exc: msgbox.critical(
-                            self, "Error", f"Could not replace:\n{exc}"
+                            self, "Failed to Apply Replacement",
+                            f"The value could not be replaced. Check that the project data files are accessible.\n\nDetail: {exc}"
                         ),
                     )
 
@@ -1208,7 +1209,8 @@ class ViewMapping(ScreenBase):
                     apply_worker,
                     lambda _: self._reload_data(force=True),
                     lambda exc: msgbox.critical(
-                        self, "Error", f"Could not add row:\n{exc}"
+                        self, "Failed to Add Row",
+                        f"The new row could not be saved to the dimension table. Check that the project data files are accessible.\n\nDetail: {exc}"
                     ),
                 )
 
@@ -1368,7 +1370,8 @@ class ViewMapping(ScreenBase):
         self._run_background(
             worker,
             lambda _: self._reload_data(force=True),
-            lambda exc: msgbox.critical(self, "Error", f"Could not delete row:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Delete Row",
+                                         f"The row could not be deleted. Check that the project data files are accessible.\n\nDetail: {exc}"),
         )
 
     def _on_generate_final_file(self) -> None:
@@ -1403,7 +1406,8 @@ class ViewMapping(ScreenBase):
             answer = msgbox.question(
                 self,
                 "Export Complete",
-                f"Final file created:\n{path}\n\nOpen the output folder?",
+                f"Your output file has been created at:<br><br><code>{path}</code><br><br>"
+                f"Would you like to open the output folder now?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1414,7 +1418,8 @@ class ViewMapping(ScreenBase):
 
         def on_error(exc) -> None:
             self._generate_btn.setEnabled(True)
-            msgbox.critical(self, "Export Failed", f"Could not generate final file:\n{exc}")
+            msgbox.critical(self, "Export Failed",
+                            f"The output file could not be generated. Check that the output folder is accessible.\n\nDetail: {exc}")
 
         self._run_background_with_progress(
             worker,

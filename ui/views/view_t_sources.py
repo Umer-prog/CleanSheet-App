@@ -493,10 +493,10 @@ class ViewTSources(ScreenBase):
         self._set_error("")
         reply = msgbox.question(
             self,
-            "Append to Chain",
-            "Once added, this file cannot be removed individually.\n\n"
-            "To remove it you would have to delete the entire chain, which also removes "
-            "all associated mappings.\n\nContinue?",
+            "Append File to Chain",
+            "Once a file is added to a chain, it cannot be removed on its own.<br><br>"
+            "To remove it later you would need to delete the entire chain, which will also "
+            "remove all associated mappings. Are you sure you want to continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -559,10 +559,10 @@ class ViewTSources(ScreenBase):
         )
         reply = msgbox.question(
             self,
-            "Delete Chained Source",
-            f"This will permanently remove the chained table '{table_name}' "
-            f"and ALL its linked sources:\n\n{chain_summary}\n\n"
-            f"All associated mappings will also be removed. This cannot be undone.",
+            "Delete Chained Table",
+            f"Deleting <b>{table_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
+            f"{chain_summary}<br><br>"
+            f"All mappings referencing this table will also be deleted. This cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -593,7 +593,8 @@ class ViewTSources(ScreenBase):
         self._run_background(
             worker,
             lambda _: self.on_project_changed(target_key="t_sources"),
-            lambda exc: msgbox.critical(self, "Error", f"Could not delete source:\n{exc}"),
+            lambda exc: msgbox.critical(self, "Failed to Delete Source",
+                                         f"The source could not be deleted. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
 
     # ------------------------------------------------------------------
@@ -641,17 +642,20 @@ class ViewTSources(ScreenBase):
                 })
 
             def on_done(_):
-                msgbox.information(self, "Updated", f"Table '{table_name}' updated.")
+                msgbox.information(self, "Table Updated",
+                                   f"<b>{table_name}</b> has been updated with the new data.")
                 self.on_project_changed(target_key="t_sources")
 
             self._run_background(update_worker, on_done,
                                  lambda exc: msgbox.critical(
-                                     self, "Error", f"Could not update table:\n{exc}"
+                                     self, "Failed to Update Table",
+                                     f"<b>{table_name}</b> could not be updated. The file may be locked or corrupted.\n\nDetail: {exc}"
                                  ))
 
         self._run_background(load_sheets_worker, on_sheets_loaded,
                              lambda exc: msgbox.critical(
-                                 self, "Error", f"Could not read file:\n{exc}"
+                                 self, "Failed to Read File",
+                                 f"The Excel file could not be opened. Make sure it is not open in another application.\n\nDetail: {exc}"
                              ))
 
     def _on_delete_table(self, table_name: str) -> None:
@@ -663,8 +667,9 @@ class ViewTSources(ScreenBase):
         def on_mappings_loaded(mappings):
             count = count_mappings_for_table(mappings, table_name)
             reply = msgbox.question(
-                self, "Confirm Delete",
-                f"Deleting '{table_name}' will also remove {count} mapping(s). Confirm?",
+                self, "Delete Table",
+                f"Deleting <b>{table_name}</b> will also remove {count} mapping(s) that reference it.<br><br>"
+                f"This action cannot be undone.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
@@ -691,7 +696,8 @@ class ViewTSources(ScreenBase):
             self._run_background(delete_worker,
                                  lambda _: self.on_project_changed(target_key="t_sources"),
                                  lambda exc: msgbox.critical(
-                                     self, "Error", f"Could not delete table:\n{exc}"
+                                     self, "Failed to Delete Table",
+                                     f"<b>{table_name}</b> could not be deleted. Check that no files are open.\n\nDetail: {exc}"
                                  ))
 
         self._run_background(load_mappings_worker, on_mappings_loaded,

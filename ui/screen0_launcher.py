@@ -687,10 +687,12 @@ class Screen0Launcher(ScreenBase):
                     from ui.screen3_main import Screen3Main
                     self.app.show_screen(Screen3Main, project=state)
             except ImportError as exc:
-                msgbox.critical(self, "Navigation Error", str(exc))
+                msgbox.critical(self, "Navigation Error",
+                                f"A required screen could not be loaded.\n\nDetail: {exc}")
 
         def _on_error(exc):
-            msgbox.critical(self, "Error", f"Could not open project:\n{exc}")
+            msgbox.critical(self, "Failed to Open Project",
+                            f"The project could not be opened. The file may be missing or corrupted.\n\nDetail: {exc}")
 
         self._run_background(_load, on_success=_on_success, on_error=_on_error)
 
@@ -703,9 +705,10 @@ class Screen0Launcher(ScreenBase):
         project_path = Path(self._selected_path)
         reply = msgbox.question(
             self,
-            "Confirm Delete",
-            f"Delete project '{project_path.name}'?\n\n"
-            "This will permanently delete the workspace folder and all project data.",
+            "Delete Project",
+            f"Are you sure you want to delete <b>{project_path.name}</b>?<br><br>"
+            "The project folder and all its data will be permanently removed. "
+            "This action cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -716,7 +719,8 @@ class Screen0Launcher(ScreenBase):
                 shutil.rmtree(project_path)
             self.app.unregister_project(str(project_path))
         except Exception as exc:
-            msgbox.critical(self, "Error", f"Could not delete project:\n{exc}")
+            msgbox.critical(self, "Failed to Delete Project",
+                            f"The project could not be deleted. Check that no files are open.\n\nDetail: {exc}")
             return
         self._load_and_render_projects()
 

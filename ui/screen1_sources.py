@@ -786,7 +786,8 @@ class Screen1Sources(ScreenBase):
             self._render_sources()
 
         def on_error(exc):
-            msgbox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
+            msgbox.critical(self, "Failed to Read File",
+                            f"The Excel file could not be opened. Make sure it is not open in another application.\n\nDetail: {exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -859,7 +860,8 @@ class Screen1Sources(ScreenBase):
             self._launch_chain_mapper()
 
         def on_error(exc):
-            msgbox.critical(self, "Error", f"Could not read Excel file:\n{exc}")
+            msgbox.critical(self, "Failed to Read File",
+                            f"The Excel file could not be opened. Make sure it is not open in another application.\n\nDetail: {exc}")
 
         self._run_background(worker, on_success, on_error)
 
@@ -887,7 +889,8 @@ class Screen1Sources(ScreenBase):
         reply = msgbox.question(
             self,
             "Remove Chain Link",
-            f"Remove '{entry['sheet_name']}' from the chain?",
+            f"Remove <b>{entry['sheet_name']}</b> from the chain?<br><br>"
+            "The remaining links will be reordered. Any column mappings for this link will be lost.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -917,9 +920,9 @@ class Screen1Sources(ScreenBase):
         sheet = self._sources[fi]["sheets"][si]
         reply = msgbox.question(
             self,
-            "Delete Sheet",
-            f"Remove '{sheet['sheet_name']}' from the project?\n\n"
-            "If this sheet has a chain, the entire chain will be discarded.",
+            "Remove Sheet",
+            f"Remove <b>{sheet['sheet_name']}</b> from the project?<br><br>"
+            "If this sheet has a chain attached, the entire chain will also be discarded.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -959,9 +962,9 @@ class Screen1Sources(ScreenBase):
 
         reply = msgbox.question(
             self,
-            "Continue to Mapper?",
-            "Are you sure you want to proceed?\n\n"
-            "You can still come back and add more sheets later.",
+            "Save and Continue?",
+            "Your selected sheets will be saved and you'll move on to the column mapper.<br><br>"
+            "You can always return here later to add or update data sources.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -991,8 +994,9 @@ class Screen1Sources(ScreenBase):
             if self._sheet_warnings:
                 msgbox.warning(
                     self,
-                    "Data Import Warnings",
-                    "\n\n".join(self._sheet_warnings),
+                    "Import Completed with Warnings",
+                    "Some sheets were saved but had issues worth reviewing:\n\n"
+                    + "\n\n".join(self._sheet_warnings),
                 )
             try:
                 from ui.screen2_mappings import Screen2Mappings
@@ -1004,7 +1008,8 @@ class Screen1Sources(ScreenBase):
 
         def on_error(exc):
             self._confirm_btn.setEnabled(True)
-            msgbox.critical(self, "Error", f"Could not save selected sheets:\n{exc}")
+            msgbox.critical(self, "Failed to Save Sheets",
+                            f"The selected sheets could not be saved. Check that the files are accessible.\n\nDetail: {exc}")
 
         self._run_background_with_progress(worker, on_progress, on_success, on_error)
 
