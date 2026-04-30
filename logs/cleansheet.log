@@ -291,3 +291,35 @@ ValueError: Column 'Region' not found in transaction table 'co'
 2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'ffafaf'
 2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'adadadad'
 2026-04-30 15:56:29  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 16:37:00  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 16:37:00  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:37:00  INFO      core.project_manager — Project opened: 'dadad'
+2026-04-30 16:37:00  INFO      core.project_manager — Project opened: 'ffafaf'
+2026-04-30 16:37:00  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 16:37:01  INFO      __main__ — Main window displayed
+2026-04-30 16:37:04  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:37:04  INFO      core.project_manager — Project opened: 'dadad'
+2026-04-30 16:37:04  INFO      core.project_manager — Project opened: 'ffafaf'
+2026-04-30 16:37:07  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:37:07  INFO      core.project_manager — Project opened: 'dadad'
+2026-04-30 16:37:09  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:37:34  INFO      core.project_manager — Project created: 'sales' at G:\docs\work\global data\tests\sales
+2026-04-30 16:37:34  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:37:46  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 16:38:03  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 16:38:08  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 16:39:14  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:39:29  INFO      core.mapping_manager — Mapping saved: map_001 → co.Segment ↔ selling_channel_segment_mapping.Segment
+2026-04-30 16:39:29  INFO      core.snapshot_manager — Snapshot created: commit_001 (label='Initial commit', tables=['co', 'sales_report'])
+2026-04-30 16:41:23  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 16:41:54  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 16:48:45  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 16:49:09  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:05:51  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:05:53  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:06:12  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:06:14  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:51:03  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 17:51:03  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 17:51:03  INFO      __main__ — Main window displayed
+2026-04-30 17:51:05  INFO      core.project_manager — Project opened: 'sales'

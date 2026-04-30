@@ -176,6 +176,9 @@ class Screen3Main(QWidget):
 
         self._mappings  = self._load_mappings()
         self._nav_items = build_nav_items(self._mappings)
+        # Nav keys whose badge has been confirmed by ViewMapping (takes priority
+        # over the background badge scan so we never overwrite a known-good state).
+        self._nav_keys_confirmed: set[str] = set()
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -221,21 +224,35 @@ class Screen3Main(QWidget):
             import json as _json
             from concurrent.futures import ThreadPoolExecutor
 
+            # Parse the ignored_errors.json — supports both legacy format
+            # {table.col: [row_indices]} and the new format
+            # {"rows": {table.col: [...]}, "values": {table.col: [...]}}.
             ignored_file = project_path / "metadata" / "data" / "ignored_errors.json"
+            ignored_rows_map: dict[str, set[int]] = {}
+            ignored_vals_map: dict[str, set[str]] = {}
             try:
                 with open(ignored_file, encoding="utf-8") as fh:
-                    ignored_map = {k: set(v) for k, v in _json.load(fh).items()}
+                    raw = _json.load(fh)
+                if "rows" in raw or "values" in raw:
+                    ignored_rows_map = {k: set(v) for k, v in raw.get("rows", {}).items()}
+                    ignored_vals_map = {k: set(v) for k, v in raw.get("values", {}).items()}
+                else:
+                    # Legacy format: keys are "table.col", values are lists of row indices
+                    ignored_rows_map = {k: set(v) for k, v in raw.items()}
             except Exception:
-                ignored_map = {}
+                pass
 
             def _detect_one(item: dict):
                 try:
-                    errors, total = detect_errors(project_path, item["mapping"])
-                    m   = item["mapping"]
+                    m = item["mapping"]
                     key = f"{m.get('transaction_table', '')}.{m.get('transaction_column', '')}"
-                    ignored       = ignored_map.get(key, set())
-                    visible_count = sum(1 for e in errors if int(e["row_index"]) not in ignored)
-                    badge_count   = max(0, total - (len(errors) - visible_count))
+                    ign_vals = frozenset(ignored_vals_map.get(key, set()))
+                    errors, total = detect_errors(project_path, m, ignored_values=ign_vals)
+                    ignored_rows = ignored_rows_map.get(key, set())
+                    visible_count = sum(
+                        1 for e in errors if int(e["row_index"]) not in ignored_rows
+                    )
+                    badge_count = max(0, total - (len(errors) - visible_count))
                     return item["key"], badge_count
                 except Exception:
                     return item["key"], 0
@@ -249,7 +266,11 @@ class Screen3Main(QWidget):
 
         def on_done(results: dict):
             for nav_key, count in results.items():
-                self.update_mapping_badge(nav_key, count)
+                # Skip any key already confirmed by ViewMapping — the view's
+                # result is authoritative and must not be overwritten by the
+                # background scan which may have finished later.
+                if nav_key not in self._nav_keys_confirmed:
+                    self.update_mapping_badge(nav_key, count)
 
         w = Worker(worker)
         w.finished.connect(on_done)
@@ -475,12 +496,12 @@ class Screen3Main(QWidget):
         )
         f_lay.addWidget(del_btn)
 
-        badge = QLabel("✓")
+        # Start in neutral loading state — background scan will update to ✓ or count.
+        badge = QLabel("…")
         badge.setFixedHeight(18)
         badge.setStyleSheet(
-            "color: #34d399; background: rgba(34,211,153,0.1); "
-            "border: 1px solid rgba(34,211,153,0.2); border-radius: 9px; "
-            "font-size: 10px; padding: 0 5px; border: none;"
+            "color: #94a3b8; background: rgba(255,255,255,0.05); "
+            "border-radius: 9px; font-size: 10px; padding: 0 5px; border: none;"
         )
         f_lay.addWidget(badge)
         self._nav_badges[key] = badge
@@ -590,7 +611,7 @@ class Screen3Main(QWidget):
         self._active_nav_key = active_key
 
     def update_mapping_badge(self, nav_key: str, error_count: int) -> None:
-        """Called by ViewMapping after errors are loaded to update the sidebar badge."""
+        """Update the sidebar badge for a mapping. Called by background scan and ViewMapping."""
         if nav_key not in self._nav_badges:
             return
         badge = self._nav_badges[nav_key]
@@ -608,6 +629,15 @@ class Screen3Main(QWidget):
                 "border: 1px solid rgba(239,68,68,0.2); border-radius: 9px; "
                 "font-size: 10px; padding: 0 5px;"
             )
+
+    def confirm_mapping_badge(self, nav_key: str, error_count: int) -> None:
+        """Called by ViewMapping after a full validation load completes.
+
+        Marks the nav key as authoritative so the background scan cannot
+        overwrite it with a stale or incorrectly-filtered count.
+        """
+        self._nav_keys_confirmed.add(nav_key)
+        self.update_mapping_badge(nav_key, error_count)
 
     # ------------------------------------------------------------------
     # Mapping deletion
@@ -704,7 +734,7 @@ class Screen3Main(QWidget):
                 project=self.project,
                 mapping=item["mapping"],
                 nav_key=item["key"],
-                on_badge_update=self.update_mapping_badge,
+                on_badge_update=self.confirm_mapping_badge,
             )
         elif item["key"] == "t_sources":
             from ui.views.view_t_sources import ViewTSources

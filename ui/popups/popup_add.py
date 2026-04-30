@@ -97,12 +97,10 @@ class _FieldWidget(QWidget):
     """Label + input + inline error for a single dim column."""
 
     def __init__(self, col_name: str, col_type: str, prefill: str = "",
-                 readonly: bool = False, is_key: bool = False,
-                 existing_values: set[str] | None = None):
+                 readonly: bool = False, is_key: bool = False):
         super().__init__()
-        self._col_type       = col_type
-        self._is_key         = is_key
-        self._existing_values = existing_values  # for duplicate check on key column
+        self._col_type = col_type
+        self._is_key   = is_key
         self.setStyleSheet("background: transparent;")
 
         lay = QVBoxLayout(self)
@@ -162,16 +160,8 @@ class _FieldWidget(QWidget):
         self._err_lbl.setVisible(False)
         lay.addWidget(self._err_lbl)
 
-    def _check_duplicate(self, text: str) -> str | None:
-        """Return error if key value already exists in the dimension table."""
-        if not self._is_key or self._existing_values is None:
-            return None
-        if text.strip() in self._existing_values:
-            return "This value already exists in the dimension — it would overwrite an existing row."
-        return None
-
     def _on_changed(self, text: str) -> None:
-        err = _validate(text, self._col_type) or self._check_duplicate(text)
+        err = _validate(text, self._col_type)
         if err:
             self.entry.setStyleSheet(_FIELD_ERROR)
             self._err_lbl.setText(err)
@@ -183,7 +173,7 @@ class _FieldWidget(QWidget):
 
     def validate(self) -> str | None:
         """Return error message or None.  Also updates visual state."""
-        err = _validate(self.entry.text(), self._col_type) or self._check_duplicate(self.entry.text())
+        err = _validate(self.entry.text(), self._col_type)
         if err:
             self.entry.setStyleSheet(_FIELD_ERROR)
             self._err_lbl.setText(err)
@@ -427,15 +417,9 @@ class PopupAdd(QDialog):
         row_idx += 1
 
         col_type = _infer_col_type(self._dim_df, self._mapped_col)
-        existing: set[str] | None = None
-        if self._dim_df is not None and self._mapped_col in self._dim_df.columns:
-            existing = set(
-                self._dim_df[self._mapped_col].dropna().astype(str).str.strip()
-            )
         fw = _FieldWidget(
             self._mapped_col, col_type,
             prefill=self._bad_value, is_key=True,
-            existing_values=existing,
         )
         grid.addWidget(fw, row_idx, 0, 1, 2)
         self._fields[self._mapped_col] = fw
@@ -541,6 +525,30 @@ class PopupAdd(QDialog):
             return
 
         row = {col: fw.value() for col, fw in self._fields.items()}
+
+        # Block only exact full-row duplicates (all columns must match).
+        # A shared value in one column is NOT a duplicate — only the complete
+        # combination of all column values being identical constitutes a dup.
+        if self._dim_df is not None and not self._dim_df.empty:
+            shared_cols = [c for c in row if c in self._dim_df.columns]
+            if shared_cols:
+                is_dup = any(
+                    all(
+                        str(self._dim_df.at[idx, c]).strip() == str(row[c]).strip()
+                        for c in shared_cols
+                    )
+                    for idx in self._dim_df.index
+                )
+                if is_dup:
+                    self._hint_lbl.setText(
+                        "<span style='color:#f87171;'>"
+                        "This exact row already exists in the dimension table — "
+                        "every column value matches an existing row."
+                        "</span>"
+                    )
+                    self._hint_lbl.setTextFormat(Qt.RichText)
+                    return
+
         self._on_confirm(row)
         self.accept()
 

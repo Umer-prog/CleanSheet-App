@@ -794,7 +794,10 @@ class Screen15ChainMapper(ScreenBase):
 
         def worker():
             from core.project_manager import open_project
-            from core.chain_writer import write_unified_csv
+            # Screen 3 append: load existing processed chain data and merge in
+            # only the new sheet — do NOT re-read previously chained source files
+            # so that already-resolved errors are never re-introduced.
+            from core.chain_writer import append_sheet_to_existing_chain
             proj_file = project_path / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
@@ -810,7 +813,9 @@ class Screen15ChainMapper(ScreenBase):
             proj["sheets_meta"] = sheets_meta
             with open(proj_file, "w", encoding="utf-8") as f:
                 _json.dump(proj, f, indent=2)
-            write_unified_csv(project_path, table_name, category, table_meta)
+            append_sheet_to_existing_chain(
+                project_path, table_name, category, table_meta, new_entry
+            )
             return open_project(project_path)
 
         def on_done(updated_project):

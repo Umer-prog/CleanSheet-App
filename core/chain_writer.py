@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from core.data_loader import get_sheet_as_dataframe, get_storage_format, write_table
+from core.data_loader import get_sheet_as_dataframe, get_storage_format, read_table, write_table
 
 
 def write_unified_csv(
@@ -122,3 +122,76 @@ def _output_path(project_path: Path, table_name: str, category: str) -> Path:
     if category == "Dimension":
         return project_path / "metadata" / "data" / "dim" / f"{table_name}{ext}"
     return project_path / "metadata" / "data" / "transactions" / f"{table_name}{ext}"
+
+
+# ── Screen 3 append-only path ─────────────────────────────────────────────────
+
+def append_sheet_to_existing_chain(
+    project_path: Path,
+    table_name: str,
+    category: str,
+    sheet_meta: dict,
+    new_entry: dict,
+) -> Path:
+    """Append a new sheet to an existing chain WITHOUT re-reading previous sources.
+
+    Used exclusively by Screen 3's "Append" flow. The already-processed chain
+    file (parquet/CSV) is loaded as-is, then only the new sheet is read from
+    disk and merged in. Previously chained sheets are never re-read from their
+    original Excel files, so resolved errors are not re-introduced.
+
+    For first-time chain creation (Screen 1 → 1.5 → Chainer flow), use
+    write_unified_csv instead — this function must not be called from that path.
+    """
+    project_path = Path(project_path)
+    out_path = _output_path(project_path, table_name, category)
+
+    # If the processed file doesn't exist yet, fall back to full rewrite.
+    if not out_path.exists():
+        return write_unified_csv(project_path, table_name, category, sheet_meta)
+
+    existing_df = read_table(out_path)
+
+    # Read only the newly appended sheet from disk.
+    new_df = _load(
+        new_entry["file_path"],
+        new_entry["sheet_name"],
+        new_entry.get("header_row"),
+    )
+
+    if new_df.empty:
+        return out_path
+
+    # Determine output columns from the existing processed file so new rows
+    # conform to the established schema (including source/sheet_name columns).
+    all_output_cols = list(existing_df.columns)
+    mapping: dict[str, str] = new_entry.get("column_mapping") or {}
+    mapped_secondary_vals: set[str] = set(mapping.values())
+
+    n = len(new_df)
+    out = pd.DataFrame("", index=range(n), columns=all_output_cols)
+
+    # Apply column mapping: secondary col name → primary col name.
+    for primary_col, sec_col in mapping.items():
+        if sec_col in new_df.columns and primary_col in out.columns:
+            out[primary_col] = new_df[sec_col].values
+
+    # Pass through any extra secondary columns that land in the existing schema
+    # (columns not part of the mapping but already present in the output file).
+    for col in new_df.columns:
+        if col not in mapped_secondary_vals and col in out.columns:
+            out[col] = new_df[col].values
+
+    if "source" in out.columns:
+        out["source"] = new_entry.get("label", "")
+    if "sheet_name" in out.columns:
+        out["sheet_name"] = new_entry.get("sheet_name", "")
+
+    merged = pd.concat([existing_df, out[all_output_cols]], ignore_index=True)
+
+    try:
+        write_table(merged, out_path)
+    except OSError as e:
+        raise OSError(f"chain_writer: could not append to '{out_path}': {e}") from e
+
+    return out_path

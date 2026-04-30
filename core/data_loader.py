@@ -89,7 +89,12 @@ def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
                     "Existing projects stay in their original format."
                 )
             try:
-                df.to_parquet(tmp_path, index=False, compression="snappy")
+                # Cast every column to plain string before writing so pyarrow
+                # never stores date-formatted values as timestamp/date types.
+                df_str = df.copy()
+                for col in df_str.columns:
+                    df_str[col] = df_str[col].fillna("").astype(str)
+                df_str.to_parquet(tmp_path, index=False, compression="snappy")
             except OSError as e:
                 if getattr(e, "errno", None) == 28 or getattr(e, "winerror", None) == 112:
                     raise OSError(
@@ -99,7 +104,7 @@ def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
                 raise
             # Read-back validation: confirm row count matches
             written = pd.read_parquet(tmp_path)
-            if len(written) != len(df):
+            if len(written) != len(df_str):
                 raise OSError(
                     f"Parquet write validation failed for '{dest_path.name}': "
                     f"wrote {len(df)} rows but read back {len(written)}. "
@@ -137,26 +142,38 @@ def _excel_numfmt_to_strftime(number_format: str) -> str | None:
     fmt = re.sub(r'\[[^\]]+\]', '', fmt)
     # Strip quoted literal text e.g. "dd \"of\" mmm"
     fmt = re.sub(r'"[^"]*"', '', fmt)
+    # Strip the text-cell suffix — Excel format strings can contain
+    # positive;negative;zero;text sections separated by semicolons.
+    # Only the first section applies to date values.
+    fmt = fmt.split(';')[0]
 
     # Must contain at least one unambiguous date/year token to qualify
     if not re.search(r'y{1,4}|d{1,4}|mmm', fmt, re.IGNORECASE):
         return None
 
     result = fmt
-    # Replace tokens longest-first to avoid partial matches
+    # Replace tokens longest-first to avoid partial matches.
+    # Year / month-name tokens first.
     result = re.sub(r'(?i)yyyy', '%Y', result)
     result = re.sub(r'(?i)yy',   '%y', result)
     result = re.sub(r'(?i)mmmm', '%B', result)
     result = re.sub(r'(?i)mmm',  '%b', result)
-    result = re.sub(r'(?i)mm',   '%m', result)
-    result = re.sub(r'(?i)m',    '%m', result)
+    # Day tokens before any single-letter replacements.
     result = re.sub(r'(?i)dddd', '%A', result)
     result = re.sub(r'(?i)ddd',  '%a', result)
     result = re.sub(r'(?i)dd',   '%d', result)
     result = re.sub(r'(?i)d',    '%d', result)
-    result = re.sub(r'(?i)hh',   '%H', result)
-    result = re.sub(r'(?i)h',    '%H', result)
-    result = re.sub(r'(?i)ss',   '%S', result)
+    # Hours + minutes: handle "hh:mm" and "h:mm" BEFORE replacing standalone
+    # mm so that minute tokens (context: after hours) map to %M, not %m.
+    result = re.sub(r'(?i)hh:mm', '%H:%M', result)
+    result = re.sub(r'(?i)h:mm',  '%H:%M', result)
+    result = re.sub(r'(?i)hh',    '%H',    result)
+    result = re.sub(r'(?i)h',     '%H',    result)
+    # Seconds
+    result = re.sub(r'(?i)ss', '%S', result)
+    # Any remaining mm / m are month tokens (time component already handled).
+    result = re.sub(r'(?i)mm', '%m', result)
+    result = re.sub(r'(?i)m',  '%m', result)
 
     return result if '%' in result else None
 
