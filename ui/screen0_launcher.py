@@ -28,14 +28,14 @@ _AVATAR_COLORS = [
     ("#34d399", "rgba(52,211,153,0.1)"),
     ("#f472b6", "rgba(244,114,182,0.1)"),
     ("#fbbf24", "rgba(251,191,36,0.1)"),
-    ("#64748b", "rgba(100,116,139,0.1)"),
+    ("#94a3b8", "rgba(148,163,184,0.12)"),
 ]
 
 
 def _row_label_html(name: str, company: str, selected: bool) -> str:
     name_color = "#93c5fd" if selected else "#94a3b8"
     company_part = (
-        f"<br><span style='color:#475569; font-size:13px; letter-spacing:0.5px;'>{company}</span>"
+        f"<br><span style='color:#94a3b8; font-size:13px; letter-spacing:0.5px;'>{company}</span>"
         if company else ""
     )
     return (
@@ -185,7 +185,7 @@ class Screen0Launcher(ScreenBase):
         self._count_pill.setFont(theme.font(13))
         self._count_pill.setFixedHeight(30)
         self._count_pill.setStyleSheet(
-            "color: #64748b; background: rgba(255,255,255,0.05); "
+            "color: #cbd5e1; background: rgba(255,255,255,0.05); "
             "padding: 0px 8px; border-radius: 10px; border: none;"
         )
         h_lay.addWidget(self._count_pill)
@@ -322,7 +322,7 @@ class Screen0Launcher(ScreenBase):
 
         app_sub_lbl = QLabel("Data Cleansing and Standardization Tool.")
         app_sub_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 17px;"
+            "color: #cbd5e1; background: transparent; border: none; font-size: 17px;"
         )
         text_block.addWidget(app_sub_lbl)
         hero_lay.addLayout(text_block)
@@ -339,7 +339,7 @@ class Screen0Launcher(ScreenBase):
         section_lbl = QLabel("SELECTED PROJECT")
         section_lbl.setFont(theme.font(10, "bold"))
         section_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; letter-spacing: 1px;"
+            "color: #94a3b8; background: transparent; border: none; letter-spacing: 1px;"
         )
         detail_lay.addWidget(section_lbl)
 
@@ -366,7 +366,7 @@ class Screen0Launcher(ScreenBase):
 
             k = QLabel(key)
             k.setFont(theme.font(12))
-            k.setStyleSheet("color: #475569; background: transparent; border: none;")
+            k.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
             k.setFixedWidth(130)
             rl.addWidget(k)
 
@@ -382,7 +382,7 @@ class Screen0Launcher(ScreenBase):
         r4, self._v_path = _detail_row("Folder Path", last=True)
         self._v_path.setFont(theme.font(11))
         self._v_path.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-family: 'Courier New', monospace;"
         )
         for r in (r1, r2, r3, r4):
@@ -434,7 +434,7 @@ class Screen0Launcher(ScreenBase):
 
         dm_lbl = QLabel("Dark Mode")
         dm_lbl.setFont(theme.font(11))
-        dm_lbl.setStyleSheet("color: #334155; background: transparent; border: none;")
+        dm_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
         sb_lay.addWidget(dm_lbl)
 
         self._dark_toggle = _DarkModeToggle(on=self.app.is_dark_mode_enabled())
@@ -481,7 +481,7 @@ class Screen0Launcher(ScreenBase):
             if not loaded:
                 lbl = QLabel("No projects yet.")
                 lbl.setFont(theme.font(12))
-                lbl.setStyleSheet("color: #475569; padding: 16px 18px; background: transparent;")
+                lbl.setStyleSheet("color: #94a3b8; padding: 16px 18px; background: transparent;")
                 self._list_layout.addWidget(lbl)
                 return
             for state in loaded:
@@ -727,7 +727,7 @@ class NewProjectScreen(ScreenBase):
         header_lbl = QLabel(
             "<span style='color:#f1f5f9; font-size:16px; font-weight:600;'>New Project</span>"
             "<br>"
-            "<span style='color:#475569; font-size:13px;'>Fill in the details to create a new workspace</span>"
+            "<span style='color:#94a3b8; font-size:13px;'>Fill in the details to create a new workspace</span>"
         )
         header_lbl.setTextFormat(Qt.RichText)
         header_lbl.setStyleSheet("background: transparent; border: none;")
@@ -738,7 +738,7 @@ class NewProjectScreen(ScreenBase):
         close_btn.setStyleSheet(
             "QPushButton { background: rgba(255,255,255,0.04); "
             "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
-            "color: #64748b; font-size: 12px; padding: 0; }"
+            "color: #cbd5e1; font-size: 12px; padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
         close_btn.clicked.connect(self._go_back)
@@ -760,7 +760,7 @@ class NewProjectScreen(ScreenBase):
             wl.setSpacing(7)
             lbl = QLabel(label_text.upper())
             lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; "
+                "color: #94a3b8; background: transparent; border: none; "
                 "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             )
             wl.addWidget(lbl)
@@ -788,7 +788,7 @@ class NewProjectScreen(ScreenBase):
         lw_lay.setSpacing(7)
         loc_lbl = QLabel("SAVE LOCATION")
         loc_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #94a3b8; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         lw_lay.addWidget(loc_lbl)

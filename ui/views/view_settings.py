@@ -36,7 +36,7 @@ def merged_settings_payload(project: dict, history_enabled: bool) -> dict:
 def _field_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        "color: #475569; font-size: 11px; font-weight: 600; "
+        "color: #cbd5e1; font-size: 11px; font-weight: 600; "
         "background: transparent; border: none;"
     )
     return lbl
@@ -52,13 +52,13 @@ def _field_input(value: str = "", placeholder: str = "", readonly: bool = False)
         e.setStyleSheet(
             "QLineEdit { background: rgba(255,255,255,0.02); "
             "border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; "
-            "color: #64748b; font-size: 13px; padding: 0 12px; }"
+            "color: #94a3b8; font-size: 13px; padding: 0 12px; }"
         )
     else:
         e.setStyleSheet(
-            "QLineEdit { background: rgba(255,255,255,0.04); "
-            "border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; "
-            "color: #64748b; font-size: 13px; padding: 0 12px; }"
+            "QLineEdit { background: rgba(255,255,255,0.05); "
+            "border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; "
+            "color: #f1f5f9; font-size: 13px; padding: 0 12px; }"
             "QLineEdit:focus { border-color: rgba(59,130,246,0.5); }"
         )
     return e
@@ -98,7 +98,7 @@ class ViewSettings(ScreenBase):
             "Update project details and history preference, then save to apply changes."
         )
         meta_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
@@ -178,7 +178,7 @@ class ViewSettings(ScreenBase):
             "When enabled, a snapshot is created after each table update or revert."
         )
         hist_sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         hist_text.addWidget(hist_title)
         hist_text.addWidget(hist_sub)

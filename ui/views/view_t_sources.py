@@ -119,7 +119,7 @@ class ViewTSources(ScreenBase):
             "or add new transaction tables."
         )
         meta_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
@@ -162,14 +162,14 @@ class ViewTSources(ScreenBase):
         sch_lay.setContentsMargins(18, 0, 18, 0)
         sc_title = QLabel("CURRENT TRANSACTION TABLES")
         sc_title.setStyleSheet(
-            "color: #64748b; font-size: 11px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         sch_lay.addWidget(sc_title, 1)
         self._count_lbl = QLabel("")
         self._count_lbl.setFixedHeight(20)
         self._count_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: rgba(255,255,255,13); "
+            "color: #94a3b8; font-size: 11px; background: rgba(255,255,255,13); "
             "border-radius: 10px; padding: 2px 8px; border: none;"
         )
         self._count_lbl.setVisible(False)
@@ -209,7 +209,7 @@ class ViewTSources(ScreenBase):
             empty = QLabel("No transaction tables added yet.")
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
-                "color: #334155; font-size: 12px; background: transparent; "
+                "color: #94a3b8; font-size: 12px; background: transparent; "
                 "padding: 32px; border: none;"
             )
             self._rows_layout.addWidget(empty)
@@ -259,7 +259,7 @@ class ViewTSources(ScreenBase):
         )
         meta_lbl = QLabel("Transaction table")
         meta_lbl.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         info_col.addWidget(name_lbl)
         info_col.addWidget(meta_lbl)
@@ -376,7 +376,7 @@ class ViewTSources(ScreenBase):
         label = f"{entry.get('label', '')} · {entry.get('sheet_name', '')}"
         entry_lbl = QLabel(label)
         entry_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         lay.addWidget(entry_lbl, 1)
 

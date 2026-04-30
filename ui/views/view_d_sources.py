@@ -114,7 +114,7 @@ class _OrphanDeleteConfirm:
         cancel_btn.setStyleSheet(
             "QPushButton { background: transparent; "
             "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
-            "color: #64748b; font-size: 13px; padding: 0 18px; }"
+            "color: #cbd5e1; font-size: 13px; padding: 0 18px; }"
             "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
         )
         cancel_btn.clicked.connect(self._dlg.reject)
@@ -192,7 +192,7 @@ class ViewDSources(ScreenBase):
             "may be permanently deleted."
         )
         meta_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
@@ -229,14 +229,14 @@ class ViewDSources(ScreenBase):
         sch_lay.setContentsMargins(18, 0, 18, 0)
         sc_title = QLabel("CURRENT DIMENSION TABLES")
         sc_title.setStyleSheet(
-            "color: #64748b; font-size: 11px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         sch_lay.addWidget(sc_title, 1)
         self._count_lbl = QLabel("")
         self._count_lbl.setFixedHeight(20)
         self._count_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: rgba(255,255,255,13); "
+            "color: #94a3b8; font-size: 11px; background: rgba(255,255,255,13); "
             "border-radius: 10px; padding: 2px 8px; border: none;"
         )
         self._count_lbl.setVisible(False)
@@ -261,7 +261,7 @@ class ViewDSources(ScreenBase):
             "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
             "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
             "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
-            "QLineEdit::placeholder { color: #334155; }"
+            "QLineEdit::placeholder { color: rgba(148,163,184,0.55); }"
         )
         self._search_bar.textChanged.connect(self._on_search_changed)
         sf_lay.addWidget(self._search_bar)
@@ -324,7 +324,7 @@ class ViewDSources(ScreenBase):
             empty = QLabel(msg)
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
-                "color: #334155; font-size: 12px; background: transparent; "
+                "color: #94a3b8; font-size: 12px; background: transparent; "
                 "padding: 32px; border: none;"
             )
             self._rows_layout.addWidget(empty)
@@ -378,7 +378,7 @@ class ViewDSources(ScreenBase):
         meta_text = "No active mappings — orphaned" if is_orphan else "Dimension table"
         meta_lbl = QLabel(meta_text)
         meta_lbl.setStyleSheet(
-            f"color: {'#f59e0b' if is_orphan else '#475569'}; "
+            f"color: {'#f59e0b' if is_orphan else '#94a3b8'}; "
             "font-size: 11px; background: transparent; border: none;"
         )
         info_col.addWidget(name_lbl)
@@ -410,7 +410,7 @@ class ViewDSources(ScreenBase):
         else:
             locked_lbl = QLabel("Locked")
             locked_lbl.setStyleSheet(
-                "color: #475569; font-size: 11px; "
+                "color: #94a3b8; font-size: 11px; "
                 "background: rgba(255,255,255,0.04); "
                 "border: 1px solid rgba(255,255,255,0.08); "
                 "border-radius: 5px; padding: 2px 10px;"
@@ -511,7 +511,7 @@ class ViewDSources(ScreenBase):
         label = f"{entry.get('label', '')} · {entry.get('sheet_name', '')}"
         entry_lbl = QLabel(label)
         entry_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         lay.addWidget(entry_lbl, 1)
 

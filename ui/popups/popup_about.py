@@ -67,7 +67,7 @@ class PopupAbout(QDialog):
             lbl = QLabel(label)
             lbl.setFixedWidth(80)
             lbl.setStyleSheet(
-                "color: #475569; font-size: 11px; font-weight: 600; "
+                "color: #cbd5e1; font-size: 11px; font-weight: 600; "
                 "background: transparent; border: none;"
             )
             val = QLabel(value)
@@ -103,7 +103,7 @@ class PopupAbout(QDialog):
 
         copy_lbl = QLabel(f"© 2025 {COMPANY}")
         copy_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         f_lay.addWidget(copy_lbl, 1)
 

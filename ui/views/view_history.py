@@ -138,7 +138,7 @@ class _SnapshotLabelDialog:
         cancel_btn.setStyleSheet(
             "QPushButton { background: transparent; "
             "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
-            "color: #64748b; font-size: 12px; padding: 0 18px; }"
+            "color: #cbd5e1; font-size: 12px; padding: 0 18px; }"
             "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
         )
         cancel_btn.clicked.connect(self._dlg.reject)
@@ -207,7 +207,7 @@ class ViewHistory(ScreenBase):
             "reverting restores transactions, dimension tables, and mappings together."
         )
         meta_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         tb_text.addWidget(title_lbl)
         tb_text.addWidget(meta_lbl)
@@ -257,14 +257,14 @@ class ViewHistory(ScreenBase):
         lh_lay.setContentsMargins(18, 0, 18, 0)
         lh_title = QLabel("COMMITS")
         lh_title.setStyleSheet(
-            "color: #64748b; font-size: 11px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         lh_lay.addWidget(lh_title, 1)
         self._snap_count_lbl = QLabel("")
         self._snap_count_lbl.setFixedHeight(20)
         self._snap_count_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: rgba(255,255,255,13); "
+            "color: #94a3b8; font-size: 11px; background: rgba(255,255,255,13); "
             "border-radius: 10px; padding: 2px 8px; border: none;"
         )
         self._snap_count_lbl.setVisible(False)
@@ -297,7 +297,7 @@ class ViewHistory(ScreenBase):
         rh_lay.setSpacing(12)
         rh_title = QLabel("COMMIT DETAILS")
         rh_title.setStyleSheet(
-            "color: #64748b; font-size: 11px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 11px; font-weight: 600; "
             "background: transparent; border: none;"
         )
         rh_lay.addWidget(rh_title, 1)
@@ -332,7 +332,7 @@ class ViewHistory(ScreenBase):
         self._current_commit_lbl = QLabel("")
         self._current_commit_lbl.setTextFormat(Qt.RichText)
         self._current_commit_lbl.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         self._current_commit_lbl.setVisible(False)
         rb_lay.addWidget(self._current_commit_lbl)
@@ -451,7 +451,7 @@ class ViewHistory(ScreenBase):
             lbl = QLabel("History is OFF in settings.")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet(
-                "color: #334155; font-size: 12px; background: transparent; "
+                "color: #94a3b8; font-size: 12px; background: transparent; "
                 "padding: 32px; border: none;"
             )
             self._list_layout.addWidget(lbl)
@@ -482,7 +482,7 @@ class ViewHistory(ScreenBase):
             lbl = QLabel("No commits yet.")
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet(
-                "color: #334155; font-size: 12px; background: transparent; "
+                "color: #94a3b8; font-size: 12px; background: transparent; "
                 "padding: 32px; border: none;"
             )
             self._list_layout.addWidget(lbl)
@@ -534,7 +534,7 @@ class ViewHistory(ScreenBase):
             label_text = str(manifest.get("label", "")).strip() or "(no label)"
             label_lbl = QLabel(label_text)
             label_lbl.setStyleSheet(
-                "color: #475569; font-size: 11px; background: transparent; border: none;"
+                "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
             )
             row_lay.addWidget(label_lbl)
 
@@ -564,7 +564,7 @@ class ViewHistory(ScreenBase):
                     )
                 elif "34d399" not in ss:   # leave the HEAD pill alone
                     lbl.setStyleSheet(
-                        "color: #475569; font-size: 11px; background: transparent; border: none;"
+                        "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
                     )
 
         self._selected_manifest = manifest
@@ -588,7 +588,7 @@ class ViewHistory(ScreenBase):
         if is_current:
             self._current_commit_lbl.setText(
                 f"<span style='color:#34d399;'>●  HEAD</span>"
-                f"  <span style='color:#334155;'>— this is the currently active commit</span>"
+                f"  <span style='color:#94a3b8;'>— this is the currently active commit</span>"
             )
         else:
             current_display = (
@@ -596,7 +596,7 @@ class ViewHistory(ScreenBase):
                 if self._current_commit_id else "none"
             )
             self._current_commit_lbl.setText(
-                f"<span style='color:#475569;'>Current HEAD:</span>"
+                f"<span style='color:#94a3b8;'>Current HEAD:</span>"
                 f"  <span style='color:#60a5fa;'>{current_display}</span>"
             )
         self._current_commit_lbl.setVisible(True)

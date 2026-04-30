@@ -132,7 +132,7 @@ class _PandasModel(QAbstractTableModel):
     _ERR_BG  = QColor(239, 68, 68, 40)
     _ERR_FG  = QColor("#f87171")
     _NORM_FG = QColor("#94a3b8")
-    _HDR_FG  = QColor("#475569")
+    _HDR_FG  = QColor("#cbd5e1")
 
     def __init__(self, df: pd.DataFrame,
                  error_rows: dict[int, str] | None = None,
@@ -294,7 +294,7 @@ class ViewMapping(ScreenBase):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{tx_t}.{tx_c}"
             f"</span>"
-            f"<span style='color:#334155; font-size:15px;'>  →  </span>"
+            f"<span style='color:#94a3b8; font-size:15px;'>  →  </span>"
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{dim_t}.{dim_c}"
             f"</span>"
@@ -324,7 +324,7 @@ class ViewMapping(ScreenBase):
 
         self._tx_range_lbl = QLabel("row 0–0 of 0")
         self._tx_range_lbl.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         pager.addWidget(self._tx_range_lbl)
 
@@ -396,7 +396,7 @@ class ViewMapping(ScreenBase):
 
         sec_title = QLabel("TABLES")
         sec_title.setStyleSheet(
-            "color: #64748b; font-size: 10px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 10px; font-weight: 600; "
             "letter-spacing: 1px; background: transparent; border: none;"
         )
         hdr_lay.addWidget(sec_title)
@@ -404,7 +404,7 @@ class ViewMapping(ScreenBase):
 
         self._table_hint_lbl = QLabel("Error rows highlighted  ·  Click error to select")
         self._table_hint_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         self._table_hint_lbl.setVisible(False)
         hdr_lay.addWidget(self._table_hint_lbl)
@@ -487,7 +487,7 @@ class ViewMapping(ScreenBase):
         no_err_sub = QLabel("All values match the dimension table")
         no_err_sub.setAlignment(Qt.AlignCenter)
         no_err_sub.setStyleSheet(
-            "color: #334155; font-size: 12px; "
+            "color: #94a3b8; font-size: 12px; "
             "background: transparent; border: none;"
         )
         no_err_lay.addWidget(no_err_sub)
@@ -556,7 +556,7 @@ class ViewMapping(ScreenBase):
 
         self._footer_hint = QLabel("Select an error below to resolve it.")
         self._footer_hint.setStyleSheet(
-            "color: #475569; font-size: 12px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
         )
         lay.addWidget(self._footer_hint, 1)
 
@@ -584,7 +584,7 @@ class ViewMapping(ScreenBase):
             "background: rgba(255,255,255,0.03); "
             "border: 1px solid rgba(255,255,255,0.07); "
             "border-radius: 8px; "
-            "color: #334155; font-size: 13px; "
+            "color: rgba(148,163,184,0.45); font-size: 13px; "
             "padding: 0 20px; "
             "}"
         )
@@ -604,7 +604,7 @@ class ViewMapping(ScreenBase):
             "padding: 0 20px; "
             "} "
             "QPushButton:hover:enabled { background: rgba(59,130,246,0.2); } "
-            "QPushButton:disabled { color: #334155; border-color: rgba(255,255,255,0.07); "
+            "QPushButton:disabled { color: rgba(148,163,184,0.45); border-color: rgba(255,255,255,0.07); "
             "background: rgba(255,255,255,0.03); }"
         )
         lay.addWidget(self._replace_btn)
@@ -622,7 +622,7 @@ class ViewMapping(ScreenBase):
             "} "
             "QPushButton:hover:enabled { background: #2563eb; } "
             "QPushButton:disabled { background: rgba(255,255,255,0.03); "
-            "color: #334155; }"
+            "color: rgba(148,163,184,0.45); }"
         )
         lay.addWidget(self._add_btn)
 
@@ -787,7 +787,7 @@ class ViewMapping(ScreenBase):
         clear_layout(self._err_list_layout)
         lbl = QLabel("Loading…")
         lbl.setStyleSheet(
-            "color: #475569; font-size: 12px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
         )
         self._err_list_layout.addWidget(lbl)
         self._no_errors_widget.setVisible(False)
@@ -840,7 +840,7 @@ class ViewMapping(ScreenBase):
                 )
                 notice.setWordWrap(True)
                 notice.setStyleSheet(
-                    "color: #64748b; font-size: 11px; background: rgba(255,255,255,0.03); "
+                    "color: #94a3b8; font-size: 11px; background: rgba(255,255,255,0.03); "
                     "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
                     "padding: 8px 12px; margin: 4px 0;"
                 )
@@ -888,12 +888,12 @@ class ViewMapping(ScreenBase):
 
         col_lbl = QLabel(col_name)
         col_lbl.setStyleSheet(
-            "color: #64748b; font-size: 11px; background: transparent; border: none;"
+            "color: #cbd5e1; font-size: 11px; background: transparent; border: none;"
         )
         lay.addWidget(col_lbl)
 
         dot = QLabel("·")
-        dot.setStyleSheet("color: #334155; background: transparent; border: none;")
+        dot.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
         lay.addWidget(dot)
 
         val_lbl = QLabel(bad_val if bad_val else "(empty)")
@@ -1009,7 +1009,7 @@ class ViewMapping(ScreenBase):
                 )
             else:
                 self._footer_hint.setStyleSheet(
-                    "color: #475569; font-size: 12px; "
+                    "color: #94a3b8; font-size: 12px; "
                     "background: transparent; border: none;"
                 )
 
@@ -1468,7 +1468,7 @@ def _table_style() -> str:
         "} "
         "QHeaderView::section:horizontal { "
         "background-color: #13161e; "
-        "color: #475569; "
+        "color: #cbd5e1; "
         "font-size: 10px; "
         "font-weight: 600; "
         "font-family: 'Segoe UI'; "
@@ -1481,7 +1481,7 @@ def _table_style() -> str:
         "} "
         "QHeaderView::section:vertical { "
         "background-color: #13161e; "
-        "color: #334155; "
+        "color: #cbd5e1; "
         "font-size: 10px; "
         "font-family: 'Courier New'; "
         "padding: 0 8px; "
@@ -1577,7 +1577,7 @@ class _ConfirmPopup:
             "background: transparent; "
             "border: 1px solid rgba(255,255,255,0.12); "
             "border-radius: 7px; "
-            "color: #64748b; font-size: 13px; "
+            "color: #cbd5e1; font-size: 13px; "
             "padding: 0 18px; "
             "} "
             "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
@@ -1674,7 +1674,7 @@ class _BulkScopePopup:
             "background: transparent; "
             "border: 1px solid rgba(255,255,255,0.12); "
             "border-radius: 7px; "
-            "color: #64748b; font-size: 13px; "
+            "color: #cbd5e1; font-size: 13px; "
             "padding: 0 18px; "
             "} "
             "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"

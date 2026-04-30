@@ -134,7 +134,7 @@ class Screen1Sources(ScreenBase):
         brand_lbl = QLabel(
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#64748b; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -144,7 +144,7 @@ class Screen1Sources(ScreenBase):
         # Progress steps section label
         steps_label = QLabel("SETUP PROGRESS")
         steps_label.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -152,7 +152,7 @@ class Screen1Sources(ScreenBase):
 
         # Steps
         steps_frame = QFrame()
-        steps_frame.setStyleSheet("QFrame { background: transparent; border: none; color: #64748b;}")
+        steps_frame.setStyleSheet("QFrame { background: transparent; border: none; color: #cbd5e1;}")
         sf_lay = QVBoxLayout(steps_frame)
         sf_lay.setContentsMargins(12, 8, 12, 8)
         sf_lay.setSpacing(4)
@@ -168,7 +168,7 @@ class Screen1Sources(ScreenBase):
         # Project info section label
         proj_section = QLabel("PROJECT")
         proj_section.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 8px 18px 12px 18px; margin-top: 4px; "
         )
@@ -191,7 +191,7 @@ class Screen1Sources(ScreenBase):
         )
         proj_company_lbl = QLabel(project.get("company", ""))
         proj_company_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 10px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 10px;"
         )
         pc_lay.addWidget(proj_name_lbl)
         pc_lay.addWidget(proj_company_lbl)
@@ -312,14 +312,14 @@ class Screen1Sources(ScreenBase):
         fh_lay.setContentsMargins(20, 0, 20, 0)
         fh_title = QLabel("LOADED FILES")
         fh_title.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 11px; font-weight: 600; letter-spacing: 1px;"
         )
         fh_lay.addWidget(fh_title)
         fh_lay.addStretch()
         self._files_count_lbl = QLabel("0 files")
         self._files_count_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 11px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 11px;"
         )
         fh_lay.addWidget(self._files_count_lbl)
         files_lay.addWidget(files_hdr)
@@ -350,7 +350,7 @@ class Screen1Sources(ScreenBase):
             "Both Transaction and Dimension sheets must be present to continue"
         )
         self._footer_hint.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 12px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
         )
         fb_lay.addWidget(self._footer_hint, 1)
 
@@ -404,7 +404,7 @@ class Screen1Sources(ScreenBase):
             circle.setStyleSheet(
                 "QLabel { background: rgba(255,255,255,0.05); border-radius: 11px; "
                 "border: 1px solid rgba(255,255,255,0.1); "
-                "color: #475569; font-size: 10px; }"
+                "color: #94a3b8; font-size: 10px; }"
             )
         sl.addWidget(circle)
 
@@ -420,7 +420,7 @@ class Screen1Sources(ScreenBase):
             )
         else:
             lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; font-size: 12px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
             )
         sl.addWidget(lbl, 1)
         return step
@@ -492,13 +492,13 @@ class Screen1Sources(ScreenBase):
         title = QLabel("No files added yet")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 14px; font-weight: 500;"
         )
         sub = QLabel("Click Add File to add an Excel file here")
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 12px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
         )
 
         lay.addWidget(icon_box, 0, Qt.AlignHCenter)
@@ -535,7 +535,7 @@ class Screen1Sources(ScreenBase):
 
         fname = QLabel("Previously loaded tables")
         fname.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 13px; font-weight: 500;"
         )
         info_col.addWidget(fname)
@@ -746,7 +746,7 @@ class Screen1Sources(ScreenBase):
             msg if msg else "Both Transaction and Dimension sheets must be present to continue"
         )
         self._footer_hint.setStyleSheet(
-            f"color: {'#f87171' if msg else '#475569'}; "
+            f"color: {'#f87171' if msg else '#94a3b8'}; "
             "background: transparent; border: none; font-size: 12px;"
         )
 

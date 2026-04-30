@@ -114,7 +114,7 @@ class _FieldWidget(QWidget):
         lbl_row.setSpacing(6)
         col_lbl = QLabel(col_name.upper())
         col_lbl.setStyleSheet(
-            "color: #475569; font-size: 10px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 10px; font-weight: 600; "
             "letter-spacing: 0.7px; background: transparent; border: none;"
         )
         lbl_row.addWidget(col_lbl)
@@ -309,7 +309,7 @@ class PopupAdd(QDialog):
         )
         sub.setTextFormat(Qt.RichText)
         sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         text_col.addWidget(sub)
         lay.addLayout(text_col, 1)
@@ -342,14 +342,14 @@ class PopupAdd(QDialog):
         lay.setSpacing(8)
 
         _lbl(lay, "⚠", "color:#f87171; font-size:11px;")
-        _lbl(lay, "Error value:", "color:#64748b; font-size:11px;")
+        _lbl(lay, "Error value:", "color:#cbd5e1; font-size:11px;")
         _lbl(
             lay,
             self._bad_value or "(empty)",
             "color:#f87171; font-size:12px; font-weight:600; font-family:'Courier New';",
         )
         _lbl(lay, "— pre-filled as the key column below",
-             "color:#334155; font-size:11px;")
+             "color:#94a3b8; font-size:11px;")
         lay.addStretch()
         return strip
 
@@ -502,7 +502,7 @@ class PopupAdd(QDialog):
         )
         self._hint_lbl.setTextFormat(Qt.RichText)
         self._hint_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         lay.addWidget(self._hint_lbl, 1)
 
@@ -575,7 +575,7 @@ def _section_divider(title: str) -> QWidget:
 
     lbl = QLabel(title.upper())
     lbl.setStyleSheet(
-        "color: #334155; font-size: 10px; font-weight: 600; "
+        "color: #cbd5e1; font-size: 10px; font-weight: 600; "
         "letter-spacing: 0.8px; background: transparent; border: none;"
     )
     lay.addWidget(lbl)

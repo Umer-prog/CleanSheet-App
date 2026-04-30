@@ -99,7 +99,7 @@ class _MappingDeleteConfirm:
         mapping_lbl = QLabel(
             f"<span style='color:#94a3b8;'>Mapping to delete:</span><br>"
             f"<span style='color:#60a5fa; font-weight:600;'>{tx_t}.{tx_c}</span>"
-            f"<span style='color:#334155;'>  →  </span>"
+            f"<span style='color:#94a3b8;'>  →  </span>"
             f"<span style='color:#60a5fa; font-weight:600;'>{dim_t}.{dim_c}</span>"
         )
         mapping_lbl.setTextFormat(Qt.RichText)
@@ -112,7 +112,7 @@ class _MappingDeleteConfirm:
         )
         warn_lbl.setWordWrap(True)
         warn_lbl.setStyleSheet(
-            "color: #64748b; font-size: 12px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
         )
         b_lay.addWidget(warn_lbl)
         outer.addWidget(body, 1)
@@ -131,7 +131,7 @@ class _MappingDeleteConfirm:
         cancel_btn.setStyleSheet(
             "QPushButton { background: transparent; "
             "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
-            "color: #64748b; font-size: 13px; padding: 0 18px; }"
+            "color: #cbd5e1; font-size: 13px; padding: 0 18px; }"
             "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
         )
         cancel_btn.clicked.connect(self._dlg.reject)
@@ -308,7 +308,7 @@ class Screen3Main(QWidget):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -327,7 +327,7 @@ class Screen3Main(QWidget):
 
         ws_section = QLabel("WORKSPACE")
         ws_section.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         wi_lay.addWidget(ws_section)
@@ -341,7 +341,7 @@ class Screen3Main(QWidget):
 
         ws_company = QLabel(str(self.project.get("company", "")))
         ws_company.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 11px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 11px;"
         )
         wi_lay.addWidget(ws_company)
         lay.addWidget(ws_info)
@@ -388,7 +388,7 @@ class Screen3Main(QWidget):
 
         m_lbl = QLabel("MAPPINGS")
         m_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         mh_lay.addWidget(m_lbl, 1)
@@ -420,7 +420,7 @@ class Screen3Main(QWidget):
             if item["kind"] == "section_label":
                 sec = QLabel(item["label"])
                 sec.setStyleSheet(
-                    "color: #64748b; background: transparent; border: none; "
+                    "color: #cbd5e1; background: transparent; border: none; "
                     "font-size: 10px; font-weight: 600; letter-spacing: 1px; "
                     "padding: 14px 18px 6px 18px;"
                 )
@@ -455,7 +455,7 @@ class Screen3Main(QWidget):
 
         lbl = QLabel(item["label"])
         lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 12px;"
+            "color: #cbd5e1; background: transparent; border: none; font-size: 12px;"
         )
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
@@ -466,7 +466,7 @@ class Screen3Main(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(
             "QPushButton { background: rgba(239,68,68,0.0); border: none; "
-            "border-radius: 4px; color: #475569; font-size: 14px; font-weight: 700; "
+            "border-radius: 4px; color: #94a3b8; font-size: 14px; font-weight: 700; "
             "padding: 0; }"
             "QPushButton:hover { background: rgba(239,68,68,0.15); color: #f87171; }"
         )
@@ -511,14 +511,14 @@ class Screen3Main(QWidget):
         icon_lbl.setFixedWidth(16)
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 11px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 11px;"
         )
         f_lay.addWidget(icon_lbl)
         self._nav_icons[key] = icon_lbl
 
         lbl = QLabel(item["label"])
         lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 13px;"
+            "color: #cbd5e1; background: transparent; border: none; font-size: 13px;"
         )
         f_lay.addWidget(lbl, 1)
         self._nav_labels[key] = lbl
@@ -557,7 +557,7 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #475569; background: transparent; border: none; font-size: 12px;"
+                            "color: #cbd5e1; background: transparent; border: none; font-size: 12px;"
                         )
             else:
                 if is_active:
@@ -580,11 +580,11 @@ class Screen3Main(QWidget):
                     )
                     if key in self._nav_labels:
                         self._nav_labels[key].setStyleSheet(
-                            "color: #64748b; background: transparent; border: none; font-size: 13px;"
+                            "color: #cbd5e1; background: transparent; border: none; font-size: 13px;"
                         )
                     if key in self._nav_icons:
                         self._nav_icons[key].setStyleSheet(
-                            "color: #475569; background: transparent; border: none; font-size: 11px;"
+                            "color: #94a3b8; background: transparent; border: none; font-size: 11px;"
                         )
 
         self._active_nav_key = active_key

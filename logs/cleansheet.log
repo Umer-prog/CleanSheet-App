@@ -269,3 +269,25 @@ ValueError: Column 'Region' not found in transaction table 'co'
 2026-04-30 14:33:25  INFO      core.project_manager — Project opened: 'adadadad'
 2026-04-30 14:33:33  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
 2026-04-30 14:33:40  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 15:39:27  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 15:39:27  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 15:39:27  INFO      core.project_manager — Project opened: 'dadad'
+2026-04-30 15:39:27  INFO      core.project_manager — Project opened: 'ffafaf'
+2026-04-30 15:39:28  INFO      __main__ — Main window displayed
+2026-04-30 15:39:28  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:39:30  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:39:59  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 15:40:22  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 15:42:12  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 15:42:48  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:43:02  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 15:43:13  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-04-30 15:54:54  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:55:40  INFO      core.mapping_manager — Mapping saved: map_001 → co.Segment ↔ selling_channel_segment_mapping.Segment
+2026-04-30 15:55:40  INFO      core.snapshot_manager — Snapshot created: commit_001 (label='Initial commit', tables=['co'])
+2026-04-30 15:56:07  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'dadad'
+2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'ffafaf'
+2026-04-30 15:56:27  INFO      core.project_manager — Project opened: 'adadadad'
+2026-04-30 15:56:29  INFO      core.project_manager — Project opened: 'adadadad'

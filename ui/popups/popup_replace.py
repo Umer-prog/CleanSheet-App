@@ -165,7 +165,7 @@ class PopupReplace(QDialog):
         )
         sub.setTextFormat(Qt.RichText)
         sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         text_col.addWidget(sub)
         lay.addLayout(text_col, 1)
@@ -218,14 +218,14 @@ class PopupReplace(QDialog):
         lay.setSpacing(8)
 
         _lbl(lay, "⚠", "color:#f87171; font-size:11px;")
-        _lbl(lay, "Current bad value:", "color:#64748b; font-size:11px;")
+        _lbl(lay, "Current bad value:", "color:#cbd5e1; font-size:11px;")
         _lbl(
             lay,
             self._bad_value or "(empty)",
             "color:#f87171; font-size:12px; font-weight:600; font-family:'Courier New';",
         )
-        _lbl(lay, "→", "color:#334155;")
-        _lbl(lay, "replace with a valid dimension value", "color:#334155; font-size:11px;")
+        _lbl(lay, "→", "color:#94a3b8;")
+        _lbl(lay, "replace with a valid dimension value", "color:#94a3b8; font-size:11px;")
         lay.addStretch()
         return strip
 
@@ -250,12 +250,12 @@ class PopupReplace(QDialog):
         th_lay.setContentsMargins(14, 0, 14, 0)
         th_lay.setSpacing(8)
         _lbl(th_lay, "DIMENSION TABLE",
-             "color:#64748b; font-size:10px; font-weight:600; letter-spacing:1px;")
+             "color:#cbd5e1; font-size:10px; font-weight:600; letter-spacing:1px;")
         _lbl(th_lay, self._dim_table,
              "color:#60a5fa; font-size:11px; font-family:'Courier New';")
         th_lay.addStretch()
         self._row_count_lbl = _lbl(th_lay, f"{len(self._dim_df)} rows",
-                                   "color:#334155; font-size:11px;")
+                                   "color:#94a3b8; font-size:11px;")
         lay.addWidget(tbl_hdr)
 
         # ── Search bar ────────────────────────────────────────────────
@@ -276,7 +276,7 @@ class PopupReplace(QDialog):
             "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
             "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
             "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
-            "QLineEdit::placeholder { color: #334155; }"
+            "QLineEdit::placeholder { color: rgba(148,163,184,0.55); }"
         )
         self._table_search.textChanged.connect(self._on_table_search)
         sf_lay.addWidget(self._table_search)
@@ -310,7 +310,7 @@ class PopupReplace(QDialog):
             "color: #93c5fd; }"
             "QHeaderView { border: none; }"
             "QHeaderView::section { background: rgba(255,255,255,0.02); "
-            "color: #334155; font-size: 10px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 10px; font-weight: 600; "
             "border: none; border-bottom: 1px solid rgba(255,255,255,0.06); "
             "padding: 4px 14px; }"
             "QScrollBar:vertical { width: 6px; background: transparent; margin: 0; }"
@@ -404,7 +404,7 @@ class PopupReplace(QDialog):
             "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
             "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
             "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
-            "QLineEdit::placeholder { color: #334155; }"
+            "QLineEdit::placeholder { color: rgba(148,163,184,0.55); }"
         )
         self._fallback_search.textChanged.connect(self._on_fallback_search)
         sf_lay.addWidget(self._fallback_search)
@@ -475,7 +475,7 @@ class PopupReplace(QDialog):
         lay.setSpacing(8)
 
         _lbl(lay, "✓", "color:#60a5fa; font-size:11px;")
-        _lbl(lay, "Will replace:", "color:#64748b; font-size:11px;")
+        _lbl(lay, "Will replace:", "color:#cbd5e1; font-size:11px;")
 
         self._preview_from = QLabel(self._bad_value or "(empty)")
         self._preview_from.setStyleSheet(
@@ -484,7 +484,7 @@ class PopupReplace(QDialog):
         )
         lay.addWidget(self._preview_from)
 
-        _lbl(lay, "→", "color:#334155;")
+        _lbl(lay, "→", "color:#94a3b8;")
 
         self._preview_to = QLabel("")
         self._preview_to.setStyleSheet(
@@ -538,7 +538,7 @@ class PopupReplace(QDialog):
                 ss = lbl.styleSheet()
                 lbl.setStyleSheet(
                     ss.replace("color: #93c5fd", "color: #94a3b8")
-                      .replace("color: #7dd3fc", "color: #64748b")
+                      .replace("color: #7dd3fc", "color: #94a3b8")
                 )
 
         self._selected_frame = frame
@@ -548,7 +548,7 @@ class PopupReplace(QDialog):
             ss = lbl.styleSheet()
             lbl.setStyleSheet(
                 ss.replace("color: #94a3b8", "color: #93c5fd")
-                  .replace("color: #64748b", "color: #7dd3fc")
+                  .replace("color: #94a3b8", "color: #7dd3fc")
             )
 
         self._preview_to.setText(value)
@@ -629,7 +629,7 @@ class PopupDimView(PopupReplace):
         )
         sub.setTextFormat(Qt.RichText)
         sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         text_col.addWidget(sub)
         lay.addLayout(text_col, 1)
@@ -726,5 +726,5 @@ def _primary_btn() -> str:
         "color: #fff; font-size: 12px; font-weight: 500; padding: 0 18px; }"
         "QPushButton:hover:enabled { background: #2563eb; }"
         "QPushButton:disabled { background: rgba(255,255,255,0.04); "
-        "color: #334155; border: 1px solid rgba(255,255,255,0.07); }"
+        "color: rgba(148,163,184,0.45); border: 1px solid rgba(255,255,255,0.07); }"
     )

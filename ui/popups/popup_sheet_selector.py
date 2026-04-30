@@ -111,7 +111,7 @@ class PopupSheetSelector(QDialog):
 
         section_lbl = QLabel("CHOOSE SHEETS AND ASSIGN CATEGORY")
         section_lbl.setStyleSheet(
-            "color: #475569; background: transparent; border: none; "
+            "color: #94a3b8; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         body_lay.addWidget(section_lbl)
@@ -190,7 +190,7 @@ class PopupSheetSelector(QDialog):
         # Header row selector
         hdr_lbl = QLabel("Row")
         hdr_lbl.setStyleSheet(
-            "color: #475569; font-size: 10px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 10px; background: transparent; border: none;"
         )
         rl.addWidget(hdr_lbl)
 
@@ -298,7 +298,7 @@ class PopupSheetSelector(QDialog):
         return (
             "QPushButton { background: rgba(255,255,255,0.04); "
             "border: 1px solid rgba(255,255,255,0.09); border-radius: 6px; "
-            "color: #64748b; font-size: 11px; padding: 0 12px; }"
+            "color: #cbd5e1; font-size: 11px; padding: 0 12px; }"
             "QPushButton:hover { background: rgba(255,255,255,0.07); }"
         )
 

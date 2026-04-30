@@ -43,7 +43,7 @@ class _TitleBar(QWidget):
 
         app_lbl = QLabel(f"{APP_NAME}  v{APP_VERSION}")
         app_lbl.setStyleSheet(
-            "color: #334155; font-size: 11px; font-weight: 500; "
+            "color: #94a3b8; font-size: 11px; font-weight: 500; "
             "background: transparent; border: none;"
         )
         lay.addWidget(app_lbl, 1)
@@ -53,7 +53,7 @@ class _TitleBar(QWidget):
         min_btn.setCursor(Qt.PointingHandCursor)
         min_btn.setStyleSheet(
             "QPushButton { background: transparent; border: none; "
-            "color: #475569; font-size: 18px; font-weight: 300; }"
+            "color: #94a3b8; font-size: 18px; font-weight: 300; }"
             "QPushButton:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }"
         )
         min_btn.clicked.connect(window.showMinimized)
@@ -64,7 +64,7 @@ class _TitleBar(QWidget):
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(
             "QPushButton { background: transparent; border: none; "
-            "color: #475569; font-size: 11px; }"
+            "color: #94a3b8; font-size: 11px; }"
             "QPushButton:hover { background: rgba(239,68,68,0.18); color: #f87171; }"
         )
         close_btn.clicked.connect(window.close)

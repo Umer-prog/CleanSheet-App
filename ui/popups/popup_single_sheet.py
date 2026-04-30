@@ -16,7 +16,7 @@ import ui.theme as theme
 _ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow_ss.svg"
 _ARROW_PATH.write_text(
     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
-    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#94a3b8" '
     'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
     "</svg>",
     encoding="utf-8",
@@ -138,7 +138,7 @@ class PopupSingleSheet(QDialog):
 
         col_lbl = QLabel("SHEET")
         col_lbl.setStyleSheet(
-            "color: #475569; font-size: 10px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 10px; font-weight: 600; "
             "letter-spacing: 0.7px; background: transparent; border: none;"
         )
         lay.addWidget(col_lbl)
@@ -168,7 +168,7 @@ class PopupSingleSheet(QDialog):
 
         hdr_lbl = QLabel("HEADER ROW")
         hdr_lbl.setStyleSheet(
-            "color: #475569; font-size: 10px; font-weight: 600; "
+            "color: #cbd5e1; font-size: 10px; font-weight: 600; "
             "letter-spacing: 0.7px; background: transparent; border: none;"
         )
         lay.addWidget(hdr_lbl)

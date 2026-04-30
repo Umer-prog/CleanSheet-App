@@ -25,7 +25,7 @@ _SIDEBAR_W = 300
 _ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow.svg"
 _ARROW_PATH.write_text(
     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
-    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#94a3b8" '
     'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
     "</svg>",
     encoding="utf-8",
@@ -154,7 +154,7 @@ class Screen2Mappings(ScreenBase):
         brand_lbl = QLabel(
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -164,7 +164,7 @@ class Screen2Mappings(ScreenBase):
         # "SETUP PROGRESS" label
         prog_lbl = QLabel("SETUP PROGRESS")
         prog_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -184,7 +184,7 @@ class Screen2Mappings(ScreenBase):
         # "PROJECT" label
         proj_lbl = QLabel("PROJECT")
         proj_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 8px 18px 12px 18px; margin-top: 4px;"
         )
@@ -208,7 +208,7 @@ class Screen2Mappings(ScreenBase):
         )
         pc_lbl = QLabel(proj_client)
         pc_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 10px;"
+            "color: #cbd5e1; background: transparent; border: none; font-size: 10px;"
         )
         ic_lay.addWidget(pn_lbl)
         ic_lay.addWidget(pc_lbl)
@@ -296,7 +296,7 @@ class Screen2Mappings(ScreenBase):
             )
         else:
             num_lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; font-size: 10px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 10px;"
             )
         c_inner.addWidget(num_lbl)
         sl.addWidget(circle)
@@ -313,7 +313,7 @@ class Screen2Mappings(ScreenBase):
             )
         else:
             step_lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; font-size: 12px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
             )
         sl.addWidget(step_lbl, 1)
         return step
@@ -487,13 +487,13 @@ class Screen2Mappings(ScreenBase):
         mph_lay.setContentsMargins(16, 0, 16, 0)
         mp_title_lbl = QLabel("CONFIRMED MAPPINGS")
         mp_title_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         self._mappings_count_lbl = QLabel("0 mappings")
         self._mappings_count_lbl.setFixedHeight(30)
         self._mappings_count_lbl.setStyleSheet(
-            "color: #334155; background: rgba(255,255,255,0.05); border: none; "
+            "color: #94a3b8; background: rgba(255,255,255,0.05); border: none; "
             "font-size: 11px; padding: 2px 8px; border-radius: 10px;"
         )
         mph_lay.addWidget(mp_title_lbl)
@@ -535,7 +535,7 @@ class Screen2Mappings(ScreenBase):
 
         title_lbl = QLabel(label.upper())
         title_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         h_lay.addWidget(title_lbl)
@@ -582,7 +582,7 @@ class Screen2Mappings(ScreenBase):
         h_lay.setContentsMargins(14, 0, 14, 0)
         lbl = QLabel(label.upper())
         lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         h_lay.addWidget(lbl)
@@ -613,7 +613,7 @@ class Screen2Mappings(ScreenBase):
         )
         self._footer_hint = QLabel("")
         self._footer_hint.setStyleSheet(
-            "color: #475569; background: transparent; border: none; font-size: 12px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
         )
         f_lay.addWidget(self._footer_hint)
         f_lay.addWidget(self._error_lbl)
@@ -660,7 +660,7 @@ class Screen2Mappings(ScreenBase):
         else:
             self._finish_btn.setStyleSheet(
                 "QPushButton { background: #1a2235; border: 1px solid rgba(255,255,255,0.08); "
-                "border-radius: 8px; color: #334155; font-size: 12px; "
+                "border-radius: 8px; color: #94a3b8; font-size: 12px; "
                 "font-weight: 500; padding: 0 16px; }"
             )
             self._footer_hint.setText("Add at least 1 mapping before finishing setup.")
@@ -1069,7 +1069,7 @@ class Screen2Mappings(ScreenBase):
             ew_lay.setContentsMargins(16, 16, 16, 16)
             lbl = QLabel("No mappings added yet.")
             lbl.setStyleSheet(
-                "color: #334155; background: transparent; border: none; font-size: 12px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
             )
             ew_lay.addWidget(lbl)
             self._mapping_list_layout.addWidget(empty_wrap)
@@ -1100,7 +1100,7 @@ class Screen2Mappings(ScreenBase):
         sh_lay.setContentsMargins(16, 0, 16, 0)
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #94a3b8; background: transparent; border: none; "
             "font-size: 9px; font-weight: 600; letter-spacing: 1px;"
         )
         sh_lay.addWidget(lbl)
@@ -1125,7 +1125,7 @@ class Screen2Mappings(ScreenBase):
         text_lbl = QLabel(
             f"<span style='color:#60a5fa;'>{tx_t}</span>"
             f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{tx_c}</span>"
-            f"<span style='color:#475569;'> ↔ </span>"
+            f"<span style='color:#94a3b8;'> ↔ </span>"
             f"<span style='color:#60a5fa;'>{dim_t}</span>"
             f"<span style='color:#94a3b8; font-family:Courier New,monospace;'>.{dim_c}</span>"
         )
@@ -1140,7 +1140,7 @@ class Screen2Mappings(ScreenBase):
             lock_lbl.setFixedHeight(20)
             lock_lbl.setAlignment(Qt.AlignCenter)
             lock_lbl.setStyleSheet(
-                "color: #334155; background: rgba(255,255,255,0.04); "
+                "color: #94a3b8; background: rgba(255,255,255,0.04); "
                 "border: 1px solid rgba(255,255,255,0.07); border-radius: 4px; "
                 "font-size: 9px; padding: 0 6px;"
             )

@@ -15,8 +15,10 @@ _COLORS = {
     "sidebar_bg":     "#13161e",
     "sidebar_text":   "#f1f5f9",
     "card":           "#13161e",
-    "text_muted":     "#475569",
-    "text_secondary": "#94a3b8",
+    # Foreground ramp (dark): primary -> secondary -> muted -> subtle
+    "text_secondary": "#cbd5e1",
+    "text_muted":     "#94a3b8",
+    "text_subtle":    "#64748b",
     "selection":      "rgba(59,130,246,0.10)",
 }
 
@@ -45,7 +47,7 @@ QLineEdit {
     min-height: 32px;
 }
 QLineEdit:focus { border-color: #3b82f6; }
-QLineEdit:disabled { color: #475569; }
+QLineEdit:disabled { color: rgba(148,163,184,0.55); }
 QPushButton {
     background-color: transparent;
     border: none;
@@ -63,7 +65,7 @@ QPushButton#btn_primary:disabled { background-color: rgba(59,130,246,0.35); colo
 QPushButton#btn_ghost {
     background-color: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.09);
-    color: #94a3b8;
+    color: #cbd5e1;
 }
 QPushButton#btn_ghost:hover { background-color: rgba(255,255,255,0.07); }
 QPushButton#btn_ghost:disabled { color: rgba(148,163,184,0.4); }
@@ -91,7 +93,7 @@ QTableView {
 QTableView::item { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
 QHeaderView::section {
     background-color: #13161e;
-    color: #475569;
+    color: #cbd5e1;
     font-size: 11px;
     padding: 6px 12px;
     border: none;
@@ -130,7 +132,7 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: t
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 QListWidget { background: transparent; border: none; outline: none; }
-QListWidget::item { padding: 10px 18px; border-left: 2px solid transparent; color: #94a3b8; }
+QListWidget::item { padding: 10px 18px; border-left: 2px solid transparent; color: #cbd5e1; }
 QListWidget::item:selected { background: rgba(59,130,246,0.10); border-left-color: #3b82f6; color: #93c5fd; }
 QListWidget::item:hover { background: rgba(255,255,255,0.03); }
 QDialog, QDialog QWidget { background-color: #0f1117; }

@@ -89,7 +89,7 @@ class PopupRevertConfirm(QDialog):
         )
         sub.setTextFormat(Qt.RichText)
         sub.setStyleSheet(
-            "color: #475569; font-size: 11px; background: transparent; border: none;"
+            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
         )
         text_col.addWidget(sub)
         lay.addLayout(text_col, 1)

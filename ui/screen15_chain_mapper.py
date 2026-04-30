@@ -32,7 +32,7 @@ from ui.workers import ScreenBase, clear_layout
 _ARROW_PATH = Path(tempfile.gettempdir()) / "_cs_combo_arrow_s15.svg"
 _ARROW_PATH.write_text(
     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6">'
-    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#64748b" '
+    '<polyline points="1,1 5,5 9,1" fill="none" stroke="#94a3b8" '
     'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
     "</svg>",
     encoding="utf-8",
@@ -193,7 +193,7 @@ class Screen15ChainMapper(ScreenBase):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#475569; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -202,7 +202,7 @@ class Screen15ChainMapper(ScreenBase):
 
         steps_label = QLabel("SETUP PROGRESS")
         steps_label.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 14px 18px 6px 18px;"
         )
@@ -225,7 +225,7 @@ class Screen15ChainMapper(ScreenBase):
 
         proj_section = QLabel("PROJECT")
         proj_section.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; "
+            "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
             "padding: 8px 18px 12px 18px; margin-top: 4px;"
         )
@@ -247,7 +247,7 @@ class Screen15ChainMapper(ScreenBase):
         )
         proj_company_lbl = QLabel(self.project.get("company", ""))
         proj_company_lbl.setStyleSheet(
-            "color: #64748b; background: transparent; border: none; font-size: 10px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 10px;"
         )
         pc_lay.addWidget(proj_name_lbl)
         pc_lay.addWidget(proj_company_lbl)
@@ -296,7 +296,7 @@ class Screen15ChainMapper(ScreenBase):
         else:
             circle.setStyleSheet(
                 "QLabel { background: rgba(255,255,255,0.05); border-radius: 11px; "
-                "border: 1px solid rgba(255,255,255,0.1); color: #475569; font-size: 10px; }"
+                "border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; font-size: 10px; }"
             )
         sl.addWidget(circle)
 
@@ -312,7 +312,7 @@ class Screen15ChainMapper(ScreenBase):
             )
         else:
             lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; font-size: 12px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 12px;"
             )
         sl.addWidget(lbl, 1)
         return step
@@ -360,7 +360,7 @@ class Screen15ChainMapper(ScreenBase):
         self._placeholder = QLabel("Loading columns…")
         self._placeholder.setAlignment(Qt.AlignCenter)
         self._placeholder.setStyleSheet(
-            "color: #334155; background: transparent; border: none; font-size: 13px;"
+            "color: #94a3b8; background: transparent; border: none; font-size: 13px;"
         )
         self._mapper_card_lay.addWidget(self._placeholder)
         # Hidden until data loads to prevent a floating styled box artefact
@@ -378,7 +378,7 @@ class Screen15ChainMapper(ScreenBase):
         rf_lay.setSpacing(4)
         rules_title = QLabel("RULES")
         rules_title.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #94a3b8; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 1px;"
         )
         rf_lay.addWidget(rules_title)
@@ -389,7 +389,7 @@ class Screen15ChainMapper(ScreenBase):
         ]:
             r_lbl = QLabel(f"• {rule}")
             r_lbl.setStyleSheet(
-                "color: #475569; background: transparent; border: none; font-size: 11px;"
+                "color: #94a3b8; background: transparent; border: none; font-size: 11px;"
             )
             rf_lay.addWidget(r_lbl)
         c_lay.addWidget(rules)
@@ -533,7 +533,7 @@ class Screen15ChainMapper(ScreenBase):
             left = QLabel(primary_col)
             left.setObjectName("primaryColLocked")
             left.setStyleSheet(
-                "color: #64748b; background: transparent; border: none; "
+                "color: #94a3b8; background: transparent; border: none; "
                 "font-size: 12px; font-family: 'Courier New', monospace;"
             )
             rl.addWidget(left, 1)
@@ -543,7 +543,7 @@ class Screen15ChainMapper(ScreenBase):
             arrow.setFixedWidth(100)
             arrow.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
             arrow.setStyleSheet(
-                "color: #64748b; background: transparent; border: none; "
+                "color: #94a3b8; background: transparent; border: none; "
                 "font-size: 13px; letter-spacing: 1px;"
             )
             rl.addWidget(arrow)
@@ -663,7 +663,7 @@ class Screen15ChainMapper(ScreenBase):
         sep_lay.setContentsMargins(20, 0, 20, 0)
         sep_lbl = QLabel("EXTRA/UNMAPPED COLUMNS — not mapped with any primary file column")
         sep_lbl.setStyleSheet(
-            "color: #334155; background: transparent; border: none; "
+            "color: #94a3b8; background: transparent; border: none; "
             "font-size: 10px; font-weight: 600; letter-spacing: 0.4px;"
         )
         sep_lay.addWidget(sep_lbl)

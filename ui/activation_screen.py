@@ -77,7 +77,7 @@ class ActivationScreen(QDialog):
 
         title_lbl = QLabel(
             f"<span style='font-size:16px; font-weight:700; color:#f1f5f9;'>CleanSheet</span>"
-            f"<br><span style='font-size:12px; color:#475569;'>{heading}</span>"
+            f"<br><span style='font-size:12px; color:#94a3b8;'>{heading}</span>"
         )
         title_lbl.setTextFormat(Qt.RichText)
         lay.addWidget(title_lbl)
@@ -192,7 +192,7 @@ class ActivationScreen(QDialog):
         lay.setContentsMargins(28, 0, 28, 0)
 
         version_lbl = QLabel("CleanSheet — Licensed software")
-        version_lbl.setStyleSheet("color: #334155; font-size: 11px; background: transparent;")
+        version_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; background: transparent;")
         lay.addWidget(version_lbl, 1)
 
         close_btn = QPushButton("Exit")
@@ -293,7 +293,7 @@ def _body_text(text: str) -> QLabel:
 
 def _muted(text: str) -> QLabel:
     lbl = QLabel(text)
-    lbl.setStyleSheet("color: #475569; font-size: 12px; background: transparent;")
+    lbl.setStyleSheet("color: #94a3b8; font-size: 12px; background: transparent;")
     return lbl
 
 
@@ -352,6 +352,6 @@ def _license_hint_label() -> QLabel:
     lbl = QLabel("\n".join(lines))
     lbl.setWordWrap(True)
     lbl.setStyleSheet(
-        "color: #334155; font-size: 11px; font-family: Consolas; background: transparent;"
+        "color: #94a3b8; font-size: 11px; font-family: Consolas; background: transparent;"
     )
     return lbl
