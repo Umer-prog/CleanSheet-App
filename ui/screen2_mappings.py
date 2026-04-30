@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QFrame, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
@@ -16,6 +16,7 @@ from core.data_loader import load_csv, read_table
 from core.mapping_manager import add_mapping, delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
 from core.project_paths import active_dim_dir, active_transactions_dir
+from ui.widgets import NoScrollComboBox
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 300
@@ -411,7 +412,7 @@ class Screen2Mappings(ScreenBase):
         )
 
         dim_col_panel, dim_col_body = self._make_col_panel("Dimension Column")
-        self._dim_column_menu = QComboBox()
+        self._dim_column_menu = NoScrollComboBox()
         self._dim_column_menu.addItem("Select Column")
         self._dim_column_menu.setMinimumHeight(36)
         self._dim_column_menu.setStyleSheet(_combo_style)
@@ -456,7 +457,7 @@ class Screen2Mappings(ScreenBase):
         col_grid.addWidget(confirm_wrap)
 
         tx_col_panel, tx_col_body = self._make_col_panel("Transaction Column")
-        self._tx_column_menu = QComboBox()
+        self._tx_column_menu = NoScrollComboBox()
         self._tx_column_menu.addItem("Select Column")
         self._tx_column_menu.setMinimumHeight(36)
         self._tx_column_menu.setStyleSheet(_combo_style)

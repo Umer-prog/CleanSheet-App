@@ -172,13 +172,21 @@ class App(QMainWindow):
 
     def show_screen(self, screen_class, **kwargs) -> None:
         """Swap the active screen inside the content area."""
+        # Hide the outgoing screen immediately to prevent a visual flash while
+        # the new screen is constructed and before deleteLater fires.
+        if self._current_screen is not None:
+            self._current_screen.setVisible(False)
+            if hasattr(self._current_screen, "abandon_workers"):
+                self._current_screen.abandon_workers()
+
         new_screen = screen_class(app=self, **kwargs)
-        # Remove the current screen widget
+
         while self._content_lay.count():
             item = self._content_lay.takeAt(0)
             w = item.widget()
             if w:
                 w.deleteLater()
+
         self._content_lay.addWidget(new_screen)
         self._current_screen = new_screen
 

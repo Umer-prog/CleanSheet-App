@@ -41,7 +41,7 @@ class ActivationScreen(QDialog):
 
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedSize(540, 600)
+        self.setFixedSize(540, 660)
         self.setStyleSheet("QDialog { background: #0f1117; }")
 
         root = QVBoxLayout(self)
@@ -157,6 +157,12 @@ class ActivationScreen(QDialog):
         self._copy_btn = _copy_button(self._machine_id, self)
         lay.addWidget(self._copy_btn)
         lay.addWidget(_email_link(_SUPPORT_EMAIL))
+        lay.addWidget(_divider())
+        lay.addWidget(_section_label("Already have a license for this computer?"))
+        browse = _primary_button("Browse for New License File")
+        browse.clicked.connect(self._browse_for_license)
+        lay.addWidget(browse)
+        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 

@@ -804,13 +804,24 @@ class Screen1Sources(ScreenBase):
             return load_excel_sheets(excel_path)
 
         def on_success(sheet_names):
-            from ui.popups.popup_single_sheet import select_single_sheet
-            picked = select_single_sheet(
-                self, excel_path=excel_path, sheet_names=sheet_names,
-                title="Select Sheet to Chain",
-            )
-            if not picked:
-                return
+            primary_sheet_name = self._sources[fi]["sheets"][si]["sheet_name"]
+
+            if len(sheet_names) == 1:
+                try:
+                    from core.data_loader import detect_header_row
+                    hdr = detect_header_row(excel_path, sheet_names[0])
+                except Exception:
+                    hdr = 1
+                picked = {"sheet_name": sheet_names[0], "header_row": hdr}
+            else:
+                from ui.popups.popup_single_sheet import select_single_sheet
+                picked = select_single_sheet(
+                    self, excel_path=excel_path, sheet_names=sheet_names,
+                    title="Select Sheet to Chain",
+                    default_sheet=primary_sheet_name,
+                )
+                if not picked:
+                    return
 
             sheet = self._sources[fi]["sheets"][si]
 

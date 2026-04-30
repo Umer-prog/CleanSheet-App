@@ -155,7 +155,15 @@ class LoadingOverlay(QFrame):
             "LoadingOverlay { background-color: rgba(15,17,23,0.88); }"
         )
 
-        card = QFrame(self)
+        # Equal stretches on either side push the card to the exact centre of
+        # the overlay regardless of when show_on() fires relative to layout.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        outer.addStretch(1)
+
+        card = QFrame()
         card.setFixedWidth(240)
         card.setStyleSheet("QFrame { background-color: #13161e; border-radius: 12px; }")
 
@@ -195,9 +203,10 @@ class LoadingOverlay(QFrame):
         self._progress_bar.hide()
         card_layout.addWidget(self._progress_bar)
 
+        outer.addWidget(card, 0, Qt.AlignHCenter)
+        outer.addStretch(1)
         self._card = card
         self._frame_idx = 0
-        card.adjustSize()
 
         # Self-contained animation timer — independent of style/paint system
         self._anim_timer = QTimer(self)
@@ -211,7 +220,6 @@ class LoadingOverlay(QFrame):
         p = self.parent()
         if p:
             self.setGeometry(p.rect())
-        self._center_card()
         self.raise_()
         self.show()
         self._frame_idx = 0
@@ -230,8 +238,6 @@ class LoadingOverlay(QFrame):
             self._progress_bar.setValue(int(done / total * 100))
         if message:
             self._msg_lbl.setText(message)
-        self._card.adjustSize()
-        self._center_card()
 
     def hide(self) -> None:
         """Hide overlay and stop animation timer."""
@@ -242,15 +248,8 @@ class LoadingOverlay(QFrame):
         self._frame_idx = (self._frame_idx + 1) % len(self._FRAMES)
         self._dot_lbl.setText(self._FRAMES[self._frame_idx])
 
-    def _center_card(self) -> None:
-        self._card.move(
-            max(0, (self.width() - self._card.width()) // 2),
-            max(0, (self.height() - self._card.height()) // 2),
-        )
-
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._center_card()
 
 
 class ScreenBase(QWidget):

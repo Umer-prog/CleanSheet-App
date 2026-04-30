@@ -19,9 +19,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel,
+    QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
+
+from ui.widgets import NoScrollComboBox
 
 import ui.theme as theme
 from core.data_loader import get_sheet_as_dataframe
@@ -114,7 +116,7 @@ class Screen15ChainMapper(ScreenBase):
 
         self._primary_cols: list[str] = []
         self._secondary_cols: list[str] = []
-        self._mapping_combos: list[tuple[str, QComboBox]] = []
+        self._mapping_combos: list[tuple[str, NoScrollComboBox]] = []
         self._extra_section: QFrame | None = None
         self._rows_layout: QVBoxLayout | None = None
         self._confirm_btn: QPushButton | None = None
@@ -135,8 +137,16 @@ class Screen15ChainMapper(ScreenBase):
         main_lay.addWidget(self._build_footer())
         root.addWidget(main, 1)
 
+        self._loading_started = False
         self._setup_overlay("Loading columns…")
-        self._start_loading()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Trigger loading here, not in __init__, so the widget has real geometry
+        # when show_on() sizes the overlay — matching how Screen 1 works.
+        if not self._loading_started:
+            self._loading_started = True
+            self._start_loading()
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
 
@@ -353,6 +363,8 @@ class Screen15ChainMapper(ScreenBase):
             "color: #334155; background: transparent; border: none; font-size: 13px;"
         )
         self._mapper_card_lay.addWidget(self._placeholder)
+        # Hidden until data loads to prevent a floating styled box artefact
+        self._mapper_card.setVisible(False)
         c_lay.addWidget(self._mapper_card, 1)
 
         # Rules reminder
@@ -449,6 +461,7 @@ class Screen15ChainMapper(ScreenBase):
     # ── Build mapper rows ─────────────────────────────────────────────────────
 
     def _build_mapper_rows(self) -> None:
+        self._mapper_card.setVisible(True)
         clear_layout(self._mapper_card_lay)
         self._mapping_combos.clear()
 
@@ -536,7 +549,7 @@ class Screen15ChainMapper(ScreenBase):
             rl.addWidget(arrow)
 
             # Right: secondary column dropdown
-            combo = QComboBox()
+            combo = NoScrollComboBox()
             combo.setFixedHeight(32)
             combo.addItems(dropdown_items)
             combo.setStyleSheet(self._combo_style(duplicate=False))

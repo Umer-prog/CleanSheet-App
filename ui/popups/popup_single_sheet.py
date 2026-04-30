@@ -5,9 +5,11 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFrame, QHBoxLayout,
+    QDialog, QFrame, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QVBoxLayout,
 )
+
+from ui.widgets import NoScrollComboBox
 
 import ui.theme as theme
 
@@ -141,7 +143,7 @@ class PopupSingleSheet(QDialog):
         )
         lay.addWidget(col_lbl)
 
-        self._combo = QComboBox()
+        self._combo = NoScrollComboBox()
         self._combo.setFixedHeight(38)
         self._combo.setStyleSheet(
             "QComboBox { background: rgba(255,255,255,0.04); "
