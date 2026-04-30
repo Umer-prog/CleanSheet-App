@@ -323,3 +323,93 @@ ValueError: Column 'Region' not found in transaction table 'co'
 2026-04-30 17:51:03  INFO      core.project_manager — Project opened: 'sales'
 2026-04-30 17:51:03  INFO      __main__ — Main window displayed
 2026-04-30 17:51:05  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:07:34  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:07:35  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:07:35  INFO      __main__ — Main window displayed
+2026-04-30 18:07:36  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:09:07  INFO      core.snapshot_manager — Snapshot created: commit_002 (label='Generated output — co', tables=['co', 'sales_report'])
+2026-04-30 18:09:07  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:09:07  ERROR     ui.workers — Background worker error: No module named 'xlsxwriter'
+Traceback (most recent call last):
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\workers.py", line 114, in _run
+    self._result_queue.put(("ok", self._fn(self._report_progress)))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\views\view_mapping.py", line 1391, in worker
+    return export_final_workbook(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\core\final_export_manager.py", line 59, in export_final_workbook
+    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\prog\python\Lib\site-packages\pandas\io\excel\_xlsxwriter.py", line 197, in __init__
+    from xlsxwriter import Workbook
+ModuleNotFoundError: No module named 'xlsxwriter'
+2026-04-30 18:09:26  INFO      core.snapshot_manager — Snapshot created: commit_003 (label='Generated output — co', tables=['co', 'sales_report'])
+2026-04-30 18:09:26  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:09:26  ERROR     ui.workers — Background worker error: No module named 'xlsxwriter'
+Traceback (most recent call last):
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\workers.py", line 114, in _run
+    self._result_queue.put(("ok", self._fn(self._report_progress)))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\views\view_mapping.py", line 1391, in worker
+    return export_final_workbook(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\core\final_export_manager.py", line 59, in export_final_workbook
+    with pd.ExcelWriter(output_path, engine="xlsxwriter") as writer:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\prog\python\Lib\site-packages\pandas\io\excel\_xlsxwriter.py", line 197, in __init__
+    from xlsxwriter import Workbook
+ModuleNotFoundError: No module named 'xlsxwriter'
+2026-04-30 18:10:27  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:10:28  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:10:28  INFO      __main__ — Main window displayed
+2026-04-30 18:10:29  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:10:31  INFO      core.snapshot_manager — Snapshot created: commit_004 (label='Generated output — co', tables=['co', 'sales_report'])
+2026-04-30 18:10:31  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:10:36  INFO      core.final_export_manager — Export completed: G:\docs\work\global data\tests\sales\final\final_updated.xlsx (4 tables written)
+2026-04-30 18:19:52  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:19:52  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:19:52  INFO      __main__ — Main window displayed
+2026-04-30 18:19:54  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:19:57  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:20:24  INFO      core.mapping_manager — Mapping saved: map_002 → sales_report.Region ↔ region_mapping.Country
+2026-04-30 18:24:09  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:24:09  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:24:09  INFO      __main__ — Main window displayed
+2026-04-30 18:24:23  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:24:40  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:24:41  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:24:53  INFO      core.mapping_manager — Mapping saved: map_003 → co.Region ↔ region_mapping.Country
+2026-04-30 18:25:20  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:25:33  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:35:34  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:35:34  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:35:35  INFO      __main__ — Main window displayed
+2026-04-30 18:35:40  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:35:46  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:35:47  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:35:58  INFO      core.mapping_manager — Mapping saved: map_003 → co.Segment ↔ selling_channel_segment_mapping.Segment
+2026-04-30 18:36:10  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:36:38  INFO      core.project_manager — Project created: 'sales' at G:\docs\work\global data\tests\sales
+2026-04-30 18:36:38  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:36:44  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 18:37:09  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:37:15  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-04-30 18:37:48  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:38:12  INFO      core.mapping_manager — Mapping saved: map_001 → co.Region ↔ region_mapping.Country
+2026-04-30 18:38:12  INFO      core.mapping_manager — Mapping saved: map_002 → sales_report.Segment ↔ selling_channel_segment_mapping.Segment
+2026-04-30 18:38:12  INFO      core.snapshot_manager — Snapshot created: commit_001 (label='Initial commit', tables=['co', 'sales_report'])
+2026-04-30 18:38:53  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:39:29  INFO      core.snapshot_manager — Snapshot created: commit_002 (label='Generated output — co', tables=['co', 'sales_report'])
+2026-04-30 18:39:29  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:39:35  INFO      core.final_export_manager — Export completed: G:\docs\work\global data\tests\sales\final\final_updated.xlsx (4 tables written)
+2026-04-30 18:40:12  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:42:56  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:42:56  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:42:57  INFO      __main__ — Main window displayed
+2026-04-30 18:43:06  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:44:44  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-04-30 18:44:44  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:44:44  INFO      __main__ — Main window displayed
+2026-04-30 18:44:51  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:45:01  INFO      core.project_manager — Project opened: 'sales'
+2026-04-30 18:45:12  INFO      core.project_manager — Project opened: 'sales'

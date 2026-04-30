@@ -229,6 +229,43 @@ class ViewSettings(ScreenBase):
         log_row.addWidget(open_log_btn)
         form_lay.addLayout(log_row)
 
+        form_lay.addSpacing(20)
+
+        div3 = QFrame()
+        div3.setFixedHeight(1)
+        div3.setStyleSheet("background: rgba(255,255,255,0.06); border: none;")
+        form_lay.addWidget(div3)
+        form_lay.addSpacing(20)
+
+        # Final file location row
+        form_lay.addWidget(_field_label("FINAL FILE LOCATION"))
+        form_lay.addSpacing(8)
+        final_path = self.project_path / "final" / "final_updated.xlsx"
+        final_row = QHBoxLayout()
+        final_row.setSpacing(8)
+        final_path_entry = _field_input(value=str(final_path), readonly=True)
+        final_row.addWidget(final_path_entry, 1)
+        open_final_btn = QPushButton("Open Folder")
+        open_final_btn.setFixedHeight(38)
+        open_final_btn.setFixedWidth(100)
+        open_final_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 8px; color: #94a3b8; font-size: 11px; font-weight: 500; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.25); color: #f1f5f9; }"
+        )
+
+        def _open_final_folder(p=final_path):
+            if p.exists():
+                subprocess.Popen(["explorer", "/select,", str(p)])
+            else:
+                folder = p.parent
+                folder.mkdir(parents=True, exist_ok=True)
+                subprocess.Popen(["explorer", str(folder)])
+
+        open_final_btn.clicked.connect(lambda: _open_final_folder())
+        final_row.addWidget(open_final_btn)
+        form_lay.addLayout(final_row)
+
         body_lay.addWidget(form_wrap)
         scroll.setWidget(body)
         outer.addWidget(scroll, 1)

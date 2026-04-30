@@ -132,10 +132,27 @@ def write_table(df: pd.DataFrame, dest_path: Path) -> Path:
     return dest_path
 
 
+_EXCEL_DATE_TOKENS = re.compile(
+    r'yyyy|yy|mmmm|mmm|dddd|ddd|dd|d|hh:mm|h:mm|hh|h|ss|mm|m',
+    re.IGNORECASE,
+)
+_EXCEL_TOKEN_MAP: dict[str, str] = {
+    'yyyy': '%Y', 'yy': '%y',
+    'mmmm': '%B', 'mmm': '%b',
+    'dddd': '%A', 'ddd': '%a', 'dd': '%d', 'd': '%d',
+    'hh:mm': '%H:%M', 'h:mm': '%H:%M',
+    'hh': '%H', 'h': '%H',
+    'ss': '%S',
+    'mm': '%m', 'm': '%m',
+}
+
+
 def _excel_numfmt_to_strftime(number_format: str) -> str | None:
     """Convert an Excel number format string to a Python strftime string.
 
     Returns None if the format doesn't contain date tokens.
+    Uses a single-pass regex so already-substituted %x tokens are never
+    re-processed by a later, shorter pattern.
     """
     fmt = (number_format or "").strip()
     # Strip color codes e.g. [Red], [Black]
@@ -151,30 +168,9 @@ def _excel_numfmt_to_strftime(number_format: str) -> str | None:
     if not re.search(r'y{1,4}|d{1,4}|mmm', fmt, re.IGNORECASE):
         return None
 
-    result = fmt
-    # Replace tokens longest-first to avoid partial matches.
-    # Year / month-name tokens first.
-    result = re.sub(r'(?i)yyyy', '%Y', result)
-    result = re.sub(r'(?i)yy',   '%y', result)
-    result = re.sub(r'(?i)mmmm', '%B', result)
-    result = re.sub(r'(?i)mmm',  '%b', result)
-    # Day tokens before any single-letter replacements.
-    result = re.sub(r'(?i)dddd', '%A', result)
-    result = re.sub(r'(?i)ddd',  '%a', result)
-    result = re.sub(r'(?i)dd',   '%d', result)
-    result = re.sub(r'(?i)d',    '%d', result)
-    # Hours + minutes: handle "hh:mm" and "h:mm" BEFORE replacing standalone
-    # mm so that minute tokens (context: after hours) map to %M, not %m.
-    result = re.sub(r'(?i)hh:mm', '%H:%M', result)
-    result = re.sub(r'(?i)h:mm',  '%H:%M', result)
-    result = re.sub(r'(?i)hh',    '%H',    result)
-    result = re.sub(r'(?i)h',     '%H',    result)
-    # Seconds
-    result = re.sub(r'(?i)ss', '%S', result)
-    # Any remaining mm / m are month tokens (time component already handled).
-    result = re.sub(r'(?i)mm', '%m', result)
-    result = re.sub(r'(?i)m',  '%m', result)
-
+    result = _EXCEL_DATE_TOKENS.sub(
+        lambda m: _EXCEL_TOKEN_MAP[m.group(0).lower()], fmt
+    )
     return result if '%' in result else None
 
 
@@ -323,21 +319,6 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | N
             for i, cell in enumerate(ws[header_row], start=1)
         ]
 
-        # --- detect per-column strftime format from first ~20 data rows ---
-        col_strftime: dict[int, str] = {}   # 0-based column index → strftime
-        scan_end = min(ws.max_row, data_start_row + 19)
-        for ci in range(len(headers)):
-            for row_cells in ws.iter_rows(min_row=data_start_row, max_row=scan_end,
-                                          min_col=ci + 1, max_col=ci + 1):
-                for cell in row_cells:
-                    if cell.value is not None and isinstance(cell.value, (date, datetime)):
-                        fmt = _excel_numfmt_to_strftime(cell.number_format or "")
-                        if fmt:
-                            col_strftime[ci] = fmt
-                        break
-                if ci in col_strftime:
-                    break
-
         # --- build data rows (everything below the header) ---
         data_rows = []
         for row_cells in ws.iter_rows(min_row=data_start_row, values_only=False):
@@ -348,11 +329,13 @@ def get_sheet_as_dataframe(file_path: Path, sheet_name: str, header_row: int | N
 
                 if val is None:
                     row_data.append("")
-                elif ci in col_strftime and isinstance(val, (date, datetime)):
-                    try:
-                        row_data.append(val.strftime(col_strftime[ci]))
-                    except Exception:
-                        row_data.append(str(val))
+                elif isinstance(val, datetime):
+                    if val.hour or val.minute or val.second:
+                        row_data.append(val.strftime('%Y-%m-%d %H:%M:%S'))
+                    else:
+                        row_data.append(val.strftime('%Y-%m-%d'))
+                elif isinstance(val, date):
+                    row_data.append(val.strftime('%Y-%m-%d'))
                 else:
                     row_data.append(str(val))
             data_rows.append(row_data)
@@ -405,20 +388,6 @@ def get_sheets_as_dataframes(
                 for i, cell in enumerate(ws[hr], start=1)
             ]
 
-            col_strftime: dict[int, str] = {}
-            scan_end = min(ws.max_row, data_start + 19)
-            for ci in range(len(headers)):
-                for row_cells in ws.iter_rows(min_row=data_start, max_row=scan_end,
-                                              min_col=ci + 1, max_col=ci + 1):
-                    for cell in row_cells:
-                        if cell.value is not None and isinstance(cell.value, (date, datetime)):
-                            fmt = _excel_numfmt_to_strftime(cell.number_format or "")
-                            if fmt:
-                                col_strftime[ci] = fmt
-                        break
-                    if ci in col_strftime:
-                        break
-
             data_rows = []
             for row_cells in ws.iter_rows(min_row=data_start, values_only=False):
                 row_data = []
@@ -427,11 +396,13 @@ def get_sheets_as_dataframes(
                     val = cell.value if cell is not None else None
                     if val is None:
                         row_data.append("")
-                    elif ci in col_strftime and isinstance(val, (date, datetime)):
-                        try:
-                            row_data.append(val.strftime(col_strftime[ci]))
-                        except Exception:
-                            row_data.append(str(val))
+                    elif isinstance(val, datetime):
+                        if val.hour or val.minute or val.second:
+                            row_data.append(val.strftime('%Y-%m-%d %H:%M:%S'))
+                        else:
+                            row_data.append(val.strftime('%Y-%m-%d'))
+                    elif isinstance(val, date):
+                        row_data.append(val.strftime('%Y-%m-%d'))
                     else:
                         row_data.append(str(val))
                 data_rows.append(row_data)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -379,13 +380,47 @@ class Screen0Launcher(ScreenBase):
         r1, self._v_name = _detail_row("Project Name")
         r2, self._v_company = _detail_row("Company")
         r3, self._v_modified = _detail_row("Last Modified")
-        r4, self._v_path = _detail_row("Folder Path", last=True)
+
+        # Path row — info only
+        r4, self._v_path = _detail_row("Folder Path")
         self._v_path.setFont(theme.font(11))
         self._v_path.setStyleSheet(
             "color: #cbd5e1; background: transparent; border: none; "
             "font-family: 'Courier New', monospace;"
         )
-        for r in (r1, r2, r3, r4):
+
+        # Final file row
+        _btn_ss = (
+            "QPushButton { background: transparent; border: 1px solid rgba(255,255,255,0.12); "
+            "border-radius: 6px; color: #94a3b8; font-size: 10px; font-weight: 500; }"
+            "QPushButton:hover { border-color: rgba(255,255,255,0.28); color: #f1f5f9; }"
+            "QPushButton:disabled { opacity: 0.35; }"
+        )
+        r5 = QFrame()
+        r5.setStyleSheet("QFrame { background: transparent; border: none; }")
+        r5_lay = QHBoxLayout(r5)
+        r5_lay.setContentsMargins(18, 11, 18, 11)
+        r5_lay.setSpacing(0)
+        r5_key = QLabel("Final File")
+        r5_key.setFont(theme.font(12))
+        r5_key.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+        r5_key.setFixedWidth(130)
+        r5_lay.addWidget(r5_key)
+        self._v_final = QLabel("—")
+        self._v_final.setFont(theme.font(11))
+        self._v_final.setStyleSheet(
+            "color: #cbd5e1; background: transparent; border: none; "
+            "font-family: 'Courier New', monospace;"
+        )
+        r5_lay.addWidget(self._v_final, 1)
+        self._open_final_btn = QPushButton("Open Folder")
+        self._open_final_btn.setFixedHeight(26)
+        self._open_final_btn.setFixedWidth(88)
+        self._open_final_btn.setEnabled(False)
+        self._open_final_btn.setStyleSheet(_btn_ss)
+        r5_lay.addWidget(self._open_final_btn)
+
+        for r in (r1, r2, r3, r4, r5):
             card_lay.addWidget(r)
         detail_lay.addWidget(detail_card)
 
@@ -571,10 +606,36 @@ class Screen0Launcher(ScreenBase):
         self._v_modified.setText(_format_modified(state.get("project_path", "")))
         path = state.get("project_path", "—")
         self._v_path.setText(path)
+        folder = Path(path)
+
+        try:
+            self._open_final_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+
+        final_path = folder / "final" / "final_updated.xlsx"
+        self._v_final.setText(str(final_path))
+
+        def _open_final(p=final_path):
+            if p.exists():
+                subprocess.Popen(["explorer", "/select,", str(p)])
+            else:
+                d = p.parent
+                d.mkdir(parents=True, exist_ok=True)
+                subprocess.Popen(["explorer", str(d)])
+
+        self._open_final_btn.setEnabled(folder.exists())
+        if folder.exists():
+            self._open_final_btn.clicked.connect(lambda: _open_final())
 
     def _clear_detail_card(self) -> None:
-        for lbl in (self._v_name, self._v_company, self._v_modified, self._v_path):
+        for lbl in (self._v_name, self._v_company, self._v_modified, self._v_path, self._v_final):
             lbl.setText("—")
+        self._open_final_btn.setEnabled(False)
+        try:
+            self._open_final_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
 
     # ------------------------------------------------------------------
     # Search
