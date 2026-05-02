@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
@@ -86,39 +86,6 @@ class _HeroFrame(QFrame):
         painter.fillRect(self.rect(), QColor(13, 17, 23, 200))
         painter.end()
 
-
-class _DarkModeToggle(QFrame):
-    """Clickable pill toggle — visually on/off, emits toggled(bool)."""
-
-    toggled = Signal(bool)
-
-    def __init__(self, on: bool = True, parent=None):
-        super().__init__(parent)
-        self._on = on
-        self.setFixedSize(36, 20)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setObjectName("dm_track")
-
-        self._thumb = QFrame(self)
-        self._thumb.setObjectName("dm_thumb")
-        self._thumb.setFixedSize(14, 14)
-        self._thumb.setStyleSheet(
-            "QFrame#dm_thumb { background: white; border-radius: 7px; border: none; }"
-        )
-        self._refresh()
-
-    def _refresh(self):
-        track = "#3b82f6" if self._on else "rgba(255,255,255,0.18)"
-        self.setStyleSheet(
-            f"QFrame#dm_track {{ background: {track}; border-radius: 10px; border: none; }}"
-        )
-        self._thumb.move(19 if self._on else 3, 3)
-        self._thumb.raise_()
-
-    def mousePressEvent(self, event):
-        self._on = not self._on
-        self._refresh()
-        self.toggled.emit(self._on)
 
 
 def _format_modified(project_path: str) -> str:
@@ -553,15 +520,6 @@ class Screen0Launcher(ScreenBase):
         self._status_lbl.setStyleSheet("color: #1e293b; background: transparent; border: none;")
         sb_lay.addWidget(self._status_lbl)
         sb_lay.addStretch()
-
-        dm_lbl = QLabel("Dark Mode")
-        dm_lbl.setFont(theme.font(11))
-        dm_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
-        sb_lay.addWidget(dm_lbl)
-
-        self._dark_toggle = _DarkModeToggle(on=self.app.is_dark_mode_enabled())
-        self._dark_toggle.toggled.connect(self.app.set_dark_mode)
-        sb_lay.addWidget(self._dark_toggle)
 
         right_layout.addWidget(status_bar)
         root.addWidget(right, 1)

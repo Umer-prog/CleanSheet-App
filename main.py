@@ -1,4 +1,3 @@
-import json
 import logging
 import sys
 
@@ -7,7 +6,7 @@ from PySide6.QtWidgets import QApplication
 import ui.theme as theme
 from core.app_logger import setup_logging
 from core.constants import APP_VERSION
-from utils.paths import resource_path, user_data_path
+from utils.paths import resource_path
 
 _log = logging.getLogger(__name__)
 
@@ -21,15 +20,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
 
-    # Read persisted dark-mode preference before any window is shown
-    _cfg_path = user_data_path("app_config.json")
-    _dark = True
-    try:
-        with open(_cfg_path, encoding="utf-8") as _f:
-            _dark = json.load(_f).get("dark_mode", True)
-    except (OSError, json.JSONDecodeError, TypeError):
-        pass
-    app.setStyleSheet(theme.DARK_QSS if _dark else theme.LIGHT_QSS)
+    app.setStyleSheet(theme.DARK_QSS)
 
     # ── License check ──────────────────────────────────────────────────
     from core.license_validator import validate_license, get_days_until_expiry

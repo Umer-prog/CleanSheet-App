@@ -477,3 +477,9 @@ ModuleNotFoundError: No module named 'xlsxwriter'
 2026-05-02 20:35:10  INFO      core.project_manager — Project opened: 'sales'
 2026-05-02 20:35:35  INFO      core.project_manager — Project opened: 'sales'
 2026-05-02 20:35:37  INFO      core.project_manager — Project opened: 'sales'
+2026-05-02 20:44:55  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-02 20:44:56  INFO      core.project_manager — Project opened: 'sales'
+2026-05-02 20:44:56  INFO      __main__ — Main window displayed
+2026-05-02 20:57:18  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-02 20:57:19  INFO      core.project_manager — Project opened: 'sales'
+2026-05-02 20:57:19  INFO      __main__ — Main window displayed
