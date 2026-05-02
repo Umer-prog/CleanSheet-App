@@ -251,9 +251,25 @@ class ActivationScreen(QDialog):
 
         new_result = validate_license()
         if new_result.valid:
-            self.accept()
+            self._show_activation_success(new_result)
         else:
             self._show_error(new_result.failure_message)
+
+    def _show_activation_success(self, result) -> None:
+        """Show a themed success dialog then accept the activation screen."""
+        from core.license_validator import get_days_until_expiry
+        days = get_days_until_expiry(result)
+        expiry_str = str(result.expiry_date) if result.expiry_date else "Unknown"
+        if days > 0:
+            expiry_text = (
+                f"Your license is active and valid for <b>{days} day{'s' if days != 1 else ''}</b>.<br>"
+                f"Expiry date: {expiry_str}"
+            )
+        else:
+            expiry_text = f"Your license has been activated. Expiry date: {expiry_str}"
+
+        _show_themed_info(self, "License Activated", expiry_text)
+        self.accept()
 
     def _first_writable_path(self) -> Path | None:
         for directory in LICENSE_SEARCH_PATHS:
@@ -355,3 +371,132 @@ def _license_hint_label() -> QLabel:
         "color: #94a3b8; font-size: 11px; font-family: Consolas; background: transparent;"
     )
     return lbl
+
+
+def _show_themed_info(parent, title: str, text: str) -> None:
+    """Show a themed info dialog matching the msgbox style."""
+    from PySide6.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout
+
+    _BG      = "#13161e"
+    _SURFACE = "#0d1117"
+    _BORDER  = "rgba(255,255,255,0.09)"
+    _DIVIDER = "rgba(255,255,255,0.06)"
+    _TEXT    = "#f1f5f9"
+    _MUTED   = "#94a3b8"
+    _STRIP_BG     = "rgba(59,130,246,0.06)"
+    _STRIP_BORDER = "rgba(59,130,246,0.15)"
+    _ICON_BG      = "rgba(59,130,246,0.12)"
+    _ICON_BORDER  = "rgba(59,130,246,0.25)"
+    _ICON_COLOR   = "#60a5fa"
+    _BTN_BG       = "#3b82f6"
+    _BTN_HOVER    = "#2563eb"
+
+    dlg = QDialog(parent)
+    dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+    dlg.setAttribute(Qt.WA_StyledBackground, True)
+    dlg.setFixedWidth(460)
+    dlg.setStyleSheet(
+        f"QDialog {{ background: {_BG}; border: 1px solid {_BORDER}; border-radius: 12px; }}"
+    )
+    if parent:
+        dlg.setWindowModality(Qt.ApplicationModal)
+
+    root = QVBoxLayout(dlg)
+    root.setContentsMargins(0, 0, 0, 0)
+    root.setSpacing(0)
+
+    card = QFrame()
+    card.setStyleSheet(f"QFrame {{ background: {_BG}; border: none; border-radius: 12px; }}")
+    c_lay = QVBoxLayout(card)
+    c_lay.setContentsMargins(0, 0, 0, 0)
+    c_lay.setSpacing(0)
+
+    hdr = QFrame()
+    hdr.setFixedHeight(64)
+    hdr.setStyleSheet(
+        f"QFrame {{ background: {_SURFACE}; border: none; "
+        f"border-bottom: 1px solid {_DIVIDER}; "
+        f"border-top-left-radius: 12px; border-top-right-radius: 12px; }}"
+    )
+    h_lay = QHBoxLayout(hdr)
+    h_lay.setContentsMargins(20, 0, 20, 0)
+    h_lay.setSpacing(12)
+
+    icon_box = QFrame()
+    icon_box.setFixedSize(32, 32)
+    icon_box.setStyleSheet(
+        f"QFrame {{ background: {_ICON_BG}; border: 1px solid {_ICON_BORDER}; border-radius: 8px; }}"
+    )
+    ib_lay = QHBoxLayout(icon_box)
+    ib_lay.setContentsMargins(0, 0, 0, 0)
+    icon_lbl = QLabel("✓")
+    icon_lbl.setAlignment(Qt.AlignCenter)
+    icon_lbl.setStyleSheet(
+        f"color: {_ICON_COLOR}; font-size: 14px; font-weight: 700; background: transparent; border: none;"
+    )
+    ib_lay.addWidget(icon_lbl)
+    h_lay.addWidget(icon_box)
+
+    title_lbl = QLabel(title)
+    title_lbl.setStyleSheet(
+        f"color: {_TEXT}; font-size: 14px; font-weight: 600; background: transparent; border: none;"
+    )
+    h_lay.addWidget(title_lbl, 1)
+    c_lay.addWidget(hdr)
+
+    body = QFrame()
+    body.setStyleSheet(f"QFrame {{ background: {_BG}; border: none; }}")
+    b_lay = QVBoxLayout(body)
+    b_lay.setContentsMargins(20, 16, 20, 16)
+
+    strip = QFrame()
+    strip.setStyleSheet(
+        f"QFrame {{ background: {_STRIP_BG}; border: 1px solid {_STRIP_BORDER}; border-radius: 8px; }}"
+    )
+    s_lay = QHBoxLayout(strip)
+    s_lay.setContentsMargins(14, 10, 14, 10)
+    msg_lbl = QLabel(text)
+    msg_lbl.setTextFormat(Qt.RichText)
+    msg_lbl.setWordWrap(True)
+    msg_lbl.setStyleSheet(f"color: {_MUTED}; font-size: 12px; background: transparent; border: none;")
+    s_lay.addWidget(msg_lbl)
+    b_lay.addWidget(strip)
+    c_lay.addWidget(body, 1)
+
+    footer = QFrame()
+    footer.setFixedHeight(56)
+    footer.setStyleSheet(
+        f"QFrame {{ background: {_SURFACE}; border: none; "
+        f"border-top: 1px solid {_DIVIDER}; "
+        f"border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }}"
+    )
+    f_lay = QHBoxLayout(footer)
+    f_lay.setContentsMargins(20, 0, 20, 0)
+    f_lay.addStretch()
+
+    ok_btn = QPushButton("Continue")
+    ok_btn.setFixedHeight(34)
+    ok_btn.setCursor(Qt.PointingHandCursor)
+    ok_btn.setStyleSheet(
+        f"QPushButton {{ background: {_BTN_BG}; border: none; border-radius: 7px; "
+        f"color: #ffffff; font-size: 12px; font-weight: 500; padding: 0 20px; }}"
+        f"QPushButton:hover {{ background: {_BTN_HOVER}; }}"
+    )
+    ok_btn.clicked.connect(dlg.accept)
+    f_lay.addWidget(ok_btn)
+    c_lay.addWidget(footer)
+    root.addWidget(card)
+    dlg.adjustSize()
+
+    if parent:
+        QTimer.singleShot(0, lambda: _centre_on_screen(dlg))
+
+    dlg.exec()
+
+
+def _centre_on_screen(dlg: QDialog) -> None:
+    screen = QApplication.primaryScreen().availableGeometry()
+    dlg.move(
+        screen.center().x() - dlg.width() // 2,
+        screen.center().y() - dlg.height() // 2,
+    )

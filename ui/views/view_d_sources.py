@@ -523,9 +523,14 @@ class ViewDSources(ScreenBase):
             with open(proj_file, "w", encoding="utf-8") as f:
                 _json.dump(proj, f, indent=2)
 
+        def _on_chain_dim_deleted(_):
+            msgbox.information(self, "Dimension Deleted",
+                               f"<b>{dim_name}</b> and all its linked sources have been permanently removed.")
+            self.on_project_changed(target_key="d_sources")
+
         self._run_background(
             worker,
-            lambda _: self.on_project_changed(target_key="d_sources"),
+            _on_chain_dim_deleted,
             lambda exc: msgbox.critical(self, "Failed to Delete Source",
                                          f"The source could not be deleted. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
@@ -577,7 +582,9 @@ class ViewDSources(ScreenBase):
             with open(proj_file, "w", encoding="utf-8") as f:
                 _json.dump(proj, f, indent=2)
 
-        def on_done(_):
+        def on_done(_, _name=dim_name):
+            msgbox.information(self, "Dimension Deleted",
+                               f"<b>{_name}</b> has been permanently removed.")
             self.on_project_changed(target_key="d_sources")
 
         self._run_background(

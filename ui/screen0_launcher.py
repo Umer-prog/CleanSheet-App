@@ -445,6 +445,93 @@ class Screen0Launcher(ScreenBase):
         self._delete_btn.clicked.connect(self._on_delete_click)
         btn_row.addWidget(self._delete_btn)
         detail_lay.addLayout(btn_row)
+
+        # ── License info card ─────────────────────────────────────────
+        detail_lay.addSpacing(12)
+
+        lic_section_lbl = QLabel("LICENSE")
+        lic_section_lbl.setFont(theme.font(10, "bold"))
+        lic_section_lbl.setStyleSheet(
+            "color: #94a3b8; background: transparent; border: none; letter-spacing: 1px;"
+        )
+        detail_lay.addWidget(lic_section_lbl)
+
+        lic_card = QFrame()
+        lic_card.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.02); "
+            "border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; }"
+        )
+        lic_inner = QVBoxLayout(lic_card)
+        lic_inner.setContentsMargins(18, 12, 18, 12)
+        lic_inner.setSpacing(5)
+
+        try:
+            from core.license_validator import validate_license, get_days_until_expiry
+            _lic = validate_license()
+            _days = get_days_until_expiry(_lic)
+            if _lic.valid:
+                _expiry_str = str(_lic.expiry_date) if _lic.expiry_date else "Unknown"
+                _client = _lic.client_name or "Unknown"
+                if _days <= 0:
+                    _dot_col = "#f87171"
+                    _status_txt = "Expired"
+                    _badge_bg = "rgba(239,68,68,0.10)"
+                    _badge_border = "rgba(239,68,68,0.25)"
+                elif _days < 14:
+                    _dot_col = "#fbbf24"
+                    _status_txt = f"Expiring soon — {_days} day{'s' if _days != 1 else ''} left"
+                    _badge_bg = "rgba(217,119,6,0.10)"
+                    _badge_border = "rgba(217,119,6,0.25)"
+                else:
+                    _dot_col = "#34d399"
+                    _status_txt = f"Active — {_days} day{'s' if _days != 1 else ''} remaining"
+                    _badge_bg = "rgba(34,211,153,0.08)"
+                    _badge_border = "rgba(34,211,153,0.20)"
+
+                status_row = QHBoxLayout()
+                status_row.setSpacing(8)
+                dot_lbl = QLabel("●")
+                dot_lbl.setStyleSheet(
+                    f"color: {_dot_col}; font-size: 11px; background: transparent; border: none;"
+                )
+                status_row.addWidget(dot_lbl)
+                status_val = QLabel(_status_txt)
+                status_val.setFont(theme.font(12, "bold"))
+                status_val.setStyleSheet(
+                    f"color: {_dot_col}; background: transparent; border: none;"
+                )
+                status_row.addWidget(status_val)
+                badge = QLabel("LICENSED")
+                badge.setStyleSheet(
+                    f"color: {_dot_col}; background: {_badge_bg}; "
+                    f"border: 1px solid {_badge_border}; border-radius: 4px; "
+                    "font-size: 10px; font-weight: 600; padding: 1px 7px;"
+                )
+                status_row.addWidget(badge)
+                status_row.addStretch()
+                lic_inner.addLayout(status_row)
+
+                client_lbl = QLabel(f"Licensed to:  {_client}")
+                client_lbl.setFont(theme.font(11))
+                client_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+                lic_inner.addWidget(client_lbl)
+
+                expiry_lbl = QLabel(f"Expiry date:  {_expiry_str}")
+                expiry_lbl.setFont(theme.font(11))
+                expiry_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+                lic_inner.addWidget(expiry_lbl)
+            else:
+                no_lic = QLabel("No valid license. Contact support@gd365.com.")
+                no_lic.setFont(theme.font(11))
+                no_lic.setStyleSheet("color: #f87171; background: transparent; border: none;")
+                lic_inner.addWidget(no_lic)
+        except Exception:
+            err_lic = QLabel("Unable to read license information.")
+            err_lic.setFont(theme.font(11))
+            err_lic.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
+            lic_inner.addWidget(err_lic)
+
+        detail_lay.addWidget(lic_card)
         detail_lay.addStretch()
 
         right_layout.addWidget(detail_area, 1)

@@ -420,6 +420,8 @@ class ViewTSources(ScreenBase):
 
         def on_done(_):
             self._set_error("")
+            msgbox.information(self, "Table Refreshed",
+                               f"<b>{table_name}</b> has been refreshed from its source file.")
             self.on_project_changed(target_key="t_sources")
 
         self._run_background(
@@ -441,6 +443,8 @@ class ViewTSources(ScreenBase):
 
         def on_done(_):
             self._set_error("")
+            msgbox.information(self, "Table Refreshed",
+                               f"<b>{table_name}</b> has been refreshed from its source file.")
             self.on_project_changed(target_key="t_sources")
 
         self._run_background(
@@ -477,6 +481,12 @@ class ViewTSources(ScreenBase):
         def on_done(errors: list[str]) -> None:
             if errors:
                 self._set_error("Refresh issues: " + " | ".join(errors))
+                msgbox.warning(self, "Refresh Completed with Issues",
+                               "Some tables could not be refreshed:<br><br>"
+                               + "<br>".join(errors))
+            else:
+                msgbox.information(self, "All Tables Refreshed",
+                                   "All transaction tables have been refreshed from their source files.")
             self.on_project_changed(target_key="t_sources")
 
         self._run_background(
@@ -586,9 +596,14 @@ class ViewTSources(ScreenBase):
             with open(proj_file, "w", encoding="utf-8") as f:
                 _json.dump(proj, f, indent=2)
 
+        def _on_chain_deleted(_):
+            msgbox.information(self, "Table Deleted",
+                               f"<b>{table_name}</b> and all its linked sources have been permanently removed.")
+            self.on_project_changed(target_key="t_sources")
+
         self._run_background(
             worker,
-            lambda _: self.on_project_changed(target_key="t_sources"),
+            _on_chain_deleted,
             lambda exc: msgbox.critical(self, "Failed to Delete Source",
                                          f"The source could not be deleted. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
@@ -688,8 +703,13 @@ class ViewTSources(ScreenBase):
                     "dim_tables": list(self.project.get("dim_tables", [])),
                 })
 
+            def _on_table_deleted(_, _name=table_name):
+                msgbox.information(self, "Table Deleted",
+                                   f"<b>{_name}</b> has been permanently removed.")
+                self.on_project_changed(target_key="t_sources")
+
             self._run_background(delete_worker,
-                                 lambda _: self.on_project_changed(target_key="t_sources"),
+                                 _on_table_deleted,
                                  lambda exc: msgbox.critical(
                                      self, "Failed to Delete Table",
                                      f"<b>{table_name}</b> could not be deleted. Check that no files are open.\n\nDetail: {exc}"

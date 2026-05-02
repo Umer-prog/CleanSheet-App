@@ -421,9 +421,16 @@ class ViewHistory(ScreenBase):
                         break
             create_snapshot(project_path, tables, label=label)
 
+        def _on_snapshot_done(_):
+            msgbox.information(
+                self, "Snapshot Created",
+                f"Snapshot <b>{label}</b> has been saved successfully.",
+            )
+            self._load_manifests()
+
         self._run_background(
             worker,
-            lambda _: self._load_manifests(),
+            _on_snapshot_done,
             lambda exc: msgbox.critical(self, "Failed to Create Snapshot",
                                          f"The snapshot could not be saved. Check that the project folder is accessible.\n\nDetail: {exc}"),
         )
@@ -654,8 +661,12 @@ class ViewHistory(ScreenBase):
         def worker():
             update_manifest_label(self.project_path, manifest_id, new_label)
 
+        def _on_label_saved(_):
+            msgbox.information(self, "Label Saved", "The commit label has been updated.")
+            self.on_project_changed(target_key="history")
+
         self._run_background(worker,
-                             lambda _: self.on_project_changed(target_key="history"),
+                             _on_label_saved,
                              lambda exc: self._set_error(f"Could not update label: {exc}"))
 
     def _confirm_revert(self) -> None:

@@ -266,6 +266,98 @@ class ViewSettings(ScreenBase):
         final_row.addWidget(open_final_btn)
         form_lay.addLayout(final_row)
 
+        form_lay.addSpacing(20)
+
+        div4 = QFrame()
+        div4.setFixedHeight(1)
+        div4.setStyleSheet("background: rgba(255,255,255,0.06); border: none;")
+        form_lay.addWidget(div4)
+        form_lay.addSpacing(20)
+
+        # License info section
+        form_lay.addWidget(_field_label("LICENSE"))
+        form_lay.addSpacing(8)
+        lic_card = QFrame()
+        lic_card.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.02); "
+            "border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; }"
+        )
+        lic_lay = QVBoxLayout(lic_card)
+        lic_lay.setContentsMargins(14, 12, 14, 12)
+        lic_lay.setSpacing(6)
+
+        try:
+            from core.license_validator import validate_license, get_days_until_expiry
+            _lic = validate_license()
+            _days = get_days_until_expiry(_lic)
+            if _lic.valid:
+                _expiry_str = str(_lic.expiry_date) if _lic.expiry_date else "Unknown"
+                _client = _lic.client_name or "Unknown"
+                if _days <= 0:
+                    _status_text = "Expired"
+                    _status_color = "#f87171"
+                    _badge_bg = "rgba(239,68,68,0.10)"
+                    _badge_border = "rgba(239,68,68,0.25)"
+                elif _days < 14:
+                    _status_text = f"Expiring soon — {_days} day{'s' if _days != 1 else ''} left"
+                    _status_color = "#fbbf24"
+                    _badge_bg = "rgba(217,119,6,0.10)"
+                    _badge_border = "rgba(217,119,6,0.25)"
+                else:
+                    _status_text = f"Active — {_days} day{'s' if _days != 1 else ''} remaining"
+                    _status_color = "#34d399"
+                    _badge_bg = "rgba(34,211,153,0.08)"
+                    _badge_border = "rgba(34,211,153,0.20)"
+
+                status_row = QHBoxLayout()
+                status_row.setSpacing(10)
+                status_dot = QLabel("●")
+                status_dot.setStyleSheet(
+                    f"color: {_status_color}; font-size: 11px; background: transparent; border: none;"
+                )
+                status_row.addWidget(status_dot)
+                status_lbl = QLabel(_status_text)
+                status_lbl.setStyleSheet(
+                    f"color: {_status_color}; font-size: 12px; font-weight: 600; "
+                    "background: transparent; border: none;"
+                )
+                status_row.addWidget(status_lbl)
+                status_badge = QLabel("LICENSED")
+                status_badge.setStyleSheet(
+                    f"color: {_status_color}; background: {_badge_bg}; "
+                    f"border: 1px solid {_badge_border}; border-radius: 4px; "
+                    "font-size: 10px; font-weight: 600; padding: 1px 8px;"
+                )
+                status_row.addWidget(status_badge)
+                status_row.addStretch()
+                lic_lay.addLayout(status_row)
+
+                client_lbl = QLabel(f"Licensed to:  {_client}")
+                client_lbl.setStyleSheet(
+                    "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
+                )
+                lic_lay.addWidget(client_lbl)
+
+                expiry_lbl = QLabel(f"Expiry date:  {_expiry_str}")
+                expiry_lbl.setStyleSheet(
+                    "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
+                )
+                lic_lay.addWidget(expiry_lbl)
+            else:
+                err_lbl = QLabel("No valid license found. Please contact support@gd365.com.")
+                err_lbl.setStyleSheet(
+                    "color: #f87171; font-size: 12px; background: transparent; border: none;"
+                )
+                lic_lay.addWidget(err_lbl)
+        except Exception:
+            err_lbl = QLabel("Unable to read license information.")
+            err_lbl.setStyleSheet(
+                "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
+            )
+            lic_lay.addWidget(err_lbl)
+
+        form_lay.addWidget(lic_card)
+
         body_lay.addWidget(form_wrap)
         scroll.setWidget(body)
         outer.addWidget(scroll, 1)
