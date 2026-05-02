@@ -107,23 +107,15 @@ class ViewTSources(ScreenBase):
         tb_lay.setContentsMargins(28, 0, 28, 0)
         tb_lay.setSpacing(16)
 
-        tb_text = QVBoxLayout()
-        tb_text.setSpacing(2)
-        title_lbl = QLabel("Transaction Tables")
-        title_lbl.setStyleSheet(
-            "color: #f1f5f9; font-size: 15px; font-weight: 600; "
-            "background: transparent; border: none;"
+        header_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Transaction Tables</span>"
+            "<br>"
+            "<span style='color:#94a3b8; font-size:11px;'>Upload new versions for existing tables, "
+            "delete obsolete ones, or add new transaction tables.</span>"
         )
-        meta_lbl = QLabel(
-            "Upload new versions for existing tables, delete obsolete ones, "
-            "or add new transaction tables."
-        )
-        meta_lbl.setStyleSheet(
-            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
-        )
-        tb_text.addWidget(title_lbl)
-        tb_text.addWidget(meta_lbl)
-        tb_lay.addLayout(tb_text, 1)
+        header_lbl.setTextFormat(Qt.RichText)
+        header_lbl.setStyleSheet("background: transparent; border: none;")
+        tb_lay.addWidget(header_lbl, 1)
 
         refresh_all_btn = _btn_ghost("↻ Refresh All")
         refresh_all_btn.clicked.connect(self._on_refresh_all)

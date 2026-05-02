@@ -75,24 +75,15 @@ class PopupRevertConfirm(QDialog):
         ib_lay.addWidget(icon_lbl)
         lay.addWidget(icon_box)
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-        title = QLabel("Confirm Revert")
-        title.setStyleSheet(
-            "color: #f1f5f9; font-size: 14px; font-weight: 600; "
-            "background: transparent; border: none;"
+        header_lbl = QLabel(
+            f"<span style='color:#f1f5f9; font-size:14px; font-weight:600;'>Confirm Revert</span>"
+            f"<br>"
+            f"<span style='color:#94a3b8; font-size:11px;'>Snapshot: "
+            f"<span style='color:#60a5fa; font-family:\"Courier New\";'>{manifest_id}</span></span>"
         )
-        text_col.addWidget(title)
-        sub = QLabel(
-            f"Snapshot: <span style='color:#60a5fa; font-family:\"Courier New\";'>"
-            f"{manifest_id}</span>"
-        )
-        sub.setTextFormat(Qt.RichText)
-        sub.setStyleSheet(
-            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
-        )
-        text_col.addWidget(sub)
-        lay.addLayout(text_col, 1)
+        header_lbl.setTextFormat(Qt.RichText)
+        header_lbl.setStyleSheet("background: transparent; border: none;")
+        lay.addWidget(header_lbl, 1)
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)

@@ -195,23 +195,16 @@ class ViewHistory(ScreenBase):
         tb_lay.setContentsMargins(28, 0, 28, 0)
         tb_lay.setSpacing(16)
 
-        tb_text = QVBoxLayout()
-        tb_text.setSpacing(2)
-        title_lbl = QLabel("Commit History")
-        title_lbl.setStyleSheet(
-            "color: #f1f5f9; font-size: 15px; font-weight: 600; "
-            "background: transparent; border: none;"
+        header_lbl = QLabel(
+            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Commit History</span>"
+            "<br>"
+            "<span style='color:#94a3b8; font-size:11px;'>Select a commit to inspect its details, "
+            "edit the label, or revert — reverting restores transactions, dimension tables, "
+            "and mappings together.</span>"
         )
-        meta_lbl = QLabel(
-            "Select a commit to inspect its details, edit the label, or revert — "
-            "reverting restores transactions, dimension tables, and mappings together."
-        )
-        meta_lbl.setStyleSheet(
-            "color: #94a3b8; font-size: 11px; background: transparent; border: none;"
-        )
-        tb_text.addWidget(title_lbl)
-        tb_text.addWidget(meta_lbl)
-        tb_lay.addLayout(tb_text, 1)
+        header_lbl.setTextFormat(Qt.RichText)
+        header_lbl.setStyleSheet("background: transparent; border: none;")
+        tb_lay.addWidget(header_lbl, 1)
 
         snapshot_btn = QPushButton("+ Take Snapshot")
         snapshot_btn.setFixedHeight(34)
