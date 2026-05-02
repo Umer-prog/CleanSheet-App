@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
@@ -338,13 +338,12 @@ class ViewSettings(ScreenBase):
 
         prev_history = bool(self.project.get("settings", {}).get("history_enabled", True))
         if prev_history and not history_enabled:
-            reply = msgbox.question(
+            if not msgbox.warning_question(
                 self, "Disable History Tracking?",
                 "Turning off history will stop new snapshots from being created.<br><br>"
                 "Your existing snapshots will be kept and you can re-enable history at any time.",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
+                confirm_label="Disable",
+            ):
                 self._history_check.setChecked(True)
                 return
 

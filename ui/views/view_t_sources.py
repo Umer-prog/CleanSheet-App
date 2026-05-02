@@ -5,7 +5,7 @@ from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -491,16 +491,14 @@ class ViewTSources(ScreenBase):
 
     def _on_append_chain(self, table_name: str, chain: list[dict]) -> None:
         self._set_error("")
-        reply = msgbox.question(
+        if not msgbox.warning_question(
             self,
             "Append File to Chain",
             "Once a file is added to a chain, it cannot be removed on its own.<br><br>"
             "To remove it later you would need to delete the entire chain, which will also "
             "remove all associated mappings. Are you sure you want to continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
+            confirm_label="Append",
+        ):
             return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Excel file to append", "", "Excel Files (*.xlsx *.xlsm *.xls)"
@@ -557,16 +555,14 @@ class ViewTSources(ScreenBase):
             f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
             for e in chain
         )
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Delete Chained Table",
             f"Deleting <b>{table_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
             f"{chain_summary}<br><br>"
             f"All mappings referencing this table will also be deleted. This cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
+            confirm_label="Delete",
+        ):
             return
 
         def worker():
@@ -666,13 +662,12 @@ class ViewTSources(ScreenBase):
 
         def on_mappings_loaded(mappings):
             count = count_mappings_for_table(mappings, table_name)
-            reply = msgbox.question(
+            if not msgbox.critical_question(
                 self, "Delete Table",
                 f"Deleting <b>{table_name}</b> will also remove {count} mapping(s) that reference it.<br><br>"
                 f"This action cannot be undone.",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
+                confirm_label="Delete",
+            ):
                 return
 
             def delete_worker():

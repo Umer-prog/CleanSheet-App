@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
@@ -703,16 +703,14 @@ class Screen0Launcher(ScreenBase):
         if not self._selected_path:
             return
         project_path = Path(self._selected_path)
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Delete Project",
             f"Are you sure you want to delete <b>{project_path.name}</b>?<br><br>"
             "The project folder and all its data will be permanently removed. "
             "This action cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
+            confirm_label="Delete Project",
+        ):
             return
         try:
             if project_path.exists():

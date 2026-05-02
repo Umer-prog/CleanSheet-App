@@ -1296,19 +1296,15 @@ class ViewMapping(ScreenBase):
                 return
             scope = dlg.choice
         else:
-            dlg = _ConfirmPopup(
+            confirmed = msgbox.warning_question(
                 self,
-                title="Ignore This Error?",
-                message=(
-                    f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be hidden "
-                    f"from the error list but the data will not change."
-                ),
+                "Ignore This Error?",
+                f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be hidden "
+                f"from the error list. The data in the table will not change.",
                 confirm_label="Ignore",
-                accent="#8190a3",
-                accent_hover="#94a3b8",
+                cancel_label="Cancel",
             )
-            dlg.exec()
-            if not dlg.confirmed:
+            if not confirmed:
                 return
             scope = "single"
 
@@ -1342,20 +1338,15 @@ class ViewMapping(ScreenBase):
                 return
             scope = dlg.choice
         else:
-            dlg = _ConfirmPopup(
+            confirmed = msgbox.critical_question(
                 self,
-                title="Delete This Row?",
-                message=(
-                    f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be "
-                    f"<b>permanently removed</b> from the transaction table. "
-                    f"This cannot be undone without reverting to a previous commit."
-                ),
+                "Delete This Row?",
+                f"Row {row_index + 1} — value <b>{bad_val_display}</b> will be "
+                f"<b>permanently removed</b> from the transaction table.<br><br>"
+                f"This cannot be undone without reverting to a previous snapshot.",
                 confirm_label="Delete",
-                accent="#ef4444",
-                accent_hover="#dc2626",
             )
-            dlg.exec()
-            if not dlg.confirmed:
+            if not confirmed:
                 return
             scope = "single"
 
@@ -1402,16 +1393,14 @@ class ViewMapping(ScreenBase):
 
         def on_success(path) -> None:
             self._generate_btn.setEnabled(True)
-            from PySide6.QtWidgets import QMessageBox
-            answer = msgbox.question(
+            if msgbox.warning_question(
                 self,
                 "Export Complete",
                 f"Your output file has been created at:<br><br><code>{path}</code><br><br>"
                 f"Would you like to open the output folder now?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer == QMessageBox.StandardButton.Yes:
+                confirm_label="Open Folder",
+                cancel_label="Close",
+            ):
                 import subprocess
                 folder = str(path.parent) if hasattr(path, "parent") else str(path)
                 subprocess.Popen(f'explorer "{folder}"')
@@ -1510,195 +1499,204 @@ def _table_style() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Confirm popup (Ignore / Delete warning)
-# ---------------------------------------------------------------------------
-
-class _ConfirmPopup:
-    """Generic dark-themed confirmation dialog used for Ignore and Delete actions."""
-
-    def __init__(
-        self,
-        parent,
-        title: str,
-        message: str,
-        confirm_label: str,
-        accent: str,
-        accent_hover: str,
-    ):
-        from PySide6.QtWidgets import QDialog
-        self._dlg = QDialog(parent)
-        self._dlg.setWindowTitle(title)
-        self._dlg.setFixedSize(480, 220)
-        self._dlg.setModal(True)
-        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.confirmed = False
-
-        outer = QVBoxLayout(self._dlg)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        # Header
-        header = QFrame()
-        header.setFixedHeight(56)
-        header.setStyleSheet(f"QFrame {{ background-color: {accent}; }}")
-        h_lay = QHBoxLayout(header)
-        h_lay.setContentsMargins(22, 0, 22, 0)
-        h_lbl = QLabel(title)
-        h_lbl.setStyleSheet(
-            "color: #fff; font-size: 15px; font-weight: 700; "
-            "background: transparent; border: none;"
-        )
-        h_lay.addWidget(h_lbl)
-        outer.addWidget(header)
-
-        # Body
-        body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; }")
-        b_lay = QVBoxLayout(body)
-        b_lay.setContentsMargins(22, 18, 22, 18)
-        msg_lbl = QLabel(message)
-        msg_lbl.setTextFormat(Qt.RichText)
-        msg_lbl.setWordWrap(True)
-        msg_lbl.setStyleSheet(
-            "color: #cbd5e1; font-size: 13px; "
-            "background: transparent; border: none;"
-        )
-        b_lay.addWidget(msg_lbl)
-        outer.addWidget(body, 1)
-
-        # Footer
-        footer = QFrame()
-        footer.setFixedHeight(60)
-        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
-        f_lay = QHBoxLayout(footer)
-        f_lay.setContentsMargins(22, 0, 22, 0)
-        f_lay.setSpacing(8)
-        f_lay.addStretch()
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedHeight(36)
-        cancel_btn.setStyleSheet(
-            "QPushButton { "
-            "background: transparent; "
-            "border: 1px solid rgba(255,255,255,0.12); "
-            "border-radius: 7px; "
-            "color: #cbd5e1; font-size: 13px; "
-            "padding: 0 18px; "
-            "} "
-            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
-        )
-        cancel_btn.clicked.connect(self._dlg.reject)
-        f_lay.addWidget(cancel_btn)
-
-        confirm_btn = QPushButton(confirm_label)
-        confirm_btn.setFixedHeight(36)
-        confirm_btn.setStyleSheet(
-            f"QPushButton {{ "
-            f"background: {accent}; border: none; border-radius: 7px; "
-            f"color: #fff; font-size: 13px; font-weight: 600; "
-            f"padding: 0 18px; "
-            f"}} "
-            f"QPushButton:hover {{ background: {accent_hover}; }}"
-        )
-        confirm_btn.clicked.connect(self._confirm)
-        f_lay.addWidget(confirm_btn)
-
-        outer.addWidget(footer)
-
-        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
-
-    def _confirm(self) -> None:
-        self.confirmed = True
-        self._dlg.accept()
-
-    def exec(self) -> None:
-        self._dlg.exec()
-
-
-# ---------------------------------------------------------------------------
-# Bulk scope popup (unchanged)
+# Bulk scope popup — multiple occurrences (Delete / Ignore / Replace)
 # ---------------------------------------------------------------------------
 
 class _BulkScopePopup:
-    """Ask whether to replace all matching rows or only the selected one."""
+    """Ask whether to act on all matching rows or only the selected one."""
+
+    # colour tokens per verb
+    _VERB_KIND = {
+        "Delete":  "critical",
+        "Ignore":  "warning",
+        "Replace": "info",
+    }
+    _ACCENT = {
+        "critical": (
+            "#f87171",
+            "rgba(239,68,68,0.12)", "rgba(239,68,68,0.25)",
+            "rgba(239,68,68,0.06)", "rgba(239,68,68,0.15)",
+            "rgba(239,68,68,0.14)", "rgba(239,68,68,0.35)", "#f87171", "rgba(239,68,68,0.25)",
+        ),
+        "warning": (
+            "#fbbf24",
+            "rgba(217,119,6,0.12)", "rgba(217,119,6,0.25)",
+            "rgba(217,119,6,0.06)", "rgba(217,119,6,0.15)",
+            "rgba(217,119,6,0.14)", "rgba(217,119,6,0.35)", "#fbbf24", "rgba(217,119,6,0.25)",
+        ),
+        "info": (
+            "#60a5fa",
+            "rgba(59,130,246,0.12)", "rgba(59,130,246,0.25)",
+            "rgba(59,130,246,0.06)", "rgba(59,130,246,0.15)",
+            "#3b82f6", "#2563eb", "#ffffff", "#2563eb",
+        ),
+    }
+    _ICONS = {"critical": "✕", "warning": "⚠", "info": "ℹ"}
 
     def __init__(self, parent, bad_value: str, total_count: int, selected_row: int,
                  verb: str = "Replace", count_exact: bool = True):
+        from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QDialog
         self._dlg = QDialog(parent)
-        self._dlg.setWindowTitle("Multiple Occurrences Found")
-        self._dlg.setFixedSize(520, 280)
-        self._dlg.setModal(True)
         self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self._dlg.setAttribute(Qt.WA_StyledBackground, True)
+        self._dlg.setFixedWidth(480)
+        self._dlg.setModal(True)
+        self._dlg.setStyleSheet(
+            "QDialog { background: #13161e; border: 1px solid rgba(255,255,255,0.09); "
+            "border-radius: 12px; }"
+        )
         self.choice: str | None = None
 
+        kind   = self._VERB_KIND.get(verb, "info")
+        accent = self._ACCENT[kind]
+        icon_char = self._ICONS[kind]
         count_label = str(total_count) if count_exact else f"at least {total_count}"
-
-        outer = QVBoxLayout(self._dlg)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        header = QFrame()
-        header.setFixedHeight(68)
-        header.setStyleSheet("QFrame { background-color: #3b82f6; }")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(24, 0, 24, 0)
-        lbl = QLabel("Multiple Occurrences Found")
-        lbl.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")
-        h_layout.addWidget(lbl)
-        outer.addWidget(header)
-
-        body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; border-radius: 10px; }")
-        b_layout = QVBoxLayout(body)
-        b_layout.setContentsMargins(24, 20, 24, 20)
         display = bad_value if bad_value else "(empty / null)"
-        msg = QLabel(
-            f'The value "{display}" appears on {count_label} rows in this mapping.\n\n'
-            f"{verb} all matching rows, or only Row {selected_row}?"
-        )
-        msg.setStyleSheet(
-            "color: #f1f5f9; font-size: 13px; background: transparent; border: none;"
-        )
-        msg.setWordWrap(True)
-        b_layout.addWidget(msg)
-        outer.addWidget(body, 1)
 
+        _BG      = "#13161e"
+        _SURFACE = "#0d1117"
+        _DIVIDER = "rgba(255,255,255,0.06)"
+        _MUTED   = "#94a3b8"
+
+        root = QVBoxLayout(self._dlg)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        card = QFrame()
+        card.setStyleSheet(f"QFrame {{ background: {_BG}; border: none; border-radius: 12px; }}")
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(0, 0, 0, 0)
+        c_lay.setSpacing(0)
+
+        # Header
+        hdr = QFrame()
+        hdr.setFixedHeight(64)
+        hdr.setStyleSheet(
+            f"QFrame {{ background: {_SURFACE}; border: none; "
+            f"border-bottom: 1px solid {_DIVIDER}; "
+            f"border-top-left-radius: 12px; border-top-right-radius: 12px; }}"
+        )
+        h_lay = QHBoxLayout(hdr)
+        h_lay.setContentsMargins(20, 0, 20, 0)
+        h_lay.setSpacing(12)
+
+        icon_box = QFrame()
+        icon_box.setFixedSize(32, 32)
+        icon_box.setStyleSheet(
+            f"QFrame {{ background: {accent[1]}; border: 1px solid {accent[2]}; "
+            f"border-radius: 8px; }}"
+        )
+        ib_lay = QHBoxLayout(icon_box)
+        ib_lay.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel(icon_char)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setStyleSheet(
+            f"color: {accent[0]}; font-size: 14px; font-weight: 700; "
+            f"background: transparent; border: none;"
+        )
+        ib_lay.addWidget(icon_lbl)
+        h_lay.addWidget(icon_box)
+
+        title_lbl = QLabel("Multiple Occurrences Found")
+        title_lbl.setStyleSheet(
+            "color: #f1f5f9; font-size: 14px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        h_lay.addWidget(title_lbl, 1)
+        c_lay.addWidget(hdr)
+
+        # Body
+        body = QFrame()
+        body.setStyleSheet(f"QFrame {{ background: {_BG}; border: none; }}")
+        b_lay = QVBoxLayout(body)
+        b_lay.setContentsMargins(20, 16, 20, 16)
+
+        strip = QFrame()
+        strip.setStyleSheet(
+            f"QFrame {{ background: {accent[3]}; border: 1px solid {accent[4]}; "
+            f"border-radius: 8px; }}"
+        )
+        s_lay = QHBoxLayout(strip)
+        s_lay.setContentsMargins(14, 10, 14, 10)
+        msg_lbl = QLabel(
+            f'<b style="color:#f1f5f9;">{display}</b> appears on '
+            f'<b style="color:#f1f5f9;">{count_label} rows</b> in this mapping.<br><br>'
+            f'{verb} all matching rows, or only Row {selected_row}?'
+        )
+        msg_lbl.setTextFormat(Qt.RichText)
+        msg_lbl.setWordWrap(True)
+        msg_lbl.setStyleSheet(
+            f"color: {_MUTED}; font-size: 12px; background: transparent; border: none;"
+        )
+        s_lay.addWidget(msg_lbl)
+        b_lay.addWidget(strip)
+        c_lay.addWidget(body, 1)
+
+        # Footer
         footer = QFrame()
-        footer.setFixedHeight(68)
-        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
-        f_layout = QHBoxLayout(footer)
-        f_layout.setContentsMargins(24, 0, 24, 0)
-        f_layout.setSpacing(8)
-        f_layout.addStretch()
+        footer.setFixedHeight(56)
+        footer.setStyleSheet(
+            f"QFrame {{ background: {_SURFACE}; border: none; "
+            f"border-top: 1px solid {_DIVIDER}; "
+            f"border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }}"
+        )
+        f_lay = QHBoxLayout(footer)
+        f_lay.setContentsMargins(20, 0, 20, 0)
+        f_lay.setSpacing(8)
+        f_lay.addStretch()
+
+        _btn_cancel_ss = (
+            "QPushButton { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.09); border-radius: 7px; "
+            f"color: {_MUTED}; font-size: 12px; padding: 0 16px; }}"
+            "QPushButton:hover { background: rgba(255,255,255,0.09); color: #f1f5f9; }"
+        )
+        _btn_primary_ss = (
+            f"QPushButton {{ background: {accent[5]}; border: 1px solid {accent[6]}; "
+            f"border-radius: 7px; color: {accent[7]}; font-size: 12px; "
+            f"font-weight: 500; padding: 0 16px; }}"
+            f"QPushButton:hover {{ background: {accent[8]}; }}"
+        )
 
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedHeight(38)
-        cancel_btn.setStyleSheet(
-            "QPushButton { "
-            "background: transparent; "
-            "border: 1px solid rgba(255,255,255,0.12); "
-            "border-radius: 7px; "
-            "color: #cbd5e1; font-size: 13px; "
-            "padding: 0 18px; "
-            "} "
-            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
-        )
+        cancel_btn.setFixedHeight(34)
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.setStyleSheet(_btn_cancel_ss)
         cancel_btn.clicked.connect(self._dlg.reject)
-        f_layout.addWidget(cancel_btn)
+        f_lay.addWidget(cancel_btn)
 
         single_btn = QPushButton(f"Just Row {selected_row}")
-        single_btn.setObjectName("btn_outline")
-        single_btn.setFixedHeight(38)
+        single_btn.setFixedHeight(34)
+        single_btn.setCursor(Qt.PointingHandCursor)
+        single_btn.setStyleSheet(_btn_cancel_ss)
         single_btn.clicked.connect(lambda: self._pick("single"))
-        f_layout.addWidget(single_btn)
+        f_lay.addWidget(single_btn)
 
-        all_btn = QPushButton(f"{verb} All  ({count_label} rows)")
-        all_btn.setObjectName("btn_primary")
-        all_btn.setFixedHeight(38)
+        all_btn = QPushButton(f"{verb} All  ({count_label})")
+        all_btn.setFixedHeight(34)
+        all_btn.setCursor(Qt.PointingHandCursor)
+        all_btn.setStyleSheet(_btn_primary_ss)
         all_btn.clicked.connect(lambda: self._pick("all"))
-        f_layout.addWidget(all_btn)
-        outer.addWidget(footer)
+        f_lay.addWidget(all_btn)
+
+        c_lay.addWidget(footer)
+        root.addWidget(card)
+        self._dlg.adjustSize()
+
+        if parent:
+            QTimer.singleShot(0, self._centre)
+            QTimer.singleShot(50, self._dlg.raise_)
+
+    def _centre(self) -> None:
+        p = self._dlg.parent()
+        if p is None:
+            return
+        pg = p.window().geometry()
+        self._dlg.move(
+            pg.x() + (pg.width()  - self._dlg.width())  // 2,
+            pg.y() + (pg.height() - self._dlg.height()) // 2,
+        )
 
     def _pick(self, choice: str) -> None:
         self.choice = choice

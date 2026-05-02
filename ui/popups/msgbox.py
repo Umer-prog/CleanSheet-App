@@ -289,6 +289,19 @@ def warning_question(parent, title: str, text: str,
     return dlg.result_role() == "confirm"
 
 
+def critical_question(parent, title: str, text: str,
+                      confirm_label: str = "Delete",
+                      cancel_label: str = "Cancel") -> bool:
+    """Danger-zone confirmation dialog (red). Returns True if confirmed."""
+    dlg = _MsgDialog(
+        parent, "critical", _ICONS["critical"], title, text,
+        buttons=[(cancel_label, "cancel"), (confirm_label, "confirm")],
+        default_role="cancel",
+    )
+    dlg.exec()
+    return dlg.result_role() == "confirm"
+
+
 def warning(parent, title: str, text: str) -> int:
     dlg = _MsgDialog(
         parent, "warning", _ICONS["warning"], title, text,

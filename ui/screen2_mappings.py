@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
@@ -749,16 +749,14 @@ class Screen2Mappings(ScreenBase):
     def _confirm_remove_table(self, table_name: str, kind: str) -> None:
         """Ask for confirmation then remove the table from disk, project.json, and mappings."""
         kind_label = "dimension" if kind == "dim" else "transaction"
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Remove Table",
             f"Remove <b>{table_name}</b> from this project?<br><br>"
             f"The {kind_label} data file will be deleted from disk and any mappings "
             f"that reference it will also be removed.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+            confirm_label="Remove Table",
+        ):
             return
 
         def worker():
@@ -1204,15 +1202,13 @@ class Screen2Mappings(ScreenBase):
             )
 
             if not missing_tx and not missing_dim:
-                reply = msgbox.question(
+                if msgbox.warning_question(
                     self,
                     "Finish Setup",
                     "All tables are mapped and ready to go.<br><br>"
                     "Continue to the main workspace?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes,
-                )
-                if reply == QMessageBox.Yes:
+                    confirm_label="Continue",
+                ):
                     do_save()
                 return
 
@@ -1224,16 +1220,14 @@ class Screen2Mappings(ScreenBase):
                 parts.append(f"Dimension tables: {', '.join(missing_dim)}")
             unmapped_str = "<br>".join(parts)
 
-            reply = msgbox.question(
+            if msgbox.warning_question(
                 self,
                 "Some Tables Are Not Mapped",
                 f"The following tables have no mappings and will pass through without any column matching:<br><br>"
                 f"{unmapped_str}<br><br>"
                 f"Continue anyway?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply == QMessageBox.Yes:
+                confirm_label="Continue",
+            ):
                 do_save()
 
         def on_existing_error(exc):

@@ -5,7 +5,7 @@ from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -51,92 +51,6 @@ def _btn_ghost(text: str, height: int = 34) -> QPushButton:
     )
     return b
 
-
-class _OrphanDeleteConfirm:
-    """Dark-themed confirmation dialog for orphaned dimension table deletion."""
-
-    def __init__(self, parent, dim_name: str):
-        self._dlg = QDialog(parent)
-        self._dlg.setWindowTitle("Delete Orphaned Dimension Table")
-        self._dlg.setFixedSize(500, 240)
-        self._dlg.setModal(True)
-        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
-        self.confirmed = False
-
-        outer = QVBoxLayout(self._dlg)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        header = QFrame()
-        header.setFixedHeight(56)
-        header.setStyleSheet("QFrame { background-color: #ef4444; }")
-        h_lay = QHBoxLayout(header)
-        h_lay.setContentsMargins(22, 0, 22, 0)
-        h_lbl = QLabel("Delete Dimension Table")
-        h_lbl.setStyleSheet(
-            "color: #fff; font-size: 15px; font-weight: 700; "
-            "background: transparent; border: none;"
-        )
-        h_lay.addWidget(h_lbl)
-        outer.addWidget(header)
-
-        body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; }")
-        b_lay = QVBoxLayout(body)
-        b_lay.setContentsMargins(22, 18, 22, 18)
-        b_lay.setSpacing(10)
-
-        msg = QLabel(
-            f"<b style='color:#f1f5f9;'>{dim_name}</b> has no active mappings "
-            f"and is eligible for deletion.<br><br>"
-            f"This will <b>permanently remove</b> the dimension table and all its data. "
-            f"This action cannot be undone by reverting to a snapshot."
-        )
-        msg.setTextFormat(Qt.RichText)
-        msg.setWordWrap(True)
-        msg.setStyleSheet(
-            "color: #94a3b8; font-size: 13px; background: transparent; border: none;"
-        )
-        b_lay.addWidget(msg)
-        outer.addWidget(body, 1)
-
-        footer = QFrame()
-        footer.setFixedHeight(60)
-        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
-        f_lay = QHBoxLayout(footer)
-        f_lay.setContentsMargins(22, 0, 22, 0)
-        f_lay.setSpacing(8)
-        f_lay.addStretch()
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedHeight(36)
-        cancel_btn.setStyleSheet(
-            "QPushButton { background: transparent; "
-            "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
-            "color: #cbd5e1; font-size: 13px; padding: 0 18px; }"
-            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
-        )
-        cancel_btn.clicked.connect(self._dlg.reject)
-        f_lay.addWidget(cancel_btn)
-
-        delete_btn = QPushButton("Delete Permanently")
-        delete_btn.setFixedHeight(36)
-        delete_btn.setStyleSheet(
-            "QPushButton { background: #ef4444; border: none; border-radius: 7px; "
-            "color: #fff; font-size: 13px; font-weight: 600; padding: 0 18px; }"
-            "QPushButton:hover { background: #dc2626; }"
-        )
-        delete_btn.clicked.connect(self._confirm)
-        f_lay.addWidget(delete_btn)
-        outer.addWidget(footer)
-
-    def _confirm(self) -> None:
-        self.confirmed = True
-        self._dlg.accept()
-
-    def exec(self) -> None:
-        self._dlg.exec()
 
 
 class ViewDSources(ScreenBase):
@@ -579,16 +493,14 @@ class ViewDSources(ScreenBase):
             f"  • {e.get('label', '')} · {e.get('sheet_name', '')}"
             for e in chain
         )
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Delete Chained Dimension",
             f"Deleting <b>{dim_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
             f"{chain_summary}<br><br>"
             f"All mappings referencing this dimension will also be deleted. This cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
+            confirm_label="Delete",
+        ):
             return
 
         def worker():
@@ -640,9 +552,15 @@ class ViewDSources(ScreenBase):
         )
 
     def _on_delete_orphan(self, dim_name: str) -> None:
-        dlg = _OrphanDeleteConfirm(self, dim_name)
-        dlg.exec()
-        if not dlg.confirmed:
+        confirmed = msgbox.critical_question(
+            self,
+            "Delete Dimension Table",
+            f"<b>{dim_name}</b> has no active mappings and is eligible for deletion.<br><br>"
+            f"This will <b>permanently remove</b> the dimension table and all its data. "
+            f"This action cannot be undone by reverting to a snapshot.",
+            confirm_label="Delete Permanently",
+        )
+        if not confirmed:
             return
 
         def worker():

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
@@ -886,15 +886,13 @@ class Screen1Sources(ScreenBase):
             return
 
         entry = chain[ci]
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Remove Chain Link",
             f"Remove <b>{entry['sheet_name']}</b> from the chain?<br><br>"
             "The remaining links will be reordered. Any column mappings for this link will be lost.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+            confirm_label="Remove",
+        ):
             return
 
         chain.pop(ci)
@@ -918,15 +916,13 @@ class Screen1Sources(ScreenBase):
     def _on_sheet_delete(self, fi: int, si: int) -> None:
         """Remove a sheet entry (and its chain) from _sources after confirmation."""
         sheet = self._sources[fi]["sheets"][si]
-        reply = msgbox.question(
+        if not msgbox.critical_question(
             self,
             "Remove Sheet",
             f"Remove <b>{sheet['sheet_name']}</b> from the project?<br><br>"
             "If this sheet has a chain attached, the entire chain will also be discarded.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+            confirm_label="Remove",
+        ):
             return
 
         self._sources[fi]["sheets"].pop(si)
@@ -960,15 +956,13 @@ class Screen1Sources(ScreenBase):
             return
         self._set_error("")
 
-        reply = msgbox.question(
+        if not msgbox.warning_question(
             self,
             "Save and Continue?",
             "Your selected sheets will be saved and you'll move on to the column mapper.<br><br>"
             "You can always return here later to add or update data sources.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+            confirm_label="Save & Continue",
+        ):
             return
 
         self._confirm_btn.setEnabled(False)

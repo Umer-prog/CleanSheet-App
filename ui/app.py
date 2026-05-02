@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication, QHBoxLayout, QLabel, QMainWindow,
-    QMessageBox, QPushButton, QVBoxLayout, QWidget,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 import ui.theme as theme
@@ -143,15 +143,13 @@ class App(QMainWindow):
         """Guard against closing while a background operation is running."""
         if self._is_app_busy():
             import ui.popups.msgbox as msgbox
-            reply = msgbox.question(
+            if not msgbox.warning_question(
                 self,
                 "Operation in Progress",
                 "A background operation is still running.<br><br>"
                 "Closing the app now may corrupt your data. Are you sure you want to exit?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
+                confirm_label="Exit Anyway",
+            ):
                 event.ignore()
                 return
         event.accept()

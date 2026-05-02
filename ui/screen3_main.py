@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
@@ -53,107 +53,6 @@ def build_nav_items(mappings: list[dict]) -> list[dict]:
     ])
     return items
 
-
-class _MappingDeleteConfirm:
-    """Dark-themed confirmation dialog for deleting a mapping."""
-
-    def __init__(self, parent, mapping: dict):
-        self._dlg = QDialog(parent)
-        self._dlg.setWindowTitle("Delete Mapping")
-        self._dlg.setFixedSize(500, 250)
-        self._dlg.setModal(True)
-        self._dlg.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self._dlg.setStyleSheet("QDialog { background-color: #0f1117; }")
-        self.confirmed = False
-
-        tx_t = mapping.get("transaction_table", "")
-        tx_c = mapping.get("transaction_column", "")
-        dim_t = mapping.get("dim_table", "")
-        dim_c = mapping.get("dim_column", "")
-
-        outer = QVBoxLayout(self._dlg)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        # Header
-        header = QFrame()
-        header.setFixedHeight(56)
-        header.setStyleSheet("QFrame { background-color: #ef4444; }")
-        h_lay = QHBoxLayout(header)
-        h_lay.setContentsMargins(22, 0, 22, 0)
-        h_lbl = QLabel("Delete Mapping")
-        h_lbl.setStyleSheet(
-            "color: #fff; font-size: 15px; font-weight: 700; "
-            "background: transparent; border: none;"
-        )
-        h_lay.addWidget(h_lbl)
-        outer.addWidget(header)
-
-        # Body
-        body = QFrame()
-        body.setStyleSheet("QFrame { background-color: #13161e; }")
-        b_lay = QVBoxLayout(body)
-        b_lay.setContentsMargins(22, 18, 22, 18)
-        b_lay.setSpacing(12)
-
-        mapping_lbl = QLabel(
-            f"<span style='color:#94a3b8;'>Mapping to delete:</span><br>"
-            f"<span style='color:#60a5fa; font-weight:600;'>{tx_t}.{tx_c}</span>"
-            f"<span style='color:#94a3b8;'>  →  </span>"
-            f"<span style='color:#60a5fa; font-weight:600;'>{dim_t}.{dim_c}</span>"
-        )
-        mapping_lbl.setTextFormat(Qt.RichText)
-        mapping_lbl.setStyleSheet("background: transparent; border: none;")
-        b_lay.addWidget(mapping_lbl)
-
-        warn_lbl = QLabel(
-            "This mapping will be permanently removed. If this was the only mapping "
-            "referencing the dimension table, it will become orphaned and eligible for deletion."
-        )
-        warn_lbl.setWordWrap(True)
-        warn_lbl.setStyleSheet(
-            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
-        )
-        b_lay.addWidget(warn_lbl)
-        outer.addWidget(body, 1)
-
-        # Footer
-        footer = QFrame()
-        footer.setFixedHeight(60)
-        footer.setStyleSheet("QFrame { background-color: #0f1117; }")
-        f_lay = QHBoxLayout(footer)
-        f_lay.setContentsMargins(22, 0, 22, 0)
-        f_lay.setSpacing(8)
-        f_lay.addStretch()
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedHeight(36)
-        cancel_btn.setStyleSheet(
-            "QPushButton { background: transparent; "
-            "border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; "
-            "color: #cbd5e1; font-size: 13px; padding: 0 18px; }"
-            "QPushButton:hover { border-color: rgba(255,255,255,0.22); color: #94a3b8; }"
-        )
-        cancel_btn.clicked.connect(self._dlg.reject)
-        f_lay.addWidget(cancel_btn)
-
-        delete_btn = QPushButton("Delete Mapping")
-        delete_btn.setFixedHeight(36)
-        delete_btn.setStyleSheet(
-            "QPushButton { background: #ef4444; border: none; border-radius: 7px; "
-            "color: #fff; font-size: 13px; font-weight: 600; padding: 0 18px; }"
-            "QPushButton:hover { background: #dc2626; }"
-        )
-        delete_btn.clicked.connect(self._confirm)
-        f_lay.addWidget(delete_btn)
-        outer.addWidget(footer)
-
-    def _confirm(self) -> None:
-        self.confirmed = True
-        self._dlg.accept()
-
-    def exec(self) -> None:
-        self._dlg.exec()
 
 
 class Screen3Main(QWidget):
@@ -646,9 +545,22 @@ class Screen3Main(QWidget):
 
     def _on_delete_mapping(self, mapping: dict) -> None:
         """Show confirmation popup, delete the mapping, then check for orphaned dims."""
-        dlg = _MappingDeleteConfirm(self, mapping)
-        dlg.exec()
-        if not dlg.confirmed:
+        tx_t = mapping.get("transaction_table", "")
+        tx_c = mapping.get("transaction_column", "")
+        dim_t = mapping.get("dim_table", "")
+        dim_c = mapping.get("dim_column", "")
+        confirmed = msgbox.critical_question(
+            self,
+            "Delete Mapping",
+            f"This will permanently remove the mapping:<br><br>"
+            f"<b style='color:#60a5fa;'>{tx_t}.{tx_c}</b>"
+            f"<span style='color:#94a3b8;'>  →  </span>"
+            f"<b style='color:#60a5fa;'>{dim_t}.{dim_c}</b><br><br>"
+            f"If this was the only mapping referencing the dimension table, "
+            f"it will become orphaned and eligible for deletion.",
+            confirm_label="Delete Mapping",
+        )
+        if not confirmed:
             return
 
         mapping_id   = mapping["id"]
@@ -666,17 +578,15 @@ class Screen3Main(QWidget):
 
         def on_done(newly_orphaned: set):
             if newly_orphaned:
-                answer = msgbox.information(
+                go_to_dims = msgbox.warning_question(
                     self,
                     "Dimension Table No Longer In Use",
                     f"<b>{dim_table}</b> is no longer referenced by any mapping.<br><br>"
                     f"You can go to the <b>Dimension Tables</b> panel to delete it and "
                     f"free up space, or leave it for now.",
-                    QMessageBox.Ok | QMessageBox.Ignore,
-                    QMessageBox.Ok,
+                    confirm_label="View Dim Tables",
+                    cancel_label="Later",
                 )
-                # Navigate to d_sources if user clicked OK (not Ignore)
-                go_to_dims = (answer == QMessageBox.Yes)
             else:
                 go_to_dims = False
 
