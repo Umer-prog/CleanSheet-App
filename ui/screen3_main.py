@@ -267,40 +267,7 @@ class Screen3Main(QWidget):
         wi_lay.addWidget(ws_company)
         lay.addWidget(ws_info)
 
-        # ── Back button ──────────────────────────────────────────────
-        back_wrap = QFrame()
-        back_wrap.setStyleSheet("QFrame { background: transparent; border: none; }")
-        bw_lay = QHBoxLayout(back_wrap)
-        bw_lay.setContentsMargins(12, 8, 12, 4)
-        back_btn = QPushButton("← Back to Launcher")
-        back_btn.setFixedHeight(32)
-        back_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.04); "
-            "border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; "
-            "color: #94a3b8; font-size: 11px; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
-        )
-        back_btn.clicked.connect(self._go_to_launcher)
-        bw_lay.addWidget(back_btn)
-        lay.addWidget(back_wrap)
-
-        # ── Scrollable nav ───────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameStyle(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
-
-        nav_container = QWidget()
-        nav_container.setStyleSheet("background: transparent;")
-        nav_lay = QVBoxLayout(nav_container)
-        nav_lay.setContentsMargins(0, 0, 0, 8)
-        nav_lay.setSpacing(0)
-        nav_lay.setAlignment(Qt.AlignTop)
-        scroll.setWidget(nav_container)
-        lay.addWidget(scroll, 1)
-
-        # "MAPPINGS" section label + add-mapping button (always shown)
+        # ── MAPPINGS header (fixed, not scrollable) ──────────────────
         mh_wrap = QWidget()
         mh_wrap.setStyleSheet("background: transparent;")
         mh_lay = QHBoxLayout(mh_wrap)
@@ -325,17 +292,43 @@ class Screen3Main(QWidget):
         )
         add_map_btn.clicked.connect(self._go_to_mapping_setup)
         mh_lay.addWidget(add_map_btn)
+        lay.addWidget(mh_wrap)
 
-        nav_lay.addWidget(mh_wrap)
+        # ── Scrollable mappings only ─────────────────────────────────
+        mapping_scroll = QScrollArea()
+        mapping_scroll.setWidgetResizable(True)
+        mapping_scroll.setFrameStyle(QFrame.NoFrame)
+        mapping_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        mapping_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
+        mapping_container = QWidget()
+        mapping_container.setStyleSheet("background: transparent;")
+        mapping_lay = QVBoxLayout(mapping_container)
+        mapping_lay.setContentsMargins(0, 0, 0, 4)
+        mapping_lay.setSpacing(0)
+        mapping_lay.setAlignment(Qt.AlignTop)
+        mapping_scroll.setWidget(mapping_container)
+        lay.addWidget(mapping_scroll, 1)
+
+        # ── Fixed bottom nav items (separator + views) ───────────────
+        bottom_nav = QWidget()
+        bottom_nav.setStyleSheet("background: transparent;")
+        bottom_nav_lay = QVBoxLayout(bottom_nav)
+        bottom_nav_lay.setContentsMargins(0, 0, 0, 0)
+        bottom_nav_lay.setSpacing(0)
+        lay.addWidget(bottom_nav)
+
+        # populate mapping rows into scrollable area; views into fixed bottom
+        in_views = False
         for item in self._nav_items:
             if item["kind"] == "separator":
+                in_views = True
                 sep = QFrame()
                 sep.setFixedHeight(1)
                 sep.setStyleSheet(
                     "QFrame { background: rgba(255,255,255,0.05); border: none; margin: 6px 0; }"
                 )
-                nav_lay.addWidget(sep)
+                bottom_nav_lay.addWidget(sep)
                 continue
 
             if item["kind"] == "section_label":
@@ -345,17 +338,38 @@ class Screen3Main(QWidget):
                     "font-size: 10px; font-weight: 600; letter-spacing: 1px; "
                     "padding: 14px 18px 6px 18px;"
                 )
-                nav_lay.addWidget(sec)
+                bottom_nav_lay.addWidget(sec)
                 continue
 
             key = item["key"]
             if item["kind"] == "mapping":
                 frame = self._make_mapping_nav_item(item)
+                mapping_lay.addWidget(frame)
             else:
                 frame = self._make_view_nav_item(item)
+                bottom_nav_lay.addWidget(frame)
 
-            nav_lay.addWidget(frame)
             self._nav_frames[key] = frame
+
+        # ── Back button (pinned to bottom) ───────────────────────────
+        back_wrap = QFrame()
+        back_wrap.setStyleSheet(
+            "QFrame { background: transparent; border: none; "
+            "border-top: 1px solid rgba(255,255,255,0.06); }"
+        )
+        bw_lay = QHBoxLayout(back_wrap)
+        bw_lay.setContentsMargins(12, 8, 12, 10)
+        back_btn = QPushButton("← Back to Launcher")
+        back_btn.setFixedHeight(32)
+        back_btn.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.04); "
+            "border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; "
+            "color: #94a3b8; font-size: 11px; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
+        )
+        back_btn.clicked.connect(self._go_to_launcher)
+        bw_lay.addWidget(back_btn)
+        lay.addWidget(back_wrap)
 
         return sidebar
 
@@ -371,17 +385,10 @@ class Screen3Main(QWidget):
             "border-left: 2px solid transparent; }"
         )
         f_lay = QHBoxLayout(frame)
-        f_lay.setContentsMargins(28, 0, 12, 0)
+        f_lay.setContentsMargins(14, 0, 12, 0)
         f_lay.setSpacing(6)
 
-        lbl = QLabel(item["label"])
-        lbl.setStyleSheet(
-            "color: #cbd5e1; background: transparent; border: none; font-size: 12px;"
-        )
-        f_lay.addWidget(lbl, 1)
-        self._nav_labels[key] = lbl
-
-        # Delete button — clicking it does NOT navigate, only deletes
+        # Delete button — before label so it stays visible with long names
         del_btn = QPushButton("×")
         del_btn.setFixedSize(20, 20)
         del_btn.setCursor(Qt.PointingHandCursor)
@@ -405,6 +412,13 @@ class Screen3Main(QWidget):
         )
         f_lay.addWidget(badge)
         self._nav_badges[key] = badge
+
+        lbl = QLabel(item["label"])
+        lbl.setStyleSheet(
+            "color: #cbd5e1; background: transparent; border: none; font-size: 12px;"
+        )
+        f_lay.addWidget(lbl, 1)
+        self._nav_labels[key] = lbl
 
         def _click(_=None, it=item):
             self._on_nav_click(it)
