@@ -213,7 +213,7 @@ class PopupAdd(QDialog):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setFixedSize(620, 620)
+        self.setFixedSize(720, 620)
         self.setStyleSheet("QDialog { background: #13161e; border-radius: 12px; }")
 
         self._dim_table    = dim_table

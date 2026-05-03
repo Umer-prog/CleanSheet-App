@@ -43,7 +43,7 @@ class PopupSingleSheet(QDialog):
         self._default_sheet = default_sheet
 
         self.setWindowTitle(title)
-        self.setFixedSize(480, 330)
+        self.setFixedSize(720, 330)
         self.setModal(True)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setStyleSheet("QDialog { background: #13161e; border-radius: 12px; }")

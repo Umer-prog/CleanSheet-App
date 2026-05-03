@@ -289,6 +289,19 @@ def warning_question(parent, title: str, text: str,
     return dlg.result_role() == "confirm"
 
 
+def info_question(parent, title: str, text: str,
+                  confirm_label: str = "Continue",
+                  cancel_label: str = "Cancel") -> bool:
+    """Neutral-blue info dialog with two custom action buttons. Returns True if confirmed."""
+    dlg = _MsgDialog(
+        parent, "info", _ICONS["info"], title, text,
+        buttons=[(cancel_label, "cancel"), (confirm_label, "confirm")],
+        default_role="cancel",
+    )
+    dlg.exec()
+    return dlg.result_role() == "confirm"
+
+
 def critical_question(parent, title: str, text: str,
                       confirm_label: str = "Delete",
                       cancel_label: str = "Cancel") -> bool:

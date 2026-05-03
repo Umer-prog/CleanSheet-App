@@ -1393,7 +1393,7 @@ class ViewMapping(ScreenBase):
 
         def on_success(path) -> None:
             self._generate_btn.setEnabled(True)
-            if msgbox.warning_question(
+            if msgbox.info_question(
                 self,
                 "Export Complete",
                 f"Your output file has been created at:<br><br><code>{path}</code><br><br>"

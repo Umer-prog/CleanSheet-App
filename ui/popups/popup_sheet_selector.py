@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
@@ -34,7 +35,7 @@ class PopupSheetSelector(QDialog):
             pass
 
         self.setWindowTitle("Select Sheets")
-        self.setFixedWidth(520)
+        self.setFixedWidth(720)
         self.setModal(True)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         # Height is auto — capped via max-height logic below
@@ -161,12 +162,17 @@ class PopupSheetSelector(QDialog):
         )
         rl.addWidget(chk_frame)
 
-        # Sheet name
+        # Sheet name — clipped to avoid horizontal scroll
+        _MAX_NAME_PX = 260
         name_lbl = QLabel(sheet_name)
         name_lbl.setStyleSheet(
             "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 13px; font-weight: 500; font-family: 'Courier New', monospace;"
         )
+        name_lbl.setMaximumWidth(_MAX_NAME_PX)
+        fm = QFontMetrics(name_lbl.font())
+        name_lbl.setText(fm.elidedText(sheet_name, Qt.ElideRight, _MAX_NAME_PX))
+        name_lbl.setToolTip(sheet_name)
         rl.addWidget(name_lbl, 1)
 
         # Transaction / Dimension toggle buttons

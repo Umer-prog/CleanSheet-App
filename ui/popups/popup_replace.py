@@ -72,7 +72,7 @@ class PopupReplace(QDialog):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setFixedSize(520, 520)
+        self.setFixedSize(720, 520)
         self.setStyleSheet("QDialog { background: #13161e; border-radius: 12px; }")
 
         self._on_confirm   = on_confirm
