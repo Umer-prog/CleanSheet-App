@@ -245,7 +245,7 @@ class Screen0Launcher(ScreenBase):
         logo_box = QFrame()
         logo_box.setFixedSize(76, 76)
         logo_box.setStyleSheet(
-            "QFrame { background: #2161AC; border-radius: 18px; border: none; }"
+            "QFrame { background: #EDF3FB; border-radius: 18px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(4, 4, 4, 4)

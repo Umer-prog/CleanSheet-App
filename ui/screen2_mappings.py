@@ -133,7 +133,7 @@ class Screen2Mappings(ScreenBase):
         logo_box = QFrame()
         logo_box.setFixedSize(34, 34)
         logo_box.setStyleSheet(
-            "QFrame { background: #2161AC; border-radius: 9px; border: none; }"
+            "QFrame { background: #EDF3FB; border-radius: 9px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
         logo_inner.setContentsMargins(0, 0, 0, 0)
