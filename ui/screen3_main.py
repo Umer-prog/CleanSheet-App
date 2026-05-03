@@ -282,17 +282,19 @@ class Screen3Main(QWidget):
         )
         mh_lay.addWidget(m_lbl, 1)
 
-        add_map_btn = QPushButton("+")
-        add_map_btn.setFixedSize(18, 18)
-        add_map_btn.setCursor(Qt.PointingHandCursor)
-        add_map_btn.setToolTip("Add new mapping")
-        add_map_btn.setStyleSheet(
+        self._add_map_btn = QPushButton("+")
+        self._add_map_btn.setFixedSize(18, 18)
+        self._add_map_btn.setCursor(Qt.PointingHandCursor)
+        self._add_map_btn.setToolTip("Add new mapping")
+        self._add_map_btn.setStyleSheet(
             "QPushButton { background: rgba(59,130,246,0.15); border: none; "
             "border-radius: 4px; color: #60a5fa; font-size: 14px; font-weight: 700; padding: 0; }"
             "QPushButton:hover { background: rgba(59,130,246,0.3); color: #93c5fd; }"
+            "QPushButton:disabled { background: rgba(59,130,246,0.04); color: rgba(96,165,250,0.25); }"
         )
-        add_map_btn.clicked.connect(self._go_to_mapping_setup)
-        mh_lay.addWidget(add_map_btn)
+        self._add_map_btn.clicked.connect(self._go_to_mapping_setup)
+        mh_lay.addWidget(self._add_map_btn)
+        self._sync_add_map_btn()
         lay.addWidget(mh_wrap)
 
         # ── Scrollable mappings only ─────────────────────────────────
@@ -702,6 +704,14 @@ class Screen3Main(QWidget):
     # ------------------------------------------------------------------
     # Project navigation
     # ------------------------------------------------------------------
+
+    def _sync_add_map_btn(self) -> None:
+        has_t = bool(self.project.get("transaction_tables"))
+        has_d = bool(self.project.get("dim_tables"))
+        enabled = has_t and has_d
+        self._add_map_btn.setEnabled(enabled)
+        tip = "Add new mapping" if enabled else "No tables to map — add transaction and dimension tables first"
+        self._add_map_btn.setToolTip(tip)
 
     def _reload_from_disk(self, target_key: str | None = None) -> None:
         try:

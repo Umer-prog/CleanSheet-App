@@ -88,10 +88,7 @@ class ViewSettings(ScreenBase):
         tb_lay.setContentsMargins(28, 0, 28, 0)
 
         header_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Settings</span>"
-            "<br>"
-            "<span style='color:#94a3b8; font-size:11px;'>Update project details and history "
-            "preference, then save to apply changes.</span>"
+            "<span style='color:#f1f5f9; font-size:19px; font-weight:600;'>Settings</span>"
         )
         header_lbl.setTextFormat(Qt.RichText)
         header_lbl.setStyleSheet("background: transparent; border: none;")

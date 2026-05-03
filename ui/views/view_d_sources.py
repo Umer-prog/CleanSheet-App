@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -73,11 +73,6 @@ class ViewDSources(ScreenBase):
         self._on_go_screen1 = on_go_screen1
         self._on_chain_append = on_chain_append
         self._orphaned_dims: set[str] = set()
-        self._search_text = ""
-        self._search_debounce = QTimer(self)
-        self._search_debounce.setSingleShot(True)
-        self._search_debounce.setInterval(300)
-        self._search_debounce.timeout.connect(self._render_rows)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -95,10 +90,7 @@ class ViewDSources(ScreenBase):
         tb_lay.setSpacing(16)
 
         header_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Dimension Tables</span>"
-            "<br>"
-            "<span style='color:#94a3b8; font-size:11px;'>Add new dimension tables here. "
-            "Orphaned tables (no active mappings) may be permanently deleted.</span>"
+            "<span style='color:#f1f5f9; font-size:19px; font-weight:600;'>Dimension Tables</span>"
         )
         header_lbl.setTextFormat(Qt.RichText)
         header_lbl.setStyleSheet("background: transparent; border: none;")
@@ -149,29 +141,6 @@ class ViewDSources(ScreenBase):
         sch_lay.addWidget(self._count_lbl)
         card_lay.addWidget(sc_hdr)
 
-        # Search bar
-        search_frame = QFrame()
-        search_frame.setFixedHeight(54)
-        search_frame.setStyleSheet(
-            "QFrame { background: transparent; border: none; "
-            "border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }"
-        )
-        sf_lay = QHBoxLayout(search_frame)
-        sf_lay.setContentsMargins(12, 10, 12, 10)
-        self._search_bar = QLineEdit()
-        self._search_bar.setPlaceholderText("Search dimension tables...")
-        self._search_bar.setFixedHeight(30)
-        self._search_bar.setStyleSheet(
-            "QLineEdit { background: rgba(255,255,255,0.04); "
-            "border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; "
-            "color: #94a3b8; font-size: 12px; padding: 0 10px; }"
-            "QLineEdit:focus { border-color: rgba(59,130,246,0.4); "
-            "background: rgba(255,255,255,0.06); color: #cbd5e1; }"
-            "QLineEdit::placeholder { color: rgba(148,163,184,0.55); }"
-        )
-        self._search_bar.textChanged.connect(self._on_search_changed)
-        sf_lay.addWidget(self._search_bar)
-        card_lay.addWidget(search_frame)
 
         self._rows_scroll, _, self._rows_layout = make_scroll_area()
         self._rows_layout.setContentsMargins(0, 0, 0, 0)
@@ -192,11 +161,6 @@ class ViewDSources(ScreenBase):
 
     def _set_error(self, msg: str) -> None:
         self._error_lbl.setText(msg)
-
-    def _on_search_changed(self, text: str) -> None:
-        self._search_text = text.strip().lower()
-        self._search_debounce.stop()
-        self._search_debounce.start()
 
     def _load_orphan_state(self) -> None:
         def worker():
@@ -220,14 +184,10 @@ class ViewDSources(ScreenBase):
         self._count_lbl.setText(str(len(all_dims)))
         self._count_lbl.setVisible(len(all_dims) > 0)
 
-        if self._search_text:
-            dims = [d for d in all_dims if self._search_text in d.lower()]
-        else:
-            dims = all_dims
+        dims = all_dims
 
         if not dims:
-            msg = f'No tables match "{self._search_text}".' if self._search_text else "No dimension tables added yet."
-            empty = QLabel(msg)
+            empty = QLabel("No dimension tables added yet.")
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
                 "color: #94a3b8; font-size: 12px; background: transparent; "
@@ -314,12 +274,10 @@ class ViewDSources(ScreenBase):
             del_btn.clicked.connect(lambda _=False, n=dim_name: self._on_delete_orphan(n))
             lay.addWidget(del_btn)
         else:
-            locked_lbl = QLabel("Locked")
+            locked_lbl = QLabel("🔒 In use")
             locked_lbl.setStyleSheet(
-                "color: #94a3b8; font-size: 11px; "
-                "background: rgba(255,255,255,0.04); "
-                "border: 1px solid rgba(255,255,255,0.08); "
-                "border-radius: 5px; padding: 2px 10px;"
+                "color: #475569; font-size: 11px; "
+                "background: transparent; border: none; padding: 0 4px;"
             )
             lay.addWidget(locked_lbl)
 

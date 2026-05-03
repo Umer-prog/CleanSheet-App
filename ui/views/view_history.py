@@ -197,11 +197,7 @@ class ViewHistory(ScreenBase):
         tb_lay.setSpacing(16)
 
         header_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Commit History</span>"
-            "<br>"
-            "<span style='color:#94a3b8; font-size:11px;'>Select a commit to inspect its details, "
-            "edit the label, or revert — reverting restores transactions, dimension tables, "
-            "and mappings together.</span>"
+            "<span style='color:#f1f5f9; font-size:19px; font-weight:600;'>Commit History</span>"
         )
         header_lbl.setTextFormat(Qt.RichText)
         header_lbl.setStyleSheet("background: transparent; border: none;")

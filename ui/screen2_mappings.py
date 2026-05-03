@@ -753,7 +753,7 @@ class Screen2Mappings(ScreenBase):
             self,
             "Remove Table",
             f"Remove <b>{table_name}</b> from this project?<br><br>"
-            f"The {kind_label} data file will be deleted from disk and any mappings "
+            f"The {kind_label} data file will be deleted and any mappings "
             f"that reference it will also be removed.",
             confirm_label="Remove Table",
         ):

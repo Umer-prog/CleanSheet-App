@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
@@ -39,19 +40,13 @@ class PopupAbout(QDialog):
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(24, 0, 24, 0)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        title_lbl = QLabel(f"<b>{APP_NAME}</b>")
-        title_lbl.setStyleSheet(
-            "color: #f1f5f9; font-size: 16px; background: transparent; border: none;"
+        title_lbl = QLabel(
+            f"<span style='color:#f1f5f9; font-size:16px; font-weight:600;'>{APP_NAME}</span>"
+            f"<br><span style='color:#3b82f6; font-size:12px;'>Version {APP_VERSION}</span>"
         )
-        ver_lbl = QLabel(f"Version {APP_VERSION}")
-        ver_lbl.setStyleSheet(
-            "color: #3b82f6; font-size: 12px; background: transparent; border: none;"
-        )
-        title_col.addWidget(title_lbl)
-        title_col.addWidget(ver_lbl)
-        h_lay.addLayout(title_col, 1)
+        title_lbl.setTextFormat(Qt.RichText)
+        title_lbl.setStyleSheet("background: transparent; border: none;")
+        h_lay.addWidget(title_lbl, 1)
         outer.addWidget(header)
 
         # ── Body ──────────────────────────────────────────────────────────
@@ -79,9 +74,43 @@ class PopupAbout(QDialog):
             row.addWidget(val, 1)
             return row
 
+        _SUPPORT_EMAIL = "support@gd365.com"
+
         b_lay.addLayout(_row("Publisher", COMPANY))
         b_lay.addLayout(_row("Version", APP_VERSION))
-        b_lay.addLayout(_row("Support", "support@gd365.com"))
+
+        support_row = QHBoxLayout()
+        support_key = QLabel("Support")
+        support_key.setFixedWidth(80)
+        support_key.setStyleSheet(
+            "color: #cbd5e1; font-size: 11px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        support_val = QLabel(_SUPPORT_EMAIL)
+        support_val.setStyleSheet(
+            "color: #94a3b8; font-size: 12px; background: transparent; border: none;"
+        )
+        copy_btn = QPushButton("Copy")
+        copy_btn.setFixedSize(48, 22)
+        copy_btn.setCursor(Qt.PointingHandCursor)
+        copy_btn.setStyleSheet(
+            "QPushButton { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25); "
+            "border-radius: 5px; color: #60a5fa; font-size: 10px; font-weight: 600; padding: 0; }"
+            "QPushButton:hover { background: rgba(59,130,246,0.22); color: #93c5fd; }"
+            "QPushButton:pressed { background: rgba(59,130,246,0.32); }"
+        )
+
+        def _copy_email(_checked=False, btn=copy_btn, email=_SUPPORT_EMAIL):
+            QGuiApplication.clipboard().setText(email)
+            btn.setText("Copied!")
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(1500, lambda: btn.setText("Copy"))
+
+        copy_btn.clicked.connect(_copy_email)
+        support_row.addWidget(support_key)
+        support_row.addWidget(support_val, 1)
+        support_row.addWidget(copy_btn)
+        b_lay.addLayout(support_row)
 
         log_path = get_log_file_path()
         log_str = str(log_path) if log_path else "Not available"

@@ -533,8 +533,7 @@ class PopupAdd(QDialog):
                 if is_dup:
                     self._hint_lbl.setText(
                         "<span style='color:#f87171;'>"
-                        "This exact row already exists in the dimension table — "
-                        "every column value matches an existing row."
+                        "This exact row already exists in the dimension table"
                         "</span>"
                     )
                     self._hint_lbl.setTextFormat(Qt.RichText)

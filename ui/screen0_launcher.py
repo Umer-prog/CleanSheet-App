@@ -162,13 +162,13 @@ class Screen0Launcher(ScreenBase):
 
         # Search bar
         search_frame = QFrame()
-        search_frame.setFixedHeight(54)
+        search_frame.setFixedHeight(60)
         search_frame.setStyleSheet(
             "QFrame { background: transparent; border: none; "
             "border-bottom: 1px solid rgba(255,255,255,0.06); }"
         )
         s_lay = QHBoxLayout(search_frame)
-        s_lay.setContentsMargins(12, 10, 12, 10)
+        s_lay.setContentsMargins(12, 10, 12, 18)
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search projects…")
@@ -598,7 +598,7 @@ class Screen0Launcher(ScreenBase):
         avatar.setFont(theme.font(12, "bold"))
         avatar.setStyleSheet(
             f"QLabel {{ background: {bg_col}; color: {text_col}; "
-            "border-radius: 9px; border: none; }}"
+            f"border-radius: 9px; border: none; }}"
         )
         rl.addWidget(avatar)
 

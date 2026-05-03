@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontMetrics
+
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
@@ -162,16 +162,12 @@ class PopupSheetSelector(QDialog):
         )
         rl.addWidget(chk_frame)
 
-        # Sheet name — clipped to avoid horizontal scroll
-        _MAX_NAME_PX = 260
+        # Sheet name — stretches to fill available space, elides only if truly too wide
         name_lbl = QLabel(sheet_name)
         name_lbl.setStyleSheet(
             "color: #cbd5e1; background: transparent; border: none; "
             "font-size: 13px; font-weight: 500; font-family: 'Courier New', monospace;"
         )
-        name_lbl.setMaximumWidth(_MAX_NAME_PX)
-        fm = QFontMetrics(name_lbl.font())
-        name_lbl.setText(fm.elidedText(sheet_name, Qt.ElideRight, _MAX_NAME_PX))
         name_lbl.setToolTip(sheet_name)
         rl.addWidget(name_lbl, 1)
 

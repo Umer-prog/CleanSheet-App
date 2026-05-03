@@ -108,10 +108,7 @@ class ViewTSources(ScreenBase):
         tb_lay.setSpacing(16)
 
         header_lbl = QLabel(
-            "<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>Transaction Tables</span>"
-            "<br>"
-            "<span style='color:#94a3b8; font-size:11px;'>Upload new versions for existing tables, "
-            "delete obsolete ones, or add new transaction tables.</span>"
+            "<span style='color:#f1f5f9; font-size:19px; font-weight:600;'>Transaction Tables</span>"
         )
         header_lbl.setTextFormat(Qt.RichText)
         header_lbl.setStyleSheet("background: transparent; border: none;")

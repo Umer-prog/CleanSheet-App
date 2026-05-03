@@ -957,12 +957,12 @@ class Screen1Sources(ScreenBase):
             return
         self._set_error("")
 
-        if not msgbox.warning_question(
+        if not msgbox.info_question(
             self,
-            "Save and Continue?",
+            "Continue to Column Mapper?",
             "Your selected sheets will be saved and you'll move on to the column mapper.<br><br>"
-            "You can always return here later to add or update data sources.",
-            confirm_label="Save & Continue",
+            "You can always return here later to add.",
+            confirm_label="Continue",
         ):
             return
 
