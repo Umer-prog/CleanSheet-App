@@ -19,7 +19,7 @@ from core.dim_manager import append_dim_row, get_dim_columns, get_dim_dataframe
 from core.error_detector import detect_errors
 from core.final_export_manager import export_final_workbook
 from core.project_manager import save_project_json
-from core.project_paths import active_transactions_dir
+from core.project_paths import active_transactions_dir, internal_path
 from core.snapshot_manager import create_snapshot
 from core.mapping_manager import get_mappings
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
@@ -1055,7 +1055,7 @@ class ViewMapping(ScreenBase):
         def worker():
             import json as _json
             mappings = get_mappings(self.project_path)
-            ignored_file = self.project_path / "metadata" / "data" / "ignored_errors.json"
+            ignored_file = internal_path(self.project_path) / "metadata" / "data" / "ignored_errors.json"
             ignored_rows_map: dict[str, set[int]] = {}
             ignored_vals_map: dict[str, set[str]] = {}
             try:
@@ -1235,7 +1235,7 @@ class ViewMapping(ScreenBase):
     # ------------------------------------------------------------------
 
     def _ignored_file(self) -> Path:
-        return self.project_path / "metadata" / "data" / "ignored_errors.json"
+        return internal_path(self.project_path) / "metadata" / "data" / "ignored_errors.json"
 
     def _load_ignored(self) -> tuple[dict[str, set[int]], dict[str, set[str]]]:
         import json as _json

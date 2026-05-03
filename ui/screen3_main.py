@@ -13,6 +13,7 @@ import ui.popups.msgbox as msgbox
 from core.error_detector import detect_errors
 from core.mapping_manager import delete_mapping, get_active_dim_tables, get_mappings
 from core.project_manager import open_project
+from core.project_paths import internal_path
 from ui.screen2_mappings import Screen2Mappings
 from ui.workers import Worker
 
@@ -127,7 +128,7 @@ class Screen3Main(QWidget):
             # Parse the ignored_errors.json — supports both legacy format
             # {table.col: [row_indices]} and the new format
             # {"rows": {table.col: [...]}, "values": {table.col: [...]}}.
-            ignored_file = project_path / "metadata" / "data" / "ignored_errors.json"
+            ignored_file = internal_path(project_path) / "metadata" / "data" / "ignored_errors.json"
             ignored_rows_map: dict[str, set[int]] = {}
             ignored_vals_map: dict[str, set[str]] = {}
             try:

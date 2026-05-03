@@ -15,6 +15,7 @@ from core.data_loader import get_storage_format, write_table
 from core.project_paths import (
     active_dim_dir,
     active_mappings_dir,
+    internal_path,
     metadata_transactions_dir,
 )
 
@@ -36,7 +37,7 @@ def hash_dataframe(df: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 
 def _read_settings(project_path: Path) -> dict:
-    settings_file = project_path / "settings.json"
+    settings_file = internal_path(project_path) / "settings.json"
     if not settings_file.exists():
         return {"history_enabled": True, "current_manifest": None}
     try:
@@ -48,7 +49,7 @@ def _read_settings(project_path: Path) -> dict:
 
 def _write_settings(project_path: Path, settings: dict) -> None:
     try:
-        with open(project_path / "settings.json", "w", encoding="utf-8") as f:
+        with open(internal_path(project_path) / "settings.json", "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write settings.json: {e}") from e
@@ -176,7 +177,7 @@ def _load_mappings(project_path: Path) -> list:
 
 
 def _load_project_json(project_path: Path) -> dict:
-    path = project_path / "project.json"
+    path = internal_path(project_path) / "project.json"
     if not path.exists():
         return {}
     try:
@@ -188,7 +189,7 @@ def _load_project_json(project_path: Path) -> dict:
 
 def _write_project_json(project_path: Path, data: dict) -> None:
     try:
-        with open(project_path / "project.json", "w", encoding="utf-8") as f:
+        with open(internal_path(project_path) / "project.json", "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write project.json: {e}") from e
@@ -233,8 +234,10 @@ def create_snapshot(
     storage_format = get_storage_format(project_path)
     ext = ".parquet" if storage_format == "parquet" else ".csv"
 
+    ip = internal_path(project_path)
+
     # Always write transaction data to the live working area
-    live_tx_dir = project_path / "metadata" / "data" / "transactions"
+    live_tx_dir = ip / "metadata" / "data" / "transactions"
     try:
         live_tx_dir.mkdir(parents=True, exist_ok=True)
         for table_name, df in tables.items():
@@ -245,7 +248,7 @@ def create_snapshot(
     if not settings.get("history_enabled", True):
         return None
 
-    history_path = project_path / "history"
+    history_path = ip / "history"
     try:
         history_path.mkdir(parents=True, exist_ok=True)
         commit_id = _next_commit_id(history_path)
@@ -275,7 +278,7 @@ def create_snapshot(
     _write_mappings_to_commit(commit_dir / "mappings", mappings)
 
     # Save ignored errors snapshot
-    ignored_src = project_path / "metadata" / "data" / "ignored_errors.json"
+    ignored_src = ip / "metadata" / "data" / "ignored_errors.json"
     if ignored_src.exists():
         try:
             shutil.copy2(ignored_src, commit_dir / "ignored" / "ignored_errors.json")
@@ -359,7 +362,7 @@ def get_current_commit_id(project_path: Path) -> str | None:
 def get_manifest(project_path: Path, manifest_id: str) -> dict:
     """Read and return the commit data for the given commit id."""
     project_path = Path(project_path)
-    commit_dir = project_path / "history" / manifest_id
+    commit_dir = internal_path(project_path) / "history" / manifest_id
     if not commit_dir.exists():
         raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
     return _read_commit_json(commit_dir)
@@ -368,7 +371,7 @@ def get_manifest(project_path: Path, manifest_id: str) -> dict:
 def list_manifests(project_path: Path) -> list:
     """Return all commits in chronological order (oldest first)."""
     project_path = Path(project_path)
-    history_path = project_path / "history"
+    history_path = internal_path(project_path) / "history"
     if not history_path.exists():
         return []
 
@@ -413,7 +416,8 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
     Updates project.json table lists and settings.json current_manifest.
     """
     project_path = Path(project_path)
-    commit_dir = project_path / "history" / manifest_id
+    ip = internal_path(project_path)
+    commit_dir = ip / "history" / manifest_id
     if not commit_dir.exists():
         raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
 
@@ -448,7 +452,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
             raise FileNotFoundError(f"Dim snapshot file missing: '{dim_commit_dir / name}'")
 
     # Restore transactions → metadata/data/transactions/
-    live_tx = project_path / "metadata" / "data" / "transactions"
+    live_tx = ip / "metadata" / "data" / "transactions"
     try:
         live_tx.mkdir(parents=True, exist_ok=True)
         for name in tx_tables:
@@ -458,7 +462,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
         raise OSError(f"Failed to restore transaction data: {e}") from e
 
     # Restore dimensions → metadata/data/dim/
-    live_dim = project_path / "metadata" / "data" / "dim"
+    live_dim = ip / "metadata" / "data" / "dim"
     try:
         live_dim.mkdir(parents=True, exist_ok=True)
         for name in restored_dims:
@@ -468,7 +472,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
         raise OSError(f"Failed to restore dimension data: {e}") from e
 
     # Restore mappings → metadata/mappings/
-    live_map = project_path / "metadata" / "mappings"
+    live_map = ip / "metadata" / "mappings"
     mappings_list = manifest.get("mappings", [])
     try:
         live_map.mkdir(parents=True, exist_ok=True)
@@ -479,7 +483,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
 
     # Restore ignored errors — always update the live file to match the commit's state
     ignored_commit = commit_dir / "ignored" / "ignored_errors.json"
-    live_ignored   = project_path / "metadata" / "data" / "ignored_errors.json"
+    live_ignored   = ip / "metadata" / "data" / "ignored_errors.json"
     try:
         if ignored_commit.exists():
             shutil.copy2(ignored_commit, live_ignored)
@@ -523,7 +527,7 @@ def revert_to_manifest(project_path: Path, manifest_id: str) -> None:
 def update_manifest_label(project_path: Path, manifest_id: str, label: str) -> None:
     """Update the human-readable label for a commit."""
     project_path = Path(project_path)
-    commit_dir = project_path / "history" / manifest_id
+    commit_dir = internal_path(project_path) / "history" / manifest_id
     if not commit_dir.exists():
         raise FileNotFoundError(f"Commit not found: '{manifest_id}'")
     manifest = get_manifest(project_path, manifest_id)

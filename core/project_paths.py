@@ -4,9 +4,24 @@ import json
 from pathlib import Path
 
 
+def internal_path(project_path: Path) -> Path:
+    """Return the internal folder that holds all project data except the final export.
+
+    Structure:
+        <project_root>/
+        ├── project metadata/   ← internal_path() points here
+        │   ├── metadata/       (live data: transactions, dim, mappings)
+        │   ├── history/        (version snapshots)
+        │   ├── project.json
+        │   └── settings.json
+        └── final/              (exported workbooks — kept separate at root)
+    """
+    return Path(project_path) / "project metadata"
+
+
 def get_current_commit_id(project_path: Path) -> str | None:
     """Read the active commit ID from settings.json, or None if none exists."""
-    settings_file = Path(project_path) / "settings.json"
+    settings_file = internal_path(project_path) / "settings.json"
     if not settings_file.exists():
         return None
     try:
@@ -23,18 +38,18 @@ def get_current_commit_id(project_path: Path) -> str | None:
 # ---------------------------------------------------------------------------
 
 def active_transactions_dir(project_path: Path) -> Path:
-    """Return the live transactions directory (always metadata/data/transactions/)."""
-    return Path(project_path) / "metadata" / "data" / "transactions"
+    """Return the live transactions directory."""
+    return internal_path(project_path) / "metadata" / "data" / "transactions"
 
 
 def active_dim_dir(project_path: Path) -> Path:
-    """Return the live dimensions directory (always metadata/data/dim/)."""
-    return Path(project_path) / "metadata" / "data" / "dim"
+    """Return the live dimensions directory."""
+    return internal_path(project_path) / "metadata" / "data" / "dim"
 
 
 def active_mappings_dir(project_path: Path) -> Path:
-    """Return the live mappings directory (always metadata/mappings/)."""
-    return Path(project_path) / "metadata" / "mappings"
+    """Return the live mappings directory."""
+    return internal_path(project_path) / "metadata" / "mappings"
 
 
 # ---------------------------------------------------------------------------
@@ -42,12 +57,12 @@ def active_mappings_dir(project_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 def metadata_transactions_dir(project_path: Path) -> Path:
-    return Path(project_path) / "metadata" / "data" / "transactions"
+    return internal_path(project_path) / "metadata" / "data" / "transactions"
 
 
 def metadata_dim_dir(project_path: Path) -> Path:
-    return Path(project_path) / "metadata" / "data" / "dim"
+    return internal_path(project_path) / "metadata" / "data" / "dim"
 
 
 def metadata_mappings_dir(project_path: Path) -> Path:
-    return Path(project_path) / "metadata" / "mappings"
+    return internal_path(project_path) / "metadata" / "mappings"

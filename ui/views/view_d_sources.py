@@ -15,7 +15,7 @@ from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, read_tab
 from core.dim_manager import delete_dim_table
 from core.mapping_manager import get_active_dim_tables
 from core.project_manager import save_project_json
-from core.project_paths import active_dim_dir
+from core.project_paths import active_dim_dir, internal_path
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -505,7 +505,7 @@ class ViewDSources(ScreenBase):
                     p.unlink()
                     break
             delete_mappings_for_table(self.project_path, dim_name)
-            proj_file = self.project_path / "project.json"
+            proj_file = internal_path(self.project_path) / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
             proj["dim_tables"] = [d for d in proj.get("dim_tables", []) if d != dim_name]
@@ -563,7 +563,7 @@ class ViewDSources(ScreenBase):
         def worker():
             import json as _json
             delete_dim_table(self.project_path, dim_name)
-            proj_file = self.project_path / "project.json"
+            proj_file = internal_path(self.project_path) / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
             proj["dim_tables"] = [d for d in proj.get("dim_tables", []) if d != dim_name]

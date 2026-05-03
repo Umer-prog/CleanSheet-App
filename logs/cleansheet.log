@@ -483,3 +483,58 @@ ModuleNotFoundError: No module named 'xlsxwriter'
 2026-05-02 20:57:18  INFO      __main__ — CleanSheet v1.0.0 starting up
 2026-05-02 20:57:19  INFO      core.project_manager — Project opened: 'sales'
 2026-05-02 20:57:19  INFO      __main__ — Main window displayed
+2026-05-02 21:26:25  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-02 21:26:25  INFO      core.project_manager — Project opened: 'sales'
+2026-05-02 21:26:25  INFO      __main__ — Main window displayed
+2026-05-02 21:26:27  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:00:02  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-03 23:00:04  INFO      __main__ — Main window displayed
+2026-05-03 23:00:56  INFO      core.project_manager — Project created: 'sales' at G:\docs\work\global data\tests\sales
+2026-05-03 23:00:56  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:01:09  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-05-03 23:01:28  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-05-03 23:02:38  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:02:43  ERROR     ui.workers — Background worker error: Table file not found: 'G:\docs\work\global data\tests\sales\project metadata\metadata\data\transactions\co.csv'
+Traceback (most recent call last):
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\workers.py", line 57, in _run
+    self._queue.put(("ok", self._fn()))
+                           ^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\screen2_mappings.py", line 857, in worker
+    return self._load_transaction_columns(table_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\ui\screen2_mappings.py", line 881, in _load_transaction_columns
+    return list(read_table(path).columns)
+                ^^^^^^^^^^^^^^^^
+  File "g:\docs\work\OneDrive - Global Data 365\mapper app\CleanSheet\core\data_loader.py", line 71, in read_table
+    raise FileNotFoundError(f"Table file not found: '{file_path}'")
+FileNotFoundError: Table file not found: 'G:\docs\work\global data\tests\sales\project metadata\metadata\data\transactions\co.csv'
+2026-05-03 23:08:33  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-03 23:08:33  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:08:33  INFO      __main__ — Main window displayed
+2026-05-03 23:10:29  INFO      core.project_manager — Project created: 'sales' at G:\docs\work\global data\tests\sales
+2026-05-03 23:10:29  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:10:51  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-05-03 23:11:44  INFO      core.data_loader — File loaded: 'Sales Dashboard Data Old.xlsx' (9 sheet(s))
+2026-05-03 23:12:15  INFO      core.data_loader — File loaded: 'Sales Dashboard Data 1.xlsx' (9 sheet(s))
+2026-05-03 23:13:35  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:14:12  INFO      core.mapping_manager — Mapping saved: map_001 → co.Region ↔ region_mapping.Region ERP
+2026-05-03 23:14:12  INFO      core.mapping_manager — Mapping saved: map_002 → sales_report.Salesperson ↔ salesperson_mapping.Salesperson
+2026-05-03 23:14:12  INFO      core.snapshot_manager — Snapshot created: commit_001 (label='Initial commit', tables=['co', 'crm_pipeline', 'sales_report'])
+2026-05-03 23:14:34  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:14:59  INFO      core.mapping_manager — Mapping saved: map_003 → crm_pipeline.Segment ↔ selling_channel_segment_mapping.Segment
+2026-05-03 23:15:31  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:16:35  INFO      core.snapshot_manager — Snapshot created: commit_002 (label='test', tables=['co', 'crm_pipeline', 'sales_report'])
+2026-05-03 23:16:53  INFO      core.snapshot_manager — Reverted to snapshot: commit_001
+2026-05-03 23:16:56  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:17:28  INFO      core.snapshot_manager — Reverted to snapshot: commit_002
+2026-05-03 23:17:29  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:18:01  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:18:31  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:18:49  INFO      core.snapshot_manager — Snapshot created: commit_003 (label='test', tables=['co', 'crm_pipeline', 'sales_report'])
+2026-05-03 23:18:59  INFO      core.snapshot_manager — Reverted to snapshot: commit_002
+2026-05-03 23:19:00  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:19:09  INFO      core.snapshot_manager — Reverted to snapshot: commit_003
+2026-05-03 23:19:10  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:20:57  INFO      core.snapshot_manager — Snapshot created: commit_004 (label='Generated output — co', tables=['co', 'crm_pipeline', 'sales_report'])
+2026-05-03 23:20:57  INFO      core.project_manager — Project opened: 'sales'
+2026-05-03 23:21:03  INFO      core.final_export_manager — Export completed: G:\docs\work\global data\tests\sales\final\final_updated.xlsx (6 tables written)

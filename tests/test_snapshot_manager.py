@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from core.project_manager import create_project
+from core.project_paths import internal_path
 from core.snapshot_manager import (
     create_snapshot,
     get_manifest,
@@ -17,8 +18,10 @@ from core.snapshot_manager import (
     revert_to_manifest,
 )
 
-# Live transactions dir (current code stores here, not data/transactions/)
-LIVE_TX = ("metadata", "data", "transactions")
+
+def ip(project):
+    """Shorthand: internal folder for a project path."""
+    return internal_path(project)
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +69,11 @@ class TestCreateSnapshotHistoryOn:
 
     def test_creates_commit_folder(self, project):
         mid = create_snapshot(project, {"sales": make_df()})
-        assert (project / "history" / mid).is_dir()
+        assert (ip(project) / "history" / mid).is_dir()
 
     def test_creates_commit_json(self, project):
         mid = create_snapshot(project, {"sales": make_df()}, label="First upload")
-        commit_file = project / "history" / mid / "commit.json"
+        commit_file = ip(project) / "history" / mid / "commit.json"
         assert commit_file.exists()
         data = json.loads(commit_file.read_text())
         assert data["manifest_id"] == mid
@@ -80,20 +83,20 @@ class TestCreateSnapshotHistoryOn:
 
     def test_transaction_written_to_commit_folder(self, project):
         mid = create_snapshot(project, {"sales": make_df()})
-        tx_dir = project / "history" / mid / "transactions"
+        tx_dir = ip(project) / "history" / mid / "transactions"
         assert tx_dir.is_dir()
         files = list(tx_dir.iterdir())
         assert any(f.stem == "sales" for f in files)
 
     def test_updates_live_transactions(self, project):
         create_snapshot(project, {"sales": make_df()})
-        live_tx_dir = project.joinpath(*LIVE_TX)
+        live_tx_dir = ip(project) / "metadata" / "data" / "transactions"
         files = list(live_tx_dir.iterdir())
         assert any(f.stem == "sales" for f in files)
 
     def test_updates_settings_current_manifest(self, project):
         mid = create_snapshot(project, {"sales": make_df()})
-        settings = json.loads((project / "settings.json").read_text())
+        settings = json.loads((ip(project) / "settings.json").read_text())
         assert settings["current_manifest"] == mid
 
     def test_sequential_commit_ids(self, project):
@@ -117,8 +120,8 @@ class TestCreateSnapshotHistoryOn:
         mid1 = create_snapshot(project, {"sales": df})
         mid2 = create_snapshot(project, {"sales": df})
         assert mid1 != mid2
-        assert (project / "history" / mid1).is_dir()
-        assert (project / "history" / mid2).is_dir()
+        assert (ip(project) / "history" / mid1).is_dir()
+        assert (ip(project) / "history" / mid2).is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -127,30 +130,30 @@ class TestCreateSnapshotHistoryOn:
 
 class TestCreateSnapshotHistoryOff:
     def test_returns_none(self, project):
-        settings = json.loads((project / "settings.json").read_text())
+        settings = json.loads((ip(project) / "settings.json").read_text())
         settings["history_enabled"] = False
-        (project / "settings.json").write_text(json.dumps(settings))
+        (ip(project) / "settings.json").write_text(json.dumps(settings))
 
         result = create_snapshot(project, {"sales": make_df()})
         assert result is None
 
     def test_still_updates_live_transactions(self, project):
-        settings = json.loads((project / "settings.json").read_text())
+        settings = json.loads((ip(project) / "settings.json").read_text())
         settings["history_enabled"] = False
-        (project / "settings.json").write_text(json.dumps(settings))
+        (ip(project) / "settings.json").write_text(json.dumps(settings))
 
         create_snapshot(project, {"sales": make_df()})
-        live_tx_dir = project.joinpath(*LIVE_TX)
+        live_tx_dir = ip(project) / "metadata" / "data" / "transactions"
         files = list(live_tx_dir.iterdir())
         assert any(f.stem == "sales" for f in files)
 
     def test_no_commit_folder_created(self, project):
-        settings = json.loads((project / "settings.json").read_text())
+        settings = json.loads((ip(project) / "settings.json").read_text())
         settings["history_enabled"] = False
-        (project / "settings.json").write_text(json.dumps(settings))
+        (ip(project) / "settings.json").write_text(json.dumps(settings))
 
         create_snapshot(project, {"sales": make_df()})
-        history_path = project / "history"
+        history_path = ip(project) / "history"
         if history_path.exists():
             commit_folders = [d for d in history_path.iterdir() if d.name.startswith("commit_")]
             assert commit_folders == []
@@ -210,7 +213,7 @@ class TestRevertToManifest:
 
         revert_to_manifest(project, mid)
 
-        live_tx_dir = project.joinpath(*LIVE_TX)
+        live_tx_dir = ip(project) / "metadata" / "data" / "transactions"
         files = {f.stem: f for f in live_tx_dir.iterdir()}
         assert "sales" in files
         restored = pd.read_parquet(files["sales"]) if files["sales"].suffix == ".parquet" \
@@ -222,7 +225,7 @@ class TestRevertToManifest:
         create_snapshot(project, {"t": make_df({"a": ["x"]})})
 
         revert_to_manifest(project, mid1)
-        settings = json.loads((project / "settings.json").read_text())
+        settings = json.loads((ip(project) / "settings.json").read_text())
         assert settings["current_manifest"] == mid1
 
     def test_does_not_delete_newer_commits(self, project):
@@ -230,7 +233,7 @@ class TestRevertToManifest:
         mid2 = create_snapshot(project, {"t": make_df({"a": ["x"]})})
 
         revert_to_manifest(project, mid1)
-        assert (project / "history" / mid2).exists()
+        assert (ip(project) / "history" / mid2).exists()
 
     def test_missing_manifest_raises(self, project):
         with pytest.raises(FileNotFoundError):

@@ -14,7 +14,7 @@ import ui.popups.msgbox as msgbox
 from core.data_loader import get_sheet_as_dataframe, load_excel_sheets, save_as_csv
 from core.mapping_manager import delete_mappings_for_table, get_mappings
 from core.project_manager import save_project_json
-from core.project_paths import active_transactions_dir
+from core.project_paths import active_transactions_dir, internal_path
 from ui.screen1_sources import normalize_table_name
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
@@ -576,7 +576,7 @@ class ViewTSources(ScreenBase):
                     p.unlink()
                     break
             delete_mappings_for_table(self.project_path, table_name)
-            proj_file = self.project_path / "project.json"
+            proj_file = internal_path(self.project_path) / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
             proj["transaction_tables"] = [

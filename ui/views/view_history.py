@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.data_loader import read_table
+from core.project_paths import internal_path
 from core.snapshot_manager import (
     create_snapshot,
     get_current_commit_id,
@@ -404,7 +405,7 @@ class ViewHistory(ScreenBase):
         tx_tables = list(self.project.get("transaction_tables", []))
 
         def worker():
-            live_tx = project_path / "metadata" / "data" / "transactions"
+            live_tx = internal_path(project_path) / "metadata" / "data" / "transactions"
             tables: dict = {}
             for name in tx_tables:
                 for suffix in (".csv", ".parquet"):

@@ -16,12 +16,13 @@ Full spec is in `docs/SPEC.md` — read it before starting any section.
 - No external UI frameworks, no web tech, no flask/fastapi
 
 ### File storage rules
-- Dimension tables → JSON files in `data/dim/`
-- Transaction tables → CSV files in `data/transactions/`
-- Manifests → folders inside `history/`, each with a `manifest.json`
-- Mappings → single `mappings/mapping_store.json`
-- Project config → `project.json` at project root
-- Settings → `settings.json` at project root
+- Dimension tables → CSV/Parquet files in `project metadata/metadata/data/dim/`
+- Transaction tables → CSV/Parquet files in `project metadata/metadata/data/transactions/`
+- Manifests → folders inside `project metadata/history/`, each with a `commit.json`
+- Mappings → single `project metadata/metadata/mappings/mapping_store.json`
+- Project config → `project metadata/project.json`
+- Settings → `project metadata/settings.json`
+- Final export → `final/` at project root (separate from all internal files)
 
 ### Code structure rules
 - One class per screen/view (e.g. `Screen1DataSources`, `Screen3Main`)

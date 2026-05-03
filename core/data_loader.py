@@ -15,10 +15,10 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _find_project_root(path: Path) -> Path | None:
-    """Walk up from path to find the directory containing project.json."""
+    """Walk up from path to find the project root (directory containing 'project metadata/')."""
     current = path if path.is_dir() else path.parent
     for _ in range(10):
-        if (current / "project.json").exists():
+        if (current / "project metadata" / "project.json").exists():
             return current
         parent = current.parent
         if parent == current:
@@ -29,7 +29,8 @@ def _find_project_root(path: Path) -> Path | None:
 
 def get_storage_format(project_path: Path) -> str:
     """Return 'parquet' or 'csv' for the given project. Defaults to 'csv' for old projects."""
-    pj = Path(project_path) / "project.json"
+    from core.project_paths import internal_path
+    pj = internal_path(Path(project_path)) / "project.json"
     if pj.exists():
         try:
             with open(pj, encoding="utf-8") as f:

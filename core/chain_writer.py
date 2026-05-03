@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 from core.data_loader import get_sheet_as_dataframe, get_storage_format, read_table, write_table
+from core.project_paths import internal_path
 
 
 def write_unified_csv(
@@ -120,8 +121,8 @@ def _output_path(project_path: Path, table_name: str, category: str) -> Path:
     fmt = get_storage_format(project_path)
     ext = ".parquet" if fmt == "parquet" else ".csv"
     if category == "Dimension":
-        return project_path / "metadata" / "data" / "dim" / f"{table_name}{ext}"
-    return project_path / "metadata" / "data" / "transactions" / f"{table_name}{ext}"
+        return internal_path(project_path) / "metadata" / "data" / "dim" / f"{table_name}{ext}"
+    return internal_path(project_path) / "metadata" / "data" / "transactions" / f"{table_name}{ext}"
 
 
 # ── Screen 3 append-only path ─────────────────────────────────────────────────

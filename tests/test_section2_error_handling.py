@@ -16,14 +16,16 @@ import pytest
 
 def _make_project(tmp_path: Path, fmt: str = "parquet") -> Path:
     """Create a minimal project structure for testing."""
+    from core.project_paths import internal_path
     project_path = tmp_path / "TestProject"
+    ip = internal_path(project_path)
     for sub in ["metadata/data/transactions", "metadata/data/dim", "metadata/mappings"]:
-        (project_path / sub).mkdir(parents=True, exist_ok=True)
-    (project_path / "project.json").write_text(
+        (ip / sub).mkdir(parents=True, exist_ok=True)
+    (ip / "project.json").write_text(
         json.dumps({"project_name": "TestProject", "storage_format": fmt}),
         encoding="utf-8",
     )
-    (project_path / "settings.json").write_text(
+    (ip / "settings.json").write_text(
         json.dumps({"history_enabled": True, "current_manifest": None}),
         encoding="utf-8",
     )

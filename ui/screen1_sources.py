@@ -13,6 +13,7 @@ import ui.theme as theme
 import ui.popups.msgbox as msgbox
 from core.data_loader import detect_merged_cells, get_sheets_as_dataframes, load_excel_sheets, save_as_csv
 from core.project_manager import open_project, save_project_json
+from core.project_paths import internal_path
 from ui.workers import ScreenBase, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 300
@@ -1080,12 +1081,12 @@ class Screen1Sources(ScreenBase):
                     if category == "Transaction":
                         save_as_csv(
                             df,
-                            self.project_path / "metadata" / "data" / "transactions" / f"{table_name}.csv",
+                            internal_path(self.project_path) / "metadata" / "data" / "transactions" / f"{table_name}.csv",
                         )
                     elif category == "Dimension":
                         save_as_csv(
                             df,
-                            self.project_path / "metadata" / "data" / "dim" / f"{table_name}.csv",
+                            internal_path(self.project_path) / "metadata" / "data" / "dim" / f"{table_name}.csv",
                         )
 
                     sheets_meta[table_name] = {

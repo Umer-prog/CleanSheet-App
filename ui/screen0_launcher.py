@@ -16,6 +16,7 @@ import ui.theme as theme
 import ui.popups.msgbox as msgbox
 from core.mapping_manager import get_mappings
 from core.project_manager import create_project, open_project, validate_project_name
+from core.project_paths import internal_path
 from ui.workers import LoadingOverlay, ScreenBase, Worker, clear_layout, make_scroll_area
 
 _SIDEBAR_W = 340
@@ -90,7 +91,7 @@ class _HeroFrame(QFrame):
 
 def _format_modified(project_path: str) -> str:
     try:
-        mtime = (Path(project_path) / "project.json").stat().st_mtime
+        mtime = (internal_path(Path(project_path)) / "project.json").stat().st_mtime
         dt = datetime.fromtimestamp(mtime)
         delta = datetime.now() - dt
         if delta.days == 0:

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from ui.widgets import NoScrollComboBox
 
 import ui.theme as theme
+from core.project_paths import internal_path
 from core.data_loader import get_sheet_as_dataframe
 from ui.workers import ScreenBase, clear_layout
 
@@ -798,7 +799,7 @@ class Screen15ChainMapper(ScreenBase):
             # only the new sheet — do NOT re-read previously chained source files
             # so that already-resolved errors are never re-introduced.
             from core.chain_writer import append_sheet_to_existing_chain
-            proj_file = project_path / "project.json"
+            proj_file = internal_path(project_path) / "project.json"
             with open(proj_file, encoding="utf-8") as f:
                 proj = _json.load(f)
             sheets_meta = proj.get("sheets_meta", {})

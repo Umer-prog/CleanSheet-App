@@ -15,6 +15,7 @@ from core.project_manager import (
     save_project_json,
     save_settings_json,
 )
+from core.project_paths import internal_path
 from core.data_loader import (
     get_sheet_as_dataframe,
     load_csv,
@@ -33,15 +34,17 @@ class TestCreateProject:
     def test_creates_folder_structure(self, tmp_path):
         project_path = create_project("TestProject", "Acme", tmp_path)
 
+        ip = internal_path(project_path)
         assert project_path.exists()
-        assert (project_path / "metadata" / "data" / "transactions").exists()
-        assert (project_path / "metadata" / "data" / "dim").exists()
-        assert (project_path / "history").exists()
-        assert (project_path / "metadata" / "mappings").exists()
+        assert (ip / "metadata" / "data" / "transactions").exists()
+        assert (ip / "metadata" / "data" / "dim").exists()
+        assert (ip / "history").exists()
+        assert (ip / "metadata" / "mappings").exists()
+        assert (project_path / "final").exists()
 
     def test_writes_project_json(self, tmp_path):
         project_path = create_project("MyProject", "Corp", tmp_path)
-        pj = json.loads((project_path / "project.json").read_text())
+        pj = json.loads((internal_path(project_path) / "project.json").read_text())
 
         assert pj["project_name"] == "MyProject"
         assert pj["company"] == "Corp"
@@ -50,7 +53,7 @@ class TestCreateProject:
 
     def test_writes_settings_json(self, tmp_path):
         project_path = create_project("P", "C", tmp_path)
-        sj = json.loads((project_path / "settings.json").read_text())
+        sj = json.loads((internal_path(project_path) / "settings.json").read_text())
 
         assert sj["history_enabled"] is True
         assert sj["current_manifest"] is None
@@ -58,7 +61,7 @@ class TestCreateProject:
 
     def test_writes_empty_mapping_store(self, tmp_path):
         project_path = create_project("P", "C", tmp_path)
-        ms = json.loads((project_path / "metadata" / "mappings" / "mapping_store.json").read_text())
+        ms = json.loads((internal_path(project_path) / "metadata" / "mappings" / "mapping_store.json").read_text())
 
         assert ms == {"mappings": []}
 
@@ -132,14 +135,14 @@ class TestSaveHelpers:
         state["company"] = "Updated"
         save_project_json(project_path, {k: v for k, v in state.items() if k != "settings"})
 
-        reloaded = json.loads((project_path / "project.json").read_text())
+        reloaded = json.loads((internal_path(project_path) / "project.json").read_text())
         assert reloaded["company"] == "Updated"
 
     def test_save_settings_json(self, tmp_path):
         project_path = create_project("P", "C", tmp_path)
         save_settings_json(project_path, {"history_enabled": False, "current_manifest": "m001"})
 
-        reloaded = json.loads((project_path / "settings.json").read_text())
+        reloaded = json.loads((internal_path(project_path) / "settings.json").read_text())
         assert reloaded["history_enabled"] is False
         assert reloaded["current_manifest"] == "m001"
 

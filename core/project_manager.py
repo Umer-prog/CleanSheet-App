@@ -4,6 +4,8 @@ import re
 from datetime import date
 from pathlib import Path
 
+from core.project_paths import internal_path
+
 _log = logging.getLogger(__name__)
 
 _ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -40,7 +42,9 @@ def create_project(name: str, company: str, root_path: Path, storage_format: str
             f"Choose a different name or open the existing project."
         )
 
-    # Create all required subdirectories
+    ip = internal_path(project_path)
+
+    # Create all required subdirectories inside "project metadata/"
     try:
         for sub in [
             "metadata/data/transactions",
@@ -48,11 +52,13 @@ def create_project(name: str, company: str, root_path: Path, storage_format: str
             "metadata/mappings",
             "history",
         ]:
-            (project_path / sub).mkdir(parents=True, exist_ok=True)
+            (ip / sub).mkdir(parents=True, exist_ok=True)
+        # final/ lives at project root, separate from internal files
+        (project_path / "final").mkdir(parents=True, exist_ok=True)
     except OSError as e:
         raise OSError(f"Failed to create project folder structure: {e}") from e
 
-    # Write project.json
+    # Write project.json inside "project metadata/"
     project_json = {
         "project_name": name,
         "created_at": str(date.today()),
@@ -62,19 +68,19 @@ def create_project(name: str, company: str, root_path: Path, storage_format: str
         "dim_tables": [],
     }
     try:
-        with open(project_path / "project.json", "w", encoding="utf-8") as f:
+        with open(ip / "project.json", "w", encoding="utf-8") as f:
             json.dump(project_json, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write project.json: {e}") from e
 
-    # Write settings.json
+    # Write settings.json inside "project metadata/"
     settings_json = {
         "history_enabled": True,
         "current_manifest": None,
         "project_path": str(project_path),
     }
     try:
-        with open(project_path / "settings.json", "w", encoding="utf-8") as f:
+        with open(ip / "settings.json", "w", encoding="utf-8") as f:
             json.dump(settings_json, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write settings.json: {e}") from e
@@ -82,7 +88,7 @@ def create_project(name: str, company: str, root_path: Path, storage_format: str
     # Write empty mapping store
     mapping_store = {"mappings": []}
     try:
-        with open(project_path / "metadata" / "mappings" / "mapping_store.json", "w", encoding="utf-8") as f:
+        with open(ip / "metadata" / "mappings" / "mapping_store.json", "w", encoding="utf-8") as f:
             json.dump(mapping_store, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to write mapping_store.json: {e}") from e
@@ -94,10 +100,11 @@ def create_project(name: str, company: str, root_path: Path, storage_format: str
 def open_project(project_path: Path) -> dict:
     """Read project.json and settings.json and return merged project state."""
     project_path = Path(project_path)
+    ip = internal_path(project_path)
 
-    project_file = project_path / "project.json"
+    project_file = ip / "project.json"
     if not project_file.exists():
-        raise FileNotFoundError(f"No project.json found at {project_path}")
+        raise FileNotFoundError(f"No project.json found at {ip}")
 
     try:
         with open(project_file, encoding="utf-8") as f:
@@ -105,7 +112,7 @@ def open_project(project_path: Path) -> dict:
     except (OSError, json.JSONDecodeError) as e:
         raise ValueError(f"Failed to read project.json: {e}") from e
 
-    settings_file = project_path / "settings.json"
+    settings_file = ip / "settings.json"
     settings_data = {}
     if settings_file.exists():
         try:
@@ -129,7 +136,7 @@ def list_projects(root_path: Path) -> list:
     for child in root_path.iterdir():
         if not child.is_dir():
             continue
-        project_file = child / "project.json"
+        project_file = internal_path(child) / "project.json"
         if not project_file.exists():
             continue
         try:
@@ -161,7 +168,7 @@ def save_project_json(project_path: Path, project_data: dict) -> None:
     project_path = Path(project_path)
     clean = {k: v for k, v in project_data.items() if k not in _RUNTIME_ONLY_KEYS}
     try:
-        with open(project_path / "project.json", "w", encoding="utf-8") as f:
+        with open(internal_path(project_path) / "project.json", "w", encoding="utf-8") as f:
             json.dump(clean, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to save project.json: {e}") from e
@@ -171,7 +178,7 @@ def save_settings_json(project_path: Path, settings_data: dict) -> None:
     """Write updated settings.json to disk."""
     project_path = Path(project_path)
     try:
-        with open(project_path / "settings.json", "w", encoding="utf-8") as f:
+        with open(internal_path(project_path) / "settings.json", "w", encoding="utf-8") as f:
             json.dump(settings_data, f, indent=2)
     except OSError as e:
         raise OSError(f"Failed to save settings.json: {e}") from e
