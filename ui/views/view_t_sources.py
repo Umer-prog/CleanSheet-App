@@ -310,7 +310,7 @@ class ViewTSources(ScreenBase):
             "color: #cbd5e1; font-size: 13px; font-weight: 500; "
             "background: transparent; border: none;"
         )
-        meta_lbl = QLabel(f"Chained transaction · {len(chain)} source{'s' if len(chain) != 1 else ''}")
+        meta_lbl = QLabel(f"Appended tables · {len(chain)} source{'s' if len(chain) != 1 else ''}")
         meta_lbl.setStyleSheet(
             "color: #3b82f6; font-size: 11px; background: transparent; border: none;"
         )
@@ -556,8 +556,8 @@ class ViewTSources(ScreenBase):
         )
         if not msgbox.critical_question(
             self,
-            "Delete Chained Table",
-            f"Deleting <b>{table_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
+            "Delete Appended Table",
+            f"Deleting <b>{table_name}</b> will permanently remove all appended tables and all its linked sources:<br><br>"
             f"{chain_summary}<br><br>"
             f"All mappings referencing this table will also be deleted. This cannot be undone.",
             confirm_label="Delete",

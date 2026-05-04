@@ -601,7 +601,7 @@ class Screen3Main(QWidget):
                     f"<b>{dim_table}</b> is no longer referenced by any mapping.<br><br>"
                     f"You can go to the <b>Dimension Tables</b> panel to delete it and "
                     f"free up space, or leave it for now.",
-                    confirm_label="View Dim Tables",
+                    confirm_label="View Tables",
                     cancel_label="Later",
                 )
             else:

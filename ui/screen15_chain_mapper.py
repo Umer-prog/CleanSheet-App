@@ -217,7 +217,7 @@ class Screen15ChainMapper(ScreenBase):
 
         for num, label, state in [
             ("1", "Load Files", "done"),
-            ("1.5", "Chain Columns", "active"),
+            ("1.5", "Append Columns", "active"),
             ("2", "Select Sheets", "inactive"),
             ("3", "Map Columns", "inactive"),
         ]:
@@ -421,7 +421,7 @@ class Screen15ChainMapper(ScreenBase):
         cancel_btn.clicked.connect(self._on_cancel)
         fb_lay.addWidget(cancel_btn)
 
-        self._confirm_btn = QPushButton("Confirm Chain →")
+        self._confirm_btn = QPushButton("Confirm Append →")
         self._confirm_btn.setObjectName("btn_primary")
         self._confirm_btn.setFixedHeight(36)
         self._confirm_btn.setEnabled(False)
@@ -449,7 +449,7 @@ class Screen15ChainMapper(ScreenBase):
             self._primary_cols, self._secondary_cols = result
             if not self._primary_cols:
                 self._placeholder.setText(
-                    "Primary sheet has no columns — cannot chain."
+                    "Primary sheet has no columns — cannot append."
                 )
                 return
             self._build_mapper_rows()

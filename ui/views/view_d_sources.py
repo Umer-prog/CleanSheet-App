@@ -446,7 +446,7 @@ class ViewDSources(ScreenBase):
         if not msgbox.critical_question(
             self,
             "Delete Chained Dimension",
-            f"Deleting <b>{dim_name}</b> will permanently remove the entire chain and all its linked sources:<br><br>"
+            f"Deleting <b>{dim_name}</b> will permanently remove all appended tables and all its linked sources:<br><br>"
             f"{chain_summary}<br><br>"
             f"All mappings referencing this dimension will also be deleted. This cannot be undone.",
             confirm_label="Delete",

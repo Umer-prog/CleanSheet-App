@@ -796,7 +796,7 @@ class Screen1Sources(ScreenBase):
         """Open file/sheet picker then navigate to Screen 1.5 (Chain Column Mapper)."""
         self._set_error("")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Excel file to chain", "", "Excel Files (*.xlsx *.xlsm *.xls)"
+            self, "Select Excel file to append", "", "Excel Files (*.xlsx *.xlsm *.xls)"
         )
         if not file_path:
             return
@@ -819,7 +819,7 @@ class Screen1Sources(ScreenBase):
                 from ui.popups.popup_single_sheet import select_single_sheet
                 picked = select_single_sheet(
                     self, excel_path=excel_path, sheet_names=sheet_names,
-                    title="Select Sheet to Chain",
+                    title="Select Sheet to Append",
                     default_sheet=primary_sheet_name,
                 )
                 if not picked:
@@ -833,7 +833,7 @@ class Screen1Sources(ScreenBase):
             # Guard: same file+sheet as primary
             if (str(excel_path) == str(self._sources[fi]["file_path"])
                     and picked_sheet == sheet["sheet_name"]):
-                self._set_error("Cannot chain a sheet with itself.")
+                self._set_error("Cannot append a sheet to itself.")
                 return
 
             # Guard: duplicate within existing chain
@@ -889,8 +889,8 @@ class Screen1Sources(ScreenBase):
         entry = chain[ci]
         if not msgbox.critical_question(
             self,
-            "Remove Chain Link",
-            f"Remove <b>{entry['sheet_name']}</b> from the chain?<br><br>"
+            "Remove table",
+            f"Remove <b>{entry['sheet_name']}</b> from the appended chain?<br><br>"
             "The remaining links will be reordered. Any column mappings for this link will be lost.",
             confirm_label="Remove",
         ):
@@ -921,7 +921,7 @@ class Screen1Sources(ScreenBase):
             self,
             "Remove Sheet",
             f"Remove <b>{sheet['sheet_name']}</b> from the project?<br><br>"
-            "If this sheet has a chain attached, the entire chain will also be discarded.",
+            "If this sheet has an appended table, the entire chain will also be discarded.",
             confirm_label="Remove",
         ):
             return
