@@ -25,7 +25,7 @@ LicenseFile=
 ; No license file required — license is enforced at runtime by the app itself
 OutputDir=installer
 OutputBaseFilename=CleanSheet_Setup_v{#AppVersion}
-SetupIconFile=assets\icon.ico
+SetupIconFile=assets\Logo Final.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

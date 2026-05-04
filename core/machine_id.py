@@ -5,7 +5,6 @@ hashes them, and returns a short human-readable Machine ID like A3F9-22BC-91DE.
 
 import hashlib
 import logging
-import subprocess
 import uuid
 import winreg
 from typing import Optional
@@ -27,23 +26,21 @@ def _read_cpu_id() -> str:
 
 
 def _read_board_serial() -> str:
+    # Read via registry instead of wmic — no subprocess, no console flash,
+    # works on Windows 11 24H2 where wmic was removed.
     try:
-        result = subprocess.run(
-            ["wmic", "baseboard", "get", "SerialNumber"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\SystemInformation",
         )
-        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-        # lines[0] is the header "SerialNumber", lines[1] is the value
-        if len(lines) >= 2:
-            serial = lines[1]
-            if "To be filled" in serial or not serial:
-                return ""
-            return serial
+        value, _ = winreg.QueryValueEx(key, "BIOSVersion")
+        winreg.CloseKey(key)
+        serial = value.strip()
+        if "To be filled" in serial or not serial:
+            return ""
+        return serial
     except Exception:
-        pass
-    return ""
+        return ""
 
 
 def _read_machine_guid() -> str:

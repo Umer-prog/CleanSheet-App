@@ -766,3 +766,10 @@ FileNotFoundError: Table file not found: 'G:\docs\work\global data\tests\sales\p
 2026-05-04 04:33:19  INFO      core.project_manager — Project opened: 'abc'
 2026-05-04 04:33:19  INFO      core.project_manager — Project opened: 'abababa'
 2026-05-04 04:33:19  INFO      __main__ — Main window displayed
+2026-05-04 06:13:06  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-04 06:13:14  INFO      __main__ — CleanSheet v1.0.0 starting up
+2026-05-04 06:13:24  INFO      __main__ — Main window displayed
+2026-05-04 06:13:24  INFO      core.project_manager — Project opened: 'sales'
+2026-05-04 06:13:24  INFO      core.project_manager — Project opened: 'sa'
+2026-05-04 06:13:24  INFO      core.project_manager — Project opened: 'abc'
+2026-05-04 06:13:24  INFO      core.project_manager — Project opened: 'abababa'

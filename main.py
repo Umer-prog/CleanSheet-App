@@ -1,6 +1,7 @@
 import logging
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 import ui.theme as theme
@@ -19,6 +20,7 @@ def main() -> None:
     theme.load(resource_path("branding.json"))
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(resource_path("assets/Logo Final.ico"))))
 
     app.setStyleSheet(theme.DARK_QSS)
 
@@ -57,6 +59,7 @@ def main() -> None:
         QTimer.singleShot(800, _show_renewal_warning)
 
     sys.exit(app.exec())
+
 
 
 if __name__ == "__main__":
