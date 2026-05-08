@@ -223,7 +223,7 @@ def font(size: int, weight: str = "normal") -> QFont:
 
 
 def company_name() -> str:
-    return _branding.get("company_name") or "CleanSheet"
+    return _branding.get("company_name") or "BI CleanSheet 365"
 
 
 def logo_path():
@@ -232,23 +232,9 @@ def logo_path():
 
 
 def logo_pixmap(size: int = 24):
-    """Return a QPixmap for the brand logo scaled to *size* × *size* px.
-
-    Looks for ``logo_path`` in branding.json.  The path may be absolute or
-    relative to the project root (one level above ``ui/``).
-    Returns ``None`` if no logo is configured or the file can't be loaded.
-
-    Usage in a sidebar brand block::
-
-        px = theme.logo_pixmap(24)
-        if px:
-            lbl.setPixmap(px)
-            # hide the blue box background
-            logo_box.setStyleSheet("QFrame { background: transparent; border: none; }")
-        else:
-            lbl.setText("▦")   # fallback icon character
-    """
+    """Return a QPixmap for the brand logo scaled to *size* × *size* px."""
     from PySide6.QtGui import QPixmap
+    from PySide6.QtCore import Qt
     p = _branding.get("logo_path")
     if not p:
         return None
@@ -260,9 +246,49 @@ def logo_pixmap(size: int = 24):
         px = QPixmap(str(path))
         if px.isNull():
             return None
-        return px.scaled(size, size,
-                         __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.KeepAspectRatio,
-                         __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.SmoothTransformation)
+        return px.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    except Exception:
+        return None
+
+
+def logo_pixmap_rounded(box_size: int, radius: int):
+    """Return a box_size×box_size QPixmap scaled to fill the box and clipped to rounded corners.
+
+    Using KeepAspectRatioByExpanding trims the white padding around the logo so
+    the actual logo content fills the full box.  The rounded-rectangle clip ensures
+    the image doesn't bleed outside the parent frame's border-radius.
+    Returns None if no logo is configured or the file can't be loaded.
+    """
+    from PySide6.QtGui import QPixmap, QPainter, QPainterPath
+    from PySide6.QtCore import Qt, QRectF
+    p = _branding.get("logo_path")
+    if not p:
+        return None
+    path = Path(p)
+    if not path.is_absolute():
+        from utils.paths import resource_path
+        path = resource_path(str(path))
+    try:
+        src = QPixmap(str(path))
+        if src.isNull():
+            return None
+        # Scale to fill the box — this crops white padding, making the logo larger
+        filled = src.scaled(box_size, box_size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        # Centre-crop to exact box size
+        x = (filled.width() - box_size) // 2
+        y = (filled.height() - box_size) // 2
+        filled = filled.copy(x, y, box_size, box_size)
+        # Render into a transparent pixmap with rounded-rect clip
+        result = QPixmap(box_size, box_size)
+        result.fill(Qt.transparent)
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(0, 0, box_size, box_size), radius, radius)
+        painter.setClipPath(clip)
+        painter.drawPixmap(0, 0, filled)
+        painter.end()
+        return result
     except Exception:
         return None
 

@@ -52,8 +52,8 @@ def main() -> None:
             _msgbox.warning(
                 window,
                 "License Expiring Soon",
-                f"Your CleanSheet license expires in <b>{days_left} day{'s' if days_left != 1 else ''}</b>.<br><br>"
-                "Please contact <b>support@gd365.com</b> to renew before it expires.",
+                f"Your BI CleanSheet 365 license expires in <b>{days_left} day{'s' if days_left != 1 else ''}</b>.<br><br>"
+                "Please contact <b>support@globaldata365.com</b> to renew before it expires.",
             )
 
         QTimer.singleShot(800, _show_renewal_warning)

@@ -177,7 +177,8 @@ class Screen15ChainMapper(ScreenBase):
         logo_inner.setContentsMargins(0, 0, 0, 0)
         logo_icon = QLabel()
         logo_icon.setAlignment(Qt.AlignCenter)
-        _logo_px = theme.logo_pixmap(24)
+        logo_icon.setStyleSheet("background: transparent; border: none;")
+        _logo_px = theme.logo_pixmap_rounded(34, 9)
         if _logo_px:
             logo_icon.setPixmap(_logo_px)
         else:
@@ -194,7 +195,7 @@ class Screen15ChainMapper(ScreenBase):
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>"
             f"{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>Data Preparation Tool</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")

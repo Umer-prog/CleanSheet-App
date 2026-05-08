@@ -20,10 +20,10 @@ from core.license_constants import LICENSE_FILE_NAME, LICENSE_SEARCH_PATHS
 from core.machine_id import get_machine_id
 from core.license_validator import LicenseResult, validate_license
 
-_SUPPORT_EMAIL = "support@gd365.com"
+_SUPPORT_EMAIL = "support@globaldata365.com"
 
 _HEADING: dict[str, str] = {
-    "NO_FILE":           "Activate CleanSheet",
+    "NO_FILE":           "Activate BI CleanSheet 365",
     "EXPIRED":           "License Expired",
     "WRONG_MACHINE":     "License Not Valid for This Computer",
     "INVALID_SIGNATURE": "Invalid License File",
@@ -73,10 +73,10 @@ class ActivationScreen(QDialog):
         lay.setSpacing(2)
 
         reason = self._result.failure_reason or "NO_FILE"
-        heading = _HEADING.get(reason, "CleanSheet Activation")
+        heading = _HEADING.get(reason, "BI CleanSheet 365 Activation")
 
         title_lbl = QLabel(
-            f"<span style='font-size:16px; font-weight:700; color:#f1f5f9;'>CleanSheet</span>"
+            f"<span style='font-size:16px; font-weight:700; color:#f1f5f9;'>BI CleanSheet 365</span>"
             f"<br><span style='font-size:12px; color:#94a3b8;'>{heading}</span>"
         )
         title_lbl.setTextFormat(Qt.RichText)
@@ -120,7 +120,7 @@ class ActivationScreen(QDialog):
 
         lay.addWidget(_divider())
 
-        lay.addWidget(_muted("Send your Machine ID to support@gd365.com."))
+        lay.addWidget(_muted("Send your Machine ID to support@globaldata365.com."))
         lay.addWidget(_muted("You will receive a license file by email."))
 
         lay.addWidget(_divider())
@@ -191,7 +191,7 @@ class ActivationScreen(QDialog):
         lay = QHBoxLayout(frame)
         lay.setContentsMargins(28, 0, 28, 0)
 
-        version_lbl = QLabel("CleanSheet — Licensed software")
+        version_lbl = QLabel("BI CleanSheet 365 — Licensed software")
         version_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; background: transparent;")
         lay.addWidget(version_lbl, 1)
 

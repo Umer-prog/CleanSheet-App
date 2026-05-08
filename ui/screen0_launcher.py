@@ -248,26 +248,14 @@ class Screen0Launcher(ScreenBase):
             "QFrame { background: #EDF3FB; border-radius: 18px; border: none; }"
         )
         logo_inner = QVBoxLayout(logo_box)
-        logo_inner.setContentsMargins(4, 4, 4, 4)
+        logo_inner.setContentsMargins(0, 0, 0, 0)
 
         logo_lbl = QLabel()
         logo_lbl.setAlignment(Qt.AlignCenter)
         logo_lbl.setStyleSheet("background: transparent; border: none;")
-        _logo_path = theme.logo_path()
-        if _logo_path:
-            from utils.paths import resource_path
-            _abs_logo = resource_path(str(_logo_path))
-            if _abs_logo.exists():
-                px = QPixmap(str(_abs_logo)).scaled(
-                    62, 62, Qt.KeepAspectRatio, Qt.SmoothTransformation
-                )
-                logo_lbl.setPixmap(px)
-            else:
-                logo_lbl.setText("CS")
-                logo_lbl.setStyleSheet(
-                    "color: white; background: transparent; border: none; "
-                    "font-size: 18px; font-weight: 700;"
-                )
+        _logo_px = theme.logo_pixmap_rounded(76, 18)
+        if _logo_px:
+            logo_lbl.setPixmap(_logo_px)
         else:
             logo_lbl.setText("CS")
             logo_lbl.setStyleSheet(
@@ -289,7 +277,7 @@ class Screen0Launcher(ScreenBase):
         )
         text_block.addWidget(app_name_lbl)
 
-        app_sub_lbl = QLabel("Data Cleansing and Standardization Tool.")
+        app_sub_lbl = QLabel("Data Preparation Tool")
         app_sub_lbl.setStyleSheet(
             "color: #cbd5e1; background: transparent; border: none; font-size: 17px;"
         )
@@ -489,7 +477,7 @@ class Screen0Launcher(ScreenBase):
                 expiry_lbl.setStyleSheet("color: #94a3b8; background: transparent; border: none;")
                 lic_inner.addWidget(expiry_lbl)
             else:
-                no_lic = QLabel("No valid license. Contact support@gd365.com.")
+                no_lic = QLabel("No valid license. Contact support@globaldata365.com.")
                 no_lic.setFont(theme.font(11))
                 no_lic.setStyleSheet("color: #f87171; background: transparent; border: none;")
                 lic_inner.addWidget(no_lic)

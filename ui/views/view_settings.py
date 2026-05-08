@@ -334,7 +334,7 @@ class ViewSettings(ScreenBase):
                 )
                 lic_lay.addWidget(expiry_lbl)
             else:
-                err_lbl = QLabel("No valid license found. Please contact support@gd365.com.")
+                err_lbl = QLabel("No valid license found. Please contact support@globaldata365.com.")
                 err_lbl.setStyleSheet(
                     "color: #f87171; font-size: 12px; background: transparent; border: none;"
                 )

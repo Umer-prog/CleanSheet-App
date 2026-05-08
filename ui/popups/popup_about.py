@@ -74,7 +74,7 @@ class PopupAbout(QDialog):
             row.addWidget(val, 1)
             return row
 
-        _SUPPORT_EMAIL = "support@gd365.com"
+        _SUPPORT_EMAIL = "support@globaldata365.com"
 
         b_lay.addLayout(_row("Publisher", COMPANY))
         b_lay.addLayout(_row("Version", APP_VERSION))

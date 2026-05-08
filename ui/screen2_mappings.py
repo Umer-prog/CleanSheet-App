@@ -139,7 +139,8 @@ class Screen2Mappings(ScreenBase):
         logo_inner.setContentsMargins(0, 0, 0, 0)
         logo_lbl = QLabel()
         logo_lbl.setAlignment(Qt.AlignCenter)
-        _logo_px = theme.logo_pixmap(24)
+        logo_lbl.setStyleSheet("background: transparent; border: none;")
+        _logo_px = theme.logo_pixmap_rounded(34, 9)
         if _logo_px:
             logo_lbl.setPixmap(_logo_px)
         else:
@@ -154,7 +155,7 @@ class Screen2Mappings(ScreenBase):
         brand_lbl = QLabel(
             f"<span style='color:#f1f5f9; font-size:15px; font-weight:600;'>{theme.company_name()}</span>"
             "<br>"
-            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>GLOBAL DATA 365</span>"
+            "<span style='color:#94a3b8; font-size:10px; letter-spacing:1px;'>Data Preparation Tool</span>"
         )
         brand_lbl.setTextFormat(Qt.RichText)
         brand_lbl.setStyleSheet("background: transparent; border: none;")
@@ -200,7 +201,7 @@ class Screen2Mappings(ScreenBase):
         ic_lay.setContentsMargins(12, 10, 12, 10)
         ic_lay.setSpacing(2)
         proj_name = self.project.get("project_name", "—")
-        proj_client = self.project.get("company_name", "")
+        proj_client = self.project.get("company") or self.project.get("company_name", "")
         pn_lbl = QLabel(proj_name)
         pn_lbl.setStyleSheet(
             "color: #93c5fd; background: transparent; border: none; "

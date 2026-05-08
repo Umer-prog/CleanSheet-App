@@ -56,7 +56,7 @@ def validate_license() -> LicenseResult:
         return LicenseResult(
             failure_reason="NO_FILE",
             failure_message=(
-                "No license file found. Please contact support@gd365.com to activate CleanSheet."
+                "No license file found. Please contact support@globaldata365.com to activate BI CleanSheet 365."
             ),
         )
 
@@ -112,8 +112,8 @@ def validate_license() -> LicenseResult:
         return LicenseResult(
             failure_reason="EXPIRED",
             failure_message=(
-                f"Your CleanSheet license expired on {expiry_date.strftime('%d %B %Y')}. "
-                "Please contact support@gd365.com to renew."
+                f"Your BI CleanSheet 365 license expired on {expiry_date.strftime('%d %B %Y')}. "
+                "Please contact support@globaldata365.com to renew."
             ),
         )
 
@@ -124,7 +124,7 @@ def validate_license() -> LicenseResult:
             failure_reason="WRONG_MACHINE",
             failure_message=(
                 "This license is not valid for this computer. "
-                "If you have changed your hardware, please contact support@gd365.com "
+                "If you have changed your hardware, please contact support@globaldata365.com "
                 "with your new Machine ID."
             ),
         )
