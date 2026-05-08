@@ -59,32 +59,26 @@ def _initials(name: str) -> str:
 
 
 class _HeroFrame(QFrame):
-    """Brand hero panel — paints an optional background image scaled to cover,
+    """Brand hero panel — paints an optional background image to fill the frame exactly,
     with a semi-transparent dark overlay so text stays readable.
     Without an image it just shows the solid #13161e background.
-    Recommended image size: 940 × 200 px.
+    Recommended image size: 940 × 240 px.
     """
 
     def __init__(self, bg_pixmap: QPixmap | None = None, parent=None):
         super().__init__(parent)
         self._bg = bg_pixmap
-
     def paintEvent(self, event):
-        super().paintEvent(event)
-        if not self._bg:
-            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        scaled = self._bg.scaled(
-            self.size(),
-            Qt.KeepAspectRatioByExpanding,
-            Qt.SmoothTransformation,
-        )
-        x = (scaled.width() - self.width()) // 2
-        y = (scaled.height() - self.height()) // 2
-        painter.drawPixmap(-x, -y, scaled)
-        # Dark overlay so text remains readable
-        painter.fillRect(self.rect(), QColor(13, 17, 23, 200))
+        # Fill background colour first
+        painter.fillRect(self.rect(), QColor(13, 17, 23))
+        if self._bg:
+            # drawPixmap(QRect, QPixmap) fills the target rect exactly — no stretching
+            # when the image matches the frame dimensions, and graceful scale otherwise.
+            painter.drawPixmap(self.rect(), self._bg)
+            # Dark overlay so text remains readable
+            painter.fillRect(self.rect(), QColor(13, 17, 23, 180))
         painter.end()
 
 
