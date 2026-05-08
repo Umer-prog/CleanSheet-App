@@ -2,12 +2,12 @@
 ; Run: ISCC cleansheet.iss
 ; Output: installer\CleanSheet_Setup_v1.0.0.exe
 
-#define AppName      "CleanSheet"
+#define AppName      "BI CleanSheet 365"
 #define AppVersion   "1.0.0"
 #define AppPublisher "Global Data 365"
-#define AppExeName   "CleanSheet.exe"
+#define AppExeName   "BICleanSheet365.exe"
 #define AppURL       "https://globaldata365.com"
-#define BuildDir     "dist\CleanSheet"
+#define BuildDir     "dist\BICleanSheet365"
 
 [Setup]
 AppId={{A3F7C2B1-4E8D-4F2A-9C6B-1D5E8F3A7B2C}
@@ -24,7 +24,7 @@ AllowNoIcons=no
 LicenseFile=
 ; No license file required — license is enforced at runtime by the app itself
 OutputDir=installer
-OutputBaseFilename=CleanSheet_Setup_v{#AppVersion}
+OutputBaseFilename=BICleanSheet365_Setup_v{#AppVersion}
 SetupIconFile=assets\Logo Final.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
