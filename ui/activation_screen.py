@@ -130,7 +130,6 @@ class ActivationScreen(QDialog):
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
 
-        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -140,10 +139,14 @@ class ActivationScreen(QDialog):
         lay.addWidget(_body_text(self._result.failure_message))
         lay.addWidget(_email_link(_SUPPORT_EMAIL))
         lay.addWidget(_divider())
+        lay.addWidget(_section_label("Your Machine ID"))
+        lay.addWidget(self._machine_id_box())
+        self._copy_btn = _copy_button(self._machine_id, self)
+        lay.addWidget(self._copy_btn)
+        lay.addWidget(_divider())
         browse = _primary_button("Browse for New License File")
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
-        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -162,7 +165,6 @@ class ActivationScreen(QDialog):
         browse = _primary_button("Browse for New License File")
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
-        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -172,10 +174,14 @@ class ActivationScreen(QDialog):
         lay.addWidget(_body_text(self._result.failure_message))
         lay.addWidget(_email_link(_SUPPORT_EMAIL))
         lay.addWidget(_divider())
+        lay.addWidget(_section_label("Your Machine ID"))
+        lay.addWidget(self._machine_id_box())
+        self._copy_btn = _copy_button(self._machine_id, self)
+        lay.addWidget(self._copy_btn)
+        lay.addWidget(_divider())
         browse = _primary_button("Browse for License File")
         browse.clicked.connect(self._browse_for_license)
         lay.addWidget(browse)
-        lay.addWidget(_license_hint_label())
         self._inline_error = _error_label()
         lay.addWidget(self._inline_error)
 
@@ -359,18 +365,6 @@ def _error_label() -> QLabel:
     lbl.setVisible(False)
     return lbl
 
-
-def _license_hint_label() -> QLabel:
-    """Shows expected .lic drop path(s) so support can guide users without ambiguity."""
-    lines = ["Expected location:"] + [
-        str(p / LICENSE_FILE_NAME) for p in LICENSE_SEARCH_PATHS
-    ]
-    lbl = QLabel("\n".join(lines))
-    lbl.setWordWrap(True)
-    lbl.setStyleSheet(
-        "color: #94a3b8; font-size: 11px; font-family: Consolas; background: transparent;"
-    )
-    return lbl
 
 
 def _show_themed_info(parent, title: str, text: str) -> None:

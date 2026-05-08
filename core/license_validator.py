@@ -108,7 +108,7 @@ def validate_license() -> LicenseResult:
             failure_message="License file is corrupted. Please contact support to receive a new license file.",
         )
 
-    if datetime.date.today() > expiry_date:
+    if datetime.date.today() >= expiry_date:
         return LicenseResult(
             failure_reason="EXPIRED",
             failure_message=(
